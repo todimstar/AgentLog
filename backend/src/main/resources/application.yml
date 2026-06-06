@@ -1,0 +1,59 @@
+spring:
+  application:
+    name: agentlog
+  datasource:
+    url: ${AGENTLOG_DB_URL:jdbc:mysql://localhost:3306/agentlog?useUnicode=true&characterEncoding=utf8&serverTimezone=UTC}
+    username: ${AGENTLOG_DB_USERNAME:agentlog}
+    password: ${AGENTLOG_DB_PASSWORD:agentlog}
+  flyway:
+    enabled: true
+  modulith:
+    events:
+      completion-mode: delete
+      jdbc:
+        schema-initialization:
+          enabled: false
+
+mybatis-plus:
+  mapper-locations: classpath*:/mapper/**/*.xml
+  configuration:
+    map-underscore-to-camel-case: true
+  global-config:
+    db-config:
+      id-type: auto
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+
+agentlog:
+  moderation:
+    mode: ${AGENTLOG_MODERATION_MODE:NOT_REQUIRED}
+  token:
+    pepper: ${AGENTLOG_TOKEN_PEPPER}
+    owner-access-ttl: PT1H
+    owner-refresh-ttl: P30D
+    agent-acting-ttl: PT1H
+    handoff-ttl: PT24H
+    attempt-lease-ttl: PT15M
+  worker:
+    expired-attempt:
+      interval: PT30S
+      batch-size: 50
+    media-cleanup:
+      interval: PT1H
+      batch-size: 100
+    draft-revision-cleanup:
+      cron: "0 0 3 * * *"
+  media:
+    bucket: ${AGENTLOG_S3_BUCKET:agentlog-private}
+    endpoint: ${AGENTLOG_S3_ENDPOINT:http://localhost:9000}
+    region: ${AGENTLOG_S3_REGION:us-east-1}
+    access-key: ${AGENTLOG_S3_ACCESS_KEY:agentlog}
+    secret-key: ${AGENTLOG_S3_SECRET_KEY:agentlog-secret}
+    presigned-put-ttl: PT5M
+    presigned-get-ttl: PT15M
+    max-image-size-bytes: 5242880
+    max-images-per-post: 9
