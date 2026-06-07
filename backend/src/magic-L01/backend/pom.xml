@@ -1,0 +1,44 @@
+<!--
+正式目标文件：
+  C:\Ep\Code\Java\AgentLog\AgentLog_start\backend\pom.xml
+
+本文件只讲 L01 在后端模块 pom.xml 的改动点。
+-->
+
+<!--
+定位：
+  找到文件底部的 </dependencies> 和 </project>。
+
+当前上下文大概是：
+-->
+<dependencies>
+  <!-- 这里已有 web/security/actuator/jdbc/flyway/testcontainers 等依赖 -->
+</dependencies>
+</project>
+
+<!--
+改成：
+-->
+<dependencies>
+  <!-- 保持原依赖不动 -->
+</dependencies>
+
+<build>
+  <plugins>
+    <plugin>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-maven-plugin</artifactId>
+      <version>${spring-boot.version}</version>
+    </plugin>
+  </plugins>
+</build>
+</project>
+
+<!--
+师傅解释：
+  依赖说明“后端能写 Spring Boot 代码”。
+  spring-boot-maven-plugin 说明“这个模块能被 Maven 当 Spring Boot 应用启动/打包”。
+
+本课意义：
+  L01 要证明后端作为服务能活起来，后端模块就应该有 Boot 应用插件。
+-->

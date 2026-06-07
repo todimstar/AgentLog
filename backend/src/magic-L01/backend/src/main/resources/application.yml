@@ -1,0 +1,58 @@
+# 正式目标文件：
+#   C:\Ep\Code\Java\AgentLog\AgentLog_start\backend\src\main\resources\application.yml
+#
+# 本文件只讲 L01 在 application.yml 的改动点。
+
+# 1. 打开 Spring MVC ProblemDetail 支持
+#
+# 定位：
+#   在 spring.application.name 后面加 mvc 配置。
+
+spring:
+  application:
+    name: agentlog
+  mvc:
+    problemdetails:
+      enabled: true
+
+# 师傅解释：
+#   L01 要打下统一错误响应基础。
+#   这行不是业务错误处理本身，只是让 Spring MVC 的 ProblemDetail 支持打开。
+
+
+# 2. Flyway 默认先关闭
+#
+# 定位：
+#   找到当前的 spring.flyway.enabled: true。
+
+spring:
+  flyway:
+    enabled: ${AGENTLOG_FLYWAY_ENABLED:false}
+
+# 师傅解释：
+#   L01 验证“后端活着”。
+#   L03 才验证“MySQL 和 Flyway migration 活着”。
+#   如果现在默认打开 Flyway，本机没数据库时服务可能直接起不来。
+#
+# 关键思想：
+#   保留依赖，不等于当前课必须激活能力。
+
+
+# 3. DB health 默认先关闭
+#
+# 定位：
+#   找到 management.endpoints.web.exposure 后面，补 health.db 配置。
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  health:
+    db:
+      enabled: ${AGENTLOG_HEALTH_DB_ENABLED:false}
+
+# 师傅解释：
+#   /actuator/health 是 L01 验收项。
+#   但 L01 的 health 应该证明“应用活着”，不是提前证明“数据库连通”。
+#   数据库健康检查留给 L03。

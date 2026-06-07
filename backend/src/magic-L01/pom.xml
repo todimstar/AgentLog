@@ -1,0 +1,39 @@
+<!--
+正式目标文件：
+  C:\Ep\Code\Java\AgentLog\AgentLog_start\pom.xml
+
+本文件只讲 L01 在父工程 pom.xml 的改动点。
+-->
+
+<!--
+定位：
+  找到 <properties> 里的 <java.version>21</java.version>
+
+当前上下文大概是：
+-->
+<properties>
+  <java.version>21</java.version>
+  <spring-boot.version>3.5.14</spring-boot.version>
+  <spring-modulith.version>1.4.11</spring-modulith.version>
+</properties>
+
+<!--
+改成：
+-->
+<properties>
+  <java.version>21</java.version>
+  <maven.compiler.release>${java.version}</maven.compiler.release>
+  <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+  <spring-boot.version>3.5.14</spring-boot.version>
+  <spring-modulith.version>1.4.11</spring-modulith.version>
+</properties>
+
+<!--
+师傅解释：
+  java.version 是“我们想用 Java 21”。
+  maven.compiler.release 是“Maven 编译时真的按 Java 21 来”。
+  sourceEncoding 是防止 Windows 下 Maven 默认 GBK，把中文资源和源码编码搞乱。
+
+本课意义：
+  L01 是后端地基课，不能让项目表面写 Java 21，实际编译 target 却飘到别的版本。
+-->
