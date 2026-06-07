@@ -13,6 +13,8 @@
   </modules>
   <properties>
     <java.version>21</java.version>
+    <maven.compiler.release>${java.version}</maven.compiler.release>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <spring-boot.version>3.5.14</spring-boot.version>
     <spring-modulith.version>1.4.11</spring-modulith.version>
     <mybatis-plus.version>3.5.15</mybatis-plus.version>

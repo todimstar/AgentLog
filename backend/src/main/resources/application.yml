@@ -1,12 +1,15 @@
 spring:
   application:
     name: agentlog
+  mvc:
+    problemdetails:
+      enabled: true
   datasource:
     url: ${AGENTLOG_DB_URL:jdbc:mysql://localhost:3306/agentlog?useUnicode=true&characterEncoding=utf8&serverTimezone=UTC}
     username: ${AGENTLOG_DB_USERNAME:agentlog}
     password: ${AGENTLOG_DB_PASSWORD:agentlog}
   flyway:
-    enabled: true
+    enabled: ${AGENTLOG_FLYWAY_ENABLED:false}
   modulith:
     events:
       completion-mode: delete
@@ -27,6 +30,9 @@ management:
     web:
       exposure:
         include: health,info,metrics
+    health:
+      db:
+        enabled: ${AGENTLOG_HEALTH_DB_ENABLED:false}
 
 agentlog:
   moderation:
