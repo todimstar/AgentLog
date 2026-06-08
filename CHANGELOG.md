@@ -1,5 +1,29 @@
 ﻿# Changelog
 
+## 0.1.0-SNAPSHOT - L02 Spring Modulith 模块边界
+
+日期：2026-06-08
+
+### Added
+- 9 个业务模块的边界声明(`package-info.java`)：identity / media / forum / content / collaboration / reliability / audit / notification / moderation。本课只立边界，不写业务。
+- `shared/package-info.java`：标记为 `ApplicationModule.Type.OPEN`，使其作为公共工具箱可被所有业务模块自由依赖。
+- `ModularityTest`：`ApplicationModules.verify()` 校验模块边界 + `Documenter` 生成 PlantUML 模块图与 AsciiDoc 模块画布到 `target/spring-modulith-docs/`。
+
+### Changed
+- `SystemController` 从 `interfaces` 包迁入 `shared/system`(决策 C)：系统探针属系统级能力，归入 OPEN 的 shared 模块，避免单独的 interfaces 包成为无归属的"伪模块"。
+
+### Removed
+- 删除 `interfaces` 包(SystemController 及其测试已迁移)。
+
+### Verified
+- `./mvnw.cmd -pl backend test`：`Tests run: 6, Failures: 0, Errors: 0`。
+- 覆盖 BackendSmokeTest(2)、ModularityTest(2)、GlobalExceptionHandlerTest(1)、SystemControllerTest(1)。
+- 生成 21 个文档文件(1 总览图 + 10 模块图 + 10 模块画布)。
+
+### Notes
+- 空模块阶段 `verify()` 平凡通过；其价值在后续课程持续拦截非法跨模块依赖。
+- 模块图/画布由代码自动生成("活文档")，随模块长出业务代码自动丰满。
+
 ## 0.1.0-SNAPSHOT - L01 后端最小启动
 
 日期：2026-06-07
