@@ -1,0 +1,9 @@
+# 测试 profile 专用配置（@ActiveProfiles("test") 时生效）
+# 目的：让 Testcontainers + Flyway 干净地验证迁移，排除无关的启动期连库组件。
+spring:
+  flyway:
+    enabled: true          # 测试就是要验证 Flyway 迁移，必须开
+  autoconfigure:
+    # 排除 Modulith 的 JDBC 事件发布自动配置：它会在启动期连库建事件表，
+    # 与本测试无关，且其建表脚本（V013）本课还没引入，留到 L17。
+    exclude: org.springframework.modulith.events.jdbc.JdbcEventPublicationAutoConfiguration

@@ -5,11 +5,13 @@ spring:
     problemdetails:
       enabled: true
   datasource:
-    url: ${AGENTLOG_DB_URL:jdbc:mysql://localhost:3306/agentlog?useUnicode=true&characterEncoding=utf8&serverTimezone=UTC}
+    url: ${AGENTLOG_DB_URL:jdbc:mysql://localhost:3307/agentlog?useUnicode=true&characterEncoding=utf8&serverTimezone=UTC}
     username: ${AGENTLOG_DB_USERNAME:agentlog}
     password: ${AGENTLOG_DB_PASSWORD:agentlog}
   flyway:
-    enabled: ${AGENTLOG_FLYWAY_ENABLED:false}
+    enabled: ${AGENTLOG_FLYWAY_ENABLED:true}
+    # L03 起 Flyway 默认开启:数据库是项目常态组成,启动期执行迁移。
+    # 仍保留环境变量可覆盖(如个别不连库的场景临时关闭)。
   modulith:
     events:
       completion-mode: delete
@@ -32,7 +34,7 @@ management:
         include: health,info,metrics
     health:
       db:
-        enabled: ${AGENTLOG_HEALTH_DB_ENABLED:false}
+        enabled: ${AGENTLOG_HEALTH_DB_ENABLED:true}
 
 agentlog:
   moderation:
