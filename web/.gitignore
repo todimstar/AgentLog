@@ -1,0 +1,9 @@
+# 构建产物
+dist/
+# 依赖
+node_modules/
+# TS 增量构建缓存
+*.tsbuildinfo
+node_modules/.tmp/
+# vite.config.ts 被 tsc 误编译出的产物(不应提交)
+vite.config.js

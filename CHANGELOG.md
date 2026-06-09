@@ -1,5 +1,28 @@
 ﻿# Changelog
 
+## 0.1.0-SNAPSHOT - L04 Vue 壳与 OpenAPI 生成链
+
+日期：2026-06-09
+
+### Added
+- 前端壳：`index.html` + `src/main.ts`(装配 Vue3 + Pinia + Vue Router + Element Plus)+ `App.vue` + `router/`(hash 模式,首页路由)+ `pages/HomePage.vue`。
+- OpenAPI 生成链:`npm run api:generate` 从 `docs/api/agentlog-openapi.yaml` 生成 typescript-axios 客户端到 `web/src/generated/api/`(7 个角色 API 分组 + 52 个 model)。生成代码禁止手改,提交入库以保证 clone 即可用。
+- 手写薄封装 `src/api/http.ts`:集中 `Configuration`(basePath/withCredentials),CSRF 与 ProblemDetail 处理留待 L05。
+- `tsconfig.json` / `tsconfig.app.json` / `tsconfig.node.json`、`src/env.d.ts`(.vue 类型声明)、`web/.gitignore`。
+
+### Changed
+- `vite.config.ts`:新增 `resolve.alias` 的 `@` → `src` 映射。原因:tsconfig 的 paths 仅服务 TS 类型检查,Vite/Rollup 打包不读 tsconfig,须在此再配一份,否则出现"type-check 过但 build 失败"。
+
+### Verified
+- `npm run api:validate`：No validation issues detected。
+- `npm run type-check`：0 类型错误。
+- `npm run build`：1733 modules transformed,`✓ built in 10s`,dist 产物生成。
+
+### Notes
+- 契约优先(contract-first):OpenAPI yaml 为前后端唯一契约,前端类型与请求方法由其生成,消除手写 URL/手抄类型的漂移。
+- 已知项:Element Plus 全量引入致 JS 包 >500KB,构建有 chunk 体积提示;本课不做按需加载优化。
+- 删除 openapi-generator 副产物 `git_push.sh`;`vite.config.js`(tsc 误编译产物)已删并 gitignore。
+
 ## 0.1.0-SNAPSHOT - L03 MySQL、Flyway、Testcontainers
 
 日期：2026-06-09
