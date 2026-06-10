@@ -37,7 +37,11 @@ public class ApiSecurityConfiguration {
                 // 启用 CSRF（旧项目 disable，本项目必须开——因为用 Cookie 认证）。
                 .csrf(csrf -> csrf
                         .csrfTokenRepository(csrfTokenRepository)
-                        .csrfTokenRequestHandler(csrfRequestHandler))
+                        .csrfTokenRequestHandler(csrfRequestHandler)
+                        .ignoringRequestMatchers(           // ← 加这个
+                                "/api/v1/web/auth/register",
+                                "/api/v1/web/auth/login",
+                                "/api/v1/web/csrf"))
                 // Session 策略：需要时创建（登录后保存认证用）。区别于旧项目的 STATELESS。
                 .sessionManagement(session -> session
                         .sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))

@@ -18,6 +18,10 @@
 ### Verified
 - 后端 `./mvnw -pl backend test`：`Tests run: 10, Failures: 0`。WebAuthIntegrationTest(Testcontainers+MockMvc)覆盖：注册→登录→带 Session 访问 /me 仍登录、匿名访问受保护接口 401、无 CSRF 的 POST 被拒 403。
 - 前端 type-check 0 错 + build 成功。
+- 实机验证(curl + 浏览器)：login 200 + 种 JSESSIONID(HttpOnly)、/me 刷新仍登录 200、/logout 裸 POST 仍 403(豁免最小化)；浏览器 `#/login` 输入 alice/password123 登录成功跳首页。
+
+### Fixed
+- 登录/注册接口虽 `permitAll` 仍返回 401:根因是 CSRF 检查在授权之前(CsrfFilter 早于授权过滤器),`permitAll` 只免授权不免 CSRF,导致死锁(登录需先持有 token,但登录接口被 CSRF 拦)。修复:`csrf().ignoringRequestMatchers("/api/v1/web/auth/register","/api/v1/web/auth/login")`,仅豁免"调用时无法持有 token"的匿名入口,其余写接口(含 /logout)CSRF 防护保持。集成测试(MockMvc)未覆盖此场景,实机 curl 才暴露——教训:集成测试应贴近真实调用方式。
 
 ### Notes
 - 401 vs 403：未认证(不知你是谁)用 401,已认证但无权限用 403;Spring Security 默认对未认证返 403,本项目用 HttpStatusEntryPoint 改 401 以符合语义并便于前端跳登录。
