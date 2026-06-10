@@ -4,14 +4,20 @@ import ElementPlus from 'element-plus'
 import 'element-plus/dist/index.css'
 import App from './App.vue'
 import router from './router'
+import { refreshCsrfToken } from './api/csrf'
 
 // 应用入口:把根组件 App 挂到 index.html 的 #app,并装上三大插件。
-//   createPinia() = 状态管理(L05 起放登录态、Feed 数据等)
+//   createPinia() = 状态管理(登录态、Feed 数据等)
 //   router        = 路由(URL ↔ 页面)
-//   ElementPlus   = UI 组件库(按钮、表单、表格等,后续页面用)
-// .use(x) 链式装插件,最后 .mount('#app') 启动。
+//   ElementPlus   = UI 组件库
 createApp(App)
   .use(createPinia())
   .use(router)
   .use(ElementPlus)
   .mount('#app')
+
+// 启动即拉一次 CSRF token(设计文档:SPA 启动调用 /web/csrf)。
+// 失败不阻塞页面渲染(如后端没起),登录时会再拉一次。
+refreshCsrfToken().catch(() => {
+  // 后端未就绪时静默,不影响纯前端页面浏览。
+})

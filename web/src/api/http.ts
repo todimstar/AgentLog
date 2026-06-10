@@ -1,19 +1,45 @@
+import axios, { type AxiosInstance } from 'axios'
 import { Configuration } from '@/generated/api'
+import { getCsrfToken, getCsrfHeaderName } from './csrf'
 
 // ── 手写薄封装层 ───────────────────────────────────────────────
-// 生成代码(generated/)负责"接口长什么样",这一层负责"调用时的横切逻辑":
-// 统一的 baseURL、withCredentials、未来的 CSRF 头与 ProblemDetail 错误处理。
-// 设计文档要求:页面禁止手拼 URL，一律通过生成的 Api 类 + 这份配置发请求。
+// 生成代码(generated/)负责"接口长什么样"，这一层负责"调用时的横切逻辑"：
+// withCredentials(带 Session Cookie)、CSRF 头注入、ProblemDetail 错误翻译。
+// 设计文档：页面禁止手拼 URL，一律通过生成的 Api 类 + 这份配置发请求。
 
-// OpenAPI 生成的每个 Api 类(PublicApi 等)都接受一个 Configuration。
-// 这里集中配置一次，供全应用复用。
-export const apiConfig = new Configuration({
-  // basePath 留空 = 用相对路径 /api/...，由 vite 代理转发到后端 8080(见 vite.config.ts)。
-  // 生产环境同源部署时同样走相对路径，无需改代码。
-  basePath: '',
+// 共享的 axios 实例：所有请求都经过它的拦截器。
+export const httpClient: AxiosInstance = axios.create({
+  // 相对路径 /api/...，由 vite 代理转发到后端 8080(见 vite.config.ts)。
+  baseURL: '',
+  // 关键：带上 Cookie(JSESSIONID + XSRF-TOKEN)。Session 认证全靠它。
+  withCredentials: true,
 })
 
-// 说明(TS/Java 对照):
-//   import { Configuration } from '...'  ≈ Java 的 import，只是 TS 用花括号做"具名导入"。
-//   export const x = ...                 ≈ 暴露一个公共常量给别的模块用。
-//   CSRF token 注入、401/403 拦截、ProblemDetail 翻译将在 L05 接入登录时补到这一层。
+// 请求拦截器：给 unsafe 方法(POST/PUT/PATCH/DELETE)自动附加 CSRF 头。
+// GET 等 safe 方法不需要(CSRF 只防会改数据的请求)。
+httpClient.interceptors.request.use((config) => {
+  const method = (config.method ?? 'get').toLowerCase()
+  if (['post', 'put', 'patch', 'delete'].includes(method)) {
+    config.headers.set(getCsrfHeaderName(), getCsrfToken())
+  }
+  return config
+})
+
+// 响应拦截器：把后端 RFC 9457 ProblemDetail 错误统一翻译成一致的 Error，方便页面 catch。
+httpClient.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const problem = error.response?.data
+    if (problem && typeof problem === 'object' && 'code' in problem) {
+      // 把 ProblemDetail 的关键信息抽出来挂到 error 上，页面可读 error.code / error.detail。
+      error.code = problem.code
+      error.detail = problem.detail
+      error.problemTitle = problem.title
+    }
+    return Promise.reject(error)
+  },
+)
+
+// 生成的 Api 类(PublicApi 等)接受 (Configuration, basePath, axiosInstance)。
+// 传入上面的 httpClient，让生成代码也走我们的拦截器。
+export const apiConfig = new Configuration({ basePath: '' })

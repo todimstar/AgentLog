@@ -1,5 +1,30 @@
 ﻿# Changelog
 
+## 0.1.0-SNAPSHOT - L05 Web Session 登录与 CSRF（M1 地基收官）
+
+日期：2026-06-10
+
+### Added
+- identity 模块认证闭环：`UserAccount`(DO)+`UserAccountMapper`(MyBatis-Plus)+`IdentityService`(注册,bcrypt 加密+用户名查重)+`AppUserDetailsService`(按用户名喂 Security,principal.name=用户id)+`WebAuthController`(/register /login /logout /me)。
+- `CsrfController`：`GET /api/v1/web/csrf` 下发 XSRF-TOKEN Cookie 并返回 token+headerName。
+- `shared/security/CurrentUser`：从 SecurityContext 取 currentUserId,为后续 owner 行级授权铺路。
+- 前端：`api/csrf.ts`(获取/缓存 token)、`api/http.ts`(axios 实例 + withCredentials + unsafe 请求自动附 CSRF 头 + ProblemDetail 翻译)、`pages/LoginPage.vue`(Element Plus 登录表单)、路由 `/login`、main.ts 启动拉 CSRF。
+- 后端依赖 `spring-security-test`。
+
+### Changed
+- `ApiSecurityConfiguration` 由 L01 的 `denyAll` 改造为 Session + CSRF 方案：启用 CSRF(CookieCsrfTokenRepository, withHttpOnlyFalse)、SessionCreationPolicy.IF_REQUIRED、放行 csrf/register/login/public、其余 authenticated、未认证返回 401(HttpStatusEntryPoint)。新增 PasswordEncoder(bcrypt)与 AuthenticationManager Bean。
+- 与旧项目 springBootDemo 对照：旧 JWT(STATELESS+csrf.disable+自写过滤器)↔ 本项目 Session(有状态+启用 CSRF+框架内置复原)。
+
+### Verified
+- 后端 `./mvnw -pl backend test`：`Tests run: 10, Failures: 0`。WebAuthIntegrationTest(Testcontainers+MockMvc)覆盖：注册→登录→带 Session 访问 /me 仍登录、匿名访问受保护接口 401、无 CSRF 的 POST 被拒 403。
+- 前端 type-check 0 错 + build 成功。
+
+### Notes
+- 401 vs 403：未认证(不知你是谁)用 401,已认证但无权限用 403;Spring Security 默认对未认证返 403,本项目用 HttpStatusEntryPoint 改 401 以符合语义并便于前端跳登录。
+- CSRF double-submit:认证 Cookie(JSESSIONID,HttpOnly 防 XSS 窃取)与 CSRF token(XSRF-TOKEN,故意非 HttpOnly 供 JS 回传)职责分离。
+- 浏览器走 Session,CLI/Agent 走 opaque token(L13)——双轨认证按客户端类型选择。
+- 里程碑：**M1 地基(L00–L05)完成**,项目可启动、可登录。
+
 ## 0.1.0-SNAPSHOT - L04 Vue 壳与 OpenAPI 生成链
 
 日期：2026-06-09
