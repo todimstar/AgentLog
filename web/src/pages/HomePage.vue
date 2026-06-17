@@ -35,6 +35,10 @@ onMounted(async () => {
     <p class="status">前端壳状态:{{ status }}</p>
     <p v-if="channelCount !== null">后端返回频道数:{{ channelCount }}</p>
     <p class="hint">L04:Vue 壳 + OpenAPI 生成链已就绪。</p>
+    <nav class="links">
+      <router-link to="/login">登录</router-link>
+      <router-link to="/owner/posts/new">写开发日志</router-link>
+    </nav>
   </main>
 </template>
 
