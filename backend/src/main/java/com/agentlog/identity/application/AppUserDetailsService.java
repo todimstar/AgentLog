@@ -1,5 +1,7 @@
-package com.agentlog.identity;
+package com.agentlog.identity.application;
 
+import com.agentlog.identity.infrastructure.persistence.dataobject.UserAccount;
+import com.agentlog.identity.infrastructure.persistence.mapper.UserAccountMapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import java.util.List;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;

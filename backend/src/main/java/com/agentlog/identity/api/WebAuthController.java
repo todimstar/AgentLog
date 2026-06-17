@@ -1,5 +1,9 @@
-package com.agentlog.identity;
+package com.agentlog.identity.api;
 
+import com.agentlog.identity.api.dto.LoginRequest;
+import com.agentlog.identity.api.dto.RegisterRequest;
+import com.agentlog.identity.api.dto.UserView;
+import com.agentlog.identity.application.IdentityService;
 import com.agentlog.shared.security.CurrentUser;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;

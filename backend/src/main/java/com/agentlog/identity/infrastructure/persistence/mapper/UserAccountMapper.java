@@ -1,5 +1,6 @@
-package com.agentlog.identity;
+package com.agentlog.identity.infrastructure.persistence.mapper;
 
+import com.agentlog.identity.infrastructure.persistence.dataobject.UserAccount;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import org.apache.ibatis.annotations.Mapper;
 

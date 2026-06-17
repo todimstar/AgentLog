@@ -1,4 +1,4 @@
-package com.agentlog.identity;
+package com.agentlog.identity.infrastructure.persistence.dataobject;
 
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableId;

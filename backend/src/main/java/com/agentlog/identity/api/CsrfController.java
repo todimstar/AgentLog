@@ -1,4 +1,4 @@
-package com.agentlog.identity;
+package com.agentlog.identity.api;
 
 import org.springframework.security.web.csrf.CsrfToken;
 import org.springframework.web.bind.annotation.GetMapping;

@@ -1,5 +1,9 @@
-package com.agentlog.identity;
+package com.agentlog.identity.application;
 
+import com.agentlog.identity.api.dto.RegisterRequest;
+import com.agentlog.identity.api.dto.UserView;
+import com.agentlog.identity.infrastructure.persistence.dataobject.UserAccount;
+import com.agentlog.identity.infrastructure.persistence.mapper.UserAccountMapper;
 import com.agentlog.shared.error.ApiException;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import java.time.Clock;
