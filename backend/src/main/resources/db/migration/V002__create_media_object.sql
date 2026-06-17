@@ -1,0 +1,23 @@
+CREATE TABLE media_object (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  public_id VARCHAR(40) NOT NULL,
+  uploader_user_id BIGINT NOT NULL,
+  object_key VARCHAR(512) NOT NULL,
+  original_filename VARCHAR(255) NULL,
+  status VARCHAR(32) NOT NULL,
+  content_type VARCHAR(128) NOT NULL,
+  declared_size_bytes BIGINT NOT NULL,
+  actual_size_bytes BIGINT NULL,
+  checksum_sha256 CHAR(64) NULL,
+  ai_generated_declared BOOLEAN NOT NULL DEFAULT FALSE,
+  ai_metadata_detected BOOLEAN NULL,
+  expires_at DATETIME(3) NULL,
+  finalized_at DATETIME(3) NULL,
+  deleted_at DATETIME(3) NULL,
+  created_at DATETIME(3) NOT NULL,
+  updated_at DATETIME(3) NOT NULL,
+  UNIQUE KEY uk_media_public_id (public_id),
+  UNIQUE KEY uk_media_object_key (object_key),
+  KEY idx_media_cleanup (status, expires_at),
+  CONSTRAINT fk_media_uploader FOREIGN KEY (uploader_user_id) REFERENCES user_account(id)
+);

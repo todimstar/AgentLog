@@ -1,0 +1,122 @@
+CREATE TABLE post (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  owner_user_id BIGINT NOT NULL,
+  channel_id BIGINT NOT NULL,
+  current_published_version_id BIGINT NULL,
+  visibility_status VARCHAR(32) NOT NULL DEFAULT 'DRAFT_ONLY',
+  title_cache VARCHAR(255) NULL,
+  summary_cache VARCHAR(500) NULL,
+  cover_media_public_id VARCHAR(40) NULL,
+  content_origin_cache VARCHAR(32) NULL,
+  iteration_count INT NOT NULL DEFAULT 0,
+  view_count BIGINT NOT NULL DEFAULT 0,
+  like_count BIGINT NOT NULL DEFAULT 0,
+  comment_count BIGINT NOT NULL DEFAULT 0,
+  collection_count BIGINT NOT NULL DEFAULT 0,
+  hot_score DECIMAL(20,6) NOT NULL DEFAULT 0,
+  is_pinned BOOLEAN NOT NULL DEFAULT FALSE,
+  is_essence BOOLEAN NOT NULL DEFAULT FALSE,
+  published_at DATETIME(3) NULL,
+  version BIGINT NOT NULL DEFAULT 0,
+  created_at DATETIME(3) NOT NULL,
+  updated_at DATETIME(3) NOT NULL,
+  KEY idx_post_feed_latest (visibility_status, is_pinned, published_at, id),
+  KEY idx_post_feed_hot (visibility_status, is_pinned, hot_score, published_at, id),
+  KEY idx_post_channel_latest (channel_id, visibility_status, published_at, id),
+  CONSTRAINT fk_post_owner FOREIGN KEY (owner_user_id) REFERENCES user_account(id),
+  CONSTRAINT fk_post_channel FOREIGN KEY (channel_id) REFERENCES forum_channel(id),
+  CONSTRAINT fk_post_cover FOREIGN KEY (cover_media_public_id) REFERENCES media_object(public_id)
+);
+
+CREATE TABLE draft (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  post_id BIGINT NOT NULL,
+  owner_user_id BIGINT NOT NULL,
+  base_post_version_id BIGINT NULL,
+  title VARCHAR(255) NOT NULL,
+  summary VARCHAR(500) NULL,
+  channel_id BIGINT NOT NULL,
+  status VARCHAR(32) NOT NULL,
+  declared_external_ai_content BOOLEAN NOT NULL DEFAULT FALSE,
+  version BIGINT NOT NULL DEFAULT 0,
+  created_at DATETIME(3) NOT NULL,
+  updated_at DATETIME(3) NOT NULL,
+  KEY idx_draft_owner_status (owner_user_id, status, updated_at),
+  CONSTRAINT fk_draft_post FOREIGN KEY (post_id) REFERENCES post(id),
+  CONSTRAINT fk_draft_owner FOREIGN KEY (owner_user_id) REFERENCES user_account(id),
+  CONSTRAINT fk_draft_channel FOREIGN KEY (channel_id) REFERENCES forum_channel(id)
+);
+
+CREATE TABLE contribution (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  session_id BIGINT NULL,
+  ticket_id BIGINT NULL,
+  author_type VARCHAR(16) NOT NULL,
+  author_user_id BIGINT NULL,
+  author_agent_id BIGINT NULL,
+  source_tool VARCHAR(32) NULL,
+  client_run_id VARCHAR(128) NULL,
+  raw_content MEDIUMTEXT NOT NULL,
+  metadata_json JSON NULL,
+  created_at DATETIME(3) NOT NULL,
+  KEY idx_contribution_user (author_user_id, created_at),
+  KEY idx_contribution_agent (author_agent_id, created_at),
+  CONSTRAINT fk_contribution_user FOREIGN KEY (author_user_id) REFERENCES user_account(id),
+  CONSTRAINT fk_contribution_agent FOREIGN KEY (author_agent_id) REFERENCES agent_account(id)
+);
+
+CREATE TABLE draft_block (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  draft_id BIGINT NOT NULL,
+  contribution_id BIGINT NULL,
+  author_type VARCHAR(16) NULL,
+  author_user_id BIGINT NULL,
+  author_agent_id BIGINT NULL,
+  source_tool VARCHAR(32) NULL,
+  display_order INT NOT NULL,
+  rendered_content MEDIUMTEXT NOT NULL,
+  is_hidden BOOLEAN NOT NULL DEFAULT FALSE,
+  version BIGINT NOT NULL DEFAULT 0,
+  created_at DATETIME(3) NOT NULL,
+  updated_at DATETIME(3) NOT NULL,
+  KEY idx_draft_block_order (draft_id, display_order),
+  CONSTRAINT fk_block_draft FOREIGN KEY (draft_id) REFERENCES draft(id),
+  CONSTRAINT fk_block_contribution FOREIGN KEY (contribution_id) REFERENCES contribution(id)
+);
+
+CREATE TABLE post_version (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  post_id BIGINT NOT NULL,
+  version_no INT NOT NULL,
+  title_snapshot VARCHAR(255) NOT NULL,
+  summary_snapshot VARCHAR(500) NULL,
+  channel_id_snapshot BIGINT NOT NULL,
+  channel_name_snapshot VARCHAR(64) NOT NULL,
+  cover_media_public_id_snapshot VARCHAR(40) NULL,
+  tag_ids_snapshot_json JSON NULL,
+  content_origin VARCHAR(32) NOT NULL,
+  moderation_status VARCHAR(32) NOT NULL,
+  owner_approved_by_user_id BIGINT NOT NULL,
+  owner_approved_at DATETIME(3) NOT NULL,
+  published_at DATETIME(3) NULL,
+  created_at DATETIME(3) NOT NULL,
+  UNIQUE KEY uk_post_version (post_id, version_no),
+  CONSTRAINT fk_version_post FOREIGN KEY (post_id) REFERENCES post(id),
+  CONSTRAINT fk_version_owner_approver FOREIGN KEY (owner_approved_by_user_id) REFERENCES user_account(id)
+);
+
+CREATE TABLE post_version_block (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  post_version_id BIGINT NOT NULL,
+  source_draft_block_id BIGINT NULL,
+  contribution_id BIGINT NULL,
+  author_type VARCHAR(16) NULL,
+  author_user_id BIGINT NULL,
+  author_agent_id BIGINT NULL,
+  source_tool VARCHAR(32) NULL,
+  display_order INT NOT NULL,
+  content_snapshot MEDIUMTEXT NOT NULL,
+  created_at DATETIME(3) NOT NULL,
+  KEY idx_version_block_order (post_version_id, display_order),
+  CONSTRAINT fk_version_block_version FOREIGN KEY (post_version_id) REFERENCES post_version(id)
+);

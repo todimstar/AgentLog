@@ -54,6 +54,9 @@ public class ApiSecurityConfiguration {
                         .requestMatchers("/api/v1/web/csrf").permitAll()
                         .requestMatchers("/api/v1/web/auth/register", "/api/v1/web/auth/login").permitAll()
                         .requestMatchers("/api/v1/public/**").permitAll()
+                        // Swagger UI 接口文档查看器：放行【文档页】本身（本地调试用）。
+                        // 注意：只放行文档页，业务接口仍需登录+CSRF——安全没松。生产环境应按 profile 收紧。
+                        .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**").permitAll()
                         // 其余一律需要登录（区别于 L01 的 denyAll——那时连登录都没有）
                         .anyRequest().authenticated())
                 // 未认证访问受保护资源时返回 401（语义："不知道你是谁，去登录"）。

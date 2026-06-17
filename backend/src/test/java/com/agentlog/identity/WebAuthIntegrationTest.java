@@ -83,11 +83,30 @@ class WebAuthIntegrationTest {
 
     @Test
     void unsafeRequestWithoutCsrfTokenIsForbidden() throws Exception {
-        // 不带 CSRF token 的 POST → 403。这是 CSRF 防护生效的证明（核心验收项）。
+        // 验证 CSRF 防护生效：用未豁免的 logout（POST）。
+        // 注意：register/login/csrf 三个入口在 L05 被 .ignoringRequestMatchers 豁免了 CSRF
+        // （修 CSRF 死锁所需），所以不能再用它们验证——它们本就不要 CSRF。
+        // logout 不在豁免名单，是验证"CSRF 拦截仍生效"的合适样本。
+        MockHttpSession session = new MockHttpSession();
+
+        // 先注册 + 登录拿到会话（这俩走豁免入口，带不带 csrf 都行，这里带上更贴近真实）。
         mockMvc.perform(post("/api/v1/web/auth/register")
+                        .session(session)
+                        .with(SecurityMockMvcRequestPostProcessors.csrf())
                         .contentType("application/json")
                         .content("""
                                 {"username":"bob","password":"password123","displayName":"Bob"}"""))
+                .andExpect(status().isCreated());
+        mockMvc.perform(post("/api/v1/web/auth/login")
+                        .session(session)
+                        .with(SecurityMockMvcRequestPostProcessors.csrf())
+                        .contentType("application/json")
+                        .content("""
+                                {"username":"bob","password":"password123"}"""))
+                .andExpect(status().isOk());
+
+        // 已登录，但 logout 不带 CSRF token → 403。证明 CSRF 防护对未豁免接口仍生效。
+        mockMvc.perform(post("/api/v1/web/auth/logout").session(session))
                 .andExpect(status().isForbidden());
     }
 }

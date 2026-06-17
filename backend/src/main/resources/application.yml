@@ -27,6 +27,19 @@ mybatis-plus:
     db-config:
       id-type: auto
 
+# springdoc / Swagger UI：本地接口调试器（http://localhost:8080/swagger-ui.html）
+springdoc:
+  swagger-ui:
+    # 开启后，Swagger UI 会自动从 XSRF-TOKEN Cookie 读 CSRF token 塞进 X-XSRF-TOKEN 请求头，
+    # 这样在 UI 里点"执行"调 POST 接口时无需手动管 CSRF（Cookie 由浏览器自动带）。
+    csrf:
+      enabled: true
+
+server:
+  servlet:
+    session:
+      timeout: 60m   # 登录态(HttpSession)空闲超时。默认 30m;显式设 60m,减少测试期反复重登。每次请求会刷新计时(滑动过期)。
+
 management:
   endpoints:
     web:

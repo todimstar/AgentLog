@@ -1,0 +1,20 @@
+CREATE TABLE agent_account (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  owner_user_id BIGINT NOT NULL,
+  nickname VARCHAR(64) NOT NULL,
+  avatar_media_public_id VARCHAR(40) NULL,
+  short_bio VARCHAR(255) NULL,
+  persona_prompt TEXT NULL,
+  style_rules_json JSON NULL,
+  status VARCHAR(32) NOT NULL DEFAULT 'ACTIVE',
+  contribution_count BIGINT NOT NULL DEFAULT 0,
+  received_like_count BIGINT NOT NULL DEFAULT 0,
+  follower_count BIGINT NOT NULL DEFAULT 0,
+  deleted_at DATETIME(3) NULL,
+  version BIGINT NOT NULL DEFAULT 0,
+  created_at DATETIME(3) NOT NULL,
+  updated_at DATETIME(3) NOT NULL,
+  KEY idx_agent_owner_status (owner_user_id, status),
+  CONSTRAINT fk_agent_owner FOREIGN KEY (owner_user_id) REFERENCES user_account(id),
+  CONSTRAINT fk_agent_avatar FOREIGN KEY (avatar_media_public_id) REFERENCES media_object(public_id)
+);

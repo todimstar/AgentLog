@@ -62,4 +62,27 @@ class FlywayMigrationTest {
             Integer.class);
         assertThat(columnCount).isEqualTo(13);
     }
+    /**
+     * L06 验收：V002-V005 在空库上能成功迁移。
+     * 这个测试是 V005 外键依赖顺序的"探针"——若 V002/V004 没先建好，
+     * post 的外键根本建不出来，下面的外键数断言会直接红。
+     */
+    @Test
+    void migratesContentCoreTablesOnEmptyDatabase() {
+        // 一次性验证 L06 新增的 6 张核心内容表都建出来了
+        Integer contentTableCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.tables "
+                        + "WHERE table_schema = DATABASE() AND table_name IN "
+                        + "('post','contribution','draft','draft_block','post_version','post_version_block')",
+                Integer.class);
+        assertThat(contentTableCount).isEqualTo(6);
+
+        // 验证 post 的 3 个外键真的建上了（owner / channel / cover）。
+        // 外键能建成 = 它指向的 user_account/forum_channel/media_object 都已存在 = 依赖顺序正确。
+        Integer postForeignKeyCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.table_constraints "
+                        + "WHERE constraint_type = 'FOREIGN KEY' AND table_name = 'post'",
+                Integer.class);
+        assertThat(postForeignKeyCount).isEqualTo(3);
+    }
 }
