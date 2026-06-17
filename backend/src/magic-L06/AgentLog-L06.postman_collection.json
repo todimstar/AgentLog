@@ -1,0 +1,156 @@
+{
+  "info": {
+    "name": "AgentLog L06 发帖闭环",
+    "description": "导入即用。内置脚本自动处理 CSRF + 会话。\n\n用法:按顺序 Send:\n1. 注册(改 body 里 username 为没用过的新名)\n2. 登录\n3. 建草稿\n4. 看草稿\n\nCSRF token 由每个请求的 Pre-request Script 自动获取并带上,Cookie(JSESSIONID/XSRF-TOKEN)由 Postman 自动管理,你无需手动操作。",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080/api/v1" },
+    { "key": "username", "value": "postman_user" },
+    { "key": "password", "value": "password123" },
+    { "key": "channelId", "value": "1" },
+    { "key": "draftId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "1. 注册 (register)",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "// register 接口豁免 CSRF,无需 token。仅确保有会话 Cookie。",
+              "pm.sendRequest({ url: pm.variables.get('baseUrl') + '/web/csrf', method: 'GET' }, function (err, res) {",
+              "  if (!err && res) { console.log('csrf 预热完成'); }",
+              "});"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('注册 201 或 409(已存在)', function () {",
+              "  pm.expect([201, 409]).to.include(pm.response.code);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"{{username}}\",\n  \"password\": \"{{password}}\",\n  \"displayName\": \"Postman测试员\"\n}"
+        },
+        "url": { "raw": "{{baseUrl}}/web/auth/register", "host": ["{{baseUrl}}"], "path": ["web", "auth", "register"] }
+      }
+    },
+    {
+      "name": "2. 登录 (login)",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "// 登录前抓一次 CSRF token 存进变量(login 虽豁免,但带上无害且统一流程)。",
+              "pm.sendRequest({ url: pm.variables.get('baseUrl') + '/web/csrf', method: 'GET' }, function (err, res) {",
+              "  if (!err && res) { pm.collectionVariables.set('csrfToken', res.json().token); }",
+              "});"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('登录成功 200', function () { pm.response.to.have.status(200); });",
+              "var j = pm.response.json();",
+              "pm.test('返回用户名正确', function () { pm.expect(j.username).to.eql(pm.variables.get('username')); });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "X-XSRF-TOKEN", "value": "{{csrfToken}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"{{username}}\",\n  \"password\": \"{{password}}\"\n}"
+        },
+        "url": { "raw": "{{baseUrl}}/web/auth/login", "host": ["{{baseUrl}}"], "path": ["web", "auth", "login"] }
+      }
+    },
+    {
+      "name": "3. 建草稿 (createDraft) ★核心",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "// 关键:每次写操作前刷新 CSRF token(登录后会轮换)。同步拿到再发请求。",
+              "pm.sendRequest({ url: pm.variables.get('baseUrl') + '/web/csrf', method: 'GET' }, function (err, res) {",
+              "  if (!err && res) { pm.collectionVariables.set('csrfToken', res.json().token); }",
+              "});"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('建草稿 201', function () { pm.response.to.have.status(201); });",
+              "var j = pm.response.json();",
+              "if (j.draftId) { pm.collectionVariables.set('draftId', j.draftId); console.log('draftId =', j.draftId); }",
+              "pm.test('状态为 EDITABLE', function () { pm.expect(j.status).to.eql('EDITABLE'); });",
+              "pm.test('blocks 含正文', function () { pm.expect(j.blocks[0].content).to.be.a('string'); });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "X-XSRF-TOKEN", "value": "{{csrfToken}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"title\": \"修了个CSRF死锁\",\n  \"channelId\": {{channelId}},\n  \"content\": \"今天踩了个坑：permitAll 不免 CSRF……\",\n  \"summary\": \"一次 CSRF 死锁的复盘\",\n  \"declaredExternalAiContent\": false\n}"
+        },
+        "url": { "raw": "{{baseUrl}}/owner/drafts", "host": ["{{baseUrl}}"], "path": ["owner", "drafts"] }
+      }
+    },
+    {
+      "name": "4. 看草稿 (getDraft)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('200', function () { pm.response.to.have.status(200); });",
+              "var j = pm.response.json();",
+              "pm.test('draftId 与建草稿一致', function () { pm.expect(String(j.draftId)).to.eql(pm.collectionVariables.get('draftId')); });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": { "raw": "{{baseUrl}}/owner/drafts/{{draftId}}", "host": ["{{baseUrl}}"], "path": ["owner", "drafts", "{{draftId}}"] }
+      }
+    }
+  ]
+}
