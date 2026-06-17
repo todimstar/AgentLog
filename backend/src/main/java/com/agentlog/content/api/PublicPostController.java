@@ -1,8 +1,10 @@
 package com.agentlog.content.api;
 
 
+import com.agentlog.content.api.dto.response.ChannelView;
 import com.agentlog.content.api.dto.response.PublicPostView;
 import com.agentlog.content.application.ContentService;
+import java.util.List;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -16,6 +18,11 @@ public class PublicPostController {
 
     public PublicPostController(ContentService contentService) {
         this.contentService = contentService;
+    }
+
+    @GetMapping("/channels")
+    public List<ChannelView> listChannels() {
+        return contentService.listChannels();
     }
 
     @GetMapping("/posts/{postId}")

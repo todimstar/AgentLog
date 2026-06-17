@@ -1,6 +1,7 @@
 package com.agentlog.content.application;
 
 import com.agentlog.content.api.dto.request.CreateOwnerDraftRequest;
+import com.agentlog.content.api.dto.response.ChannelView;
 import com.agentlog.content.api.dto.response.DraftView;
 import com.agentlog.content.api.dto.request.PublishDraftRequest;
 import com.agentlog.content.api.dto.response.PublicPostView;
@@ -248,5 +249,14 @@ public class ContentService {
 
         //超级拼装
         return PublicPostView.form(postId,version,blocks);
+    }
+
+    /** 公开分区列表:发帖选分区、Feed 筛选都用。只列启用的,按 sort_order 排。 */
+    public List<ChannelView> listChannels() {
+        List<ForumChannelDO> channels = forumChannelMapper.selectList(
+                Wrappers.<ForumChannelDO>lambdaQuery()
+                        .eq(ForumChannelDO::getEnabled, true)
+                        .orderByAsc(ForumChannelDO::getSortOrder));
+        return channels.stream().map(ChannelView::from).toList();
     }
 }
