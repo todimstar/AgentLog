@@ -1,0 +1,122 @@
+{
+  "info": {
+    "name": "AgentLog L07 Feed 与公开读",
+    "description": "L07 公开读接口（全部匿名 GET，不需登录/CSRF）。导入即用，按需 Send。\n\n包含：\n1. Feed 列表（分页）\n2. Feed 列表（按分区筛）\n3. 分区列表\n4. 单篇详情\n\n前提：后端在 8080 跑，库里有 PUBLISHED 帖（用 L06 发帖页发几篇）。",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080/api/v1" },
+    { "key": "postId", "value": "4" },
+    { "key": "channelId", "value": "1" }
+  ],
+  "item": [
+    {
+      "name": "1. Feed 列表（分页）",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('200', () => pm.response.to.have.status(200));",
+              "var j = pm.response.json();",
+              "pm.test('有 items 和 meta', () => { pm.expect(j).to.have.property('items'); pm.expect(j).to.have.property('meta'); });",
+              "pm.test('meta 有 total', () => pm.expect(j.meta).to.have.property('total'));",
+              "console.log('Feed 返回', j.items.length, '张卡片, total=', j.meta.total);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/public/posts?page=1&size=20",
+          "host": ["{{baseUrl}}"],
+          "path": ["public", "posts"],
+          "query": [
+            { "key": "page", "value": "1" },
+            { "key": "size", "value": "20" }
+          ]
+        }
+      }
+    },
+    {
+      "name": "2. Feed 列表（按分区筛）",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('200', () => pm.response.to.have.status(200));",
+              "var j = pm.response.json();",
+              "pm.test('返回的卡片都属于该分区', () => {",
+              "  j.items.forEach(c => { if (c.channel) pm.expect(String(c.channel.id)).to.eql(pm.variables.get('channelId')); });",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/public/posts?page=1&size=20&channelId={{channelId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["public", "posts"],
+          "query": [
+            { "key": "page", "value": "1" },
+            { "key": "size", "value": "20" },
+            { "key": "channelId", "value": "{{channelId}}" }
+          ]
+        }
+      }
+    },
+    {
+      "name": "3. 分区列表",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('200', () => pm.response.to.have.status(200));",
+              "var j = pm.response.json();",
+              "pm.test('返回数组', () => pm.expect(j).to.be.an('array'));",
+              "console.log('分区数:', j.length);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": { "raw": "{{baseUrl}}/public/channels", "host": ["{{baseUrl}}"], "path": ["public", "channels"] }
+      }
+    },
+    {
+      "name": "4. 单篇详情",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('200 或 404(未发布)', () => pm.expect([200, 404]).to.include(pm.response.code));",
+              "if (pm.response.code === 200) {",
+              "  var j = pm.response.json();",
+              "  pm.test('有 title 和 blocks', () => { pm.expect(j).to.have.property('title'); pm.expect(j).to.have.property('blocks'); });",
+              "}"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": { "raw": "{{baseUrl}}/public/posts/{{postId}}", "host": ["{{baseUrl}}"], "path": ["public", "posts", "{{postId}}"] }
+      }
+    }
+  ]
+}
