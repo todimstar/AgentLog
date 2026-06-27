@@ -2,6 +2,7 @@ import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import ElementPlus from 'element-plus'
 import 'element-plus/dist/index.css'
+import './styles/base.css'   // 移植自 Mock 前端的设计系统（主题色 + 卡片/三栏/顶栏样式）
 import App from './App.vue'
 import router from './router'
 import { refreshCsrfToken } from './api/csrf'
