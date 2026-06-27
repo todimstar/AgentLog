@@ -8,20 +8,23 @@ import java.util.List;
 
 /**
  * 读者看到的已发布帖详情。正文来自 post_version_block 快照（非草稿）。
- * 迁自 content 模块（L07 把"读帖子"整体迁 forum）。
+ * 字段对齐 OpenAPI 契约 PublicPostView：postId/versionNo/title/summary/authors/blocks/
+ * contentOrigin/channelName/publishedAt/metrics（attachments 媒体快照留 L11）。
  *
- * from 入参用 forum 自己的只读投影行（PublicPostVersionRow / PublicPostBlockRow），
- * 不依赖 content 的 PostVersionDO——跨模块只读直查物理表的体现。
+ * authors 本课 L07 是骨架（空数组占位），完整作者头像组 L10 做。
+ * metrics 从 post 表的冗余计数缓存列读（同 Feed 卡片）。
  */
 public record PublicPostView(
         Long postId,
+        Integer versionNo,
         String title,
         String summary,
-        String channelName,
+        List<AuthorView> authors,
+        List<ContentBlockView> blocks,
         String contentOrigin,
-        Integer versionNo,
+        String channelName,
         Instant publishedAt,
-        List<ContentBlockView> blocks
+        PostMetrics metrics
 ) {
     public static PublicPostView from(Long postId, PublicPostVersionRow version, List<PublicPostBlockRow> blockRows) {
         List<ContentBlockView> blocks = blockRows.stream()
@@ -31,14 +34,22 @@ public record PublicPostView(
                         b.getContentSnapshot(),   // 读快照字段
                         b.getSourceTool()))
                 .toList();
+        PostMetrics metrics = new PostMetrics(
+                version.getViewCount(),
+                version.getLikeCount(),
+                version.getCommentCount(),
+                version.getCollectionCount(),
+                version.getHotScore());
         return new PublicPostView(
                 postId,
+                version.getVersionNo(),
                 version.getTitleSnapshot(),
                 version.getSummarySnapshot(),
-                version.getChannelNameSnapshot(),
+                List.of(),                        // authors 骨架：L10 头像组填充
+                blocks,
                 version.getContentOrigin(),
-                version.getVersionNo(),
+                version.getChannelNameSnapshot(),
                 version.getPublishedAt(),
-                blocks);
+                metrics);
     }
 }

@@ -1,7 +1,8 @@
 <script setup lang="ts">
 // 首页 Feed。三栏布局移植自 Mock：左分区栏 + 中卡片流 + 右信息栏。
-// 数据走 L07 真 API（PublicApi.listPublicPosts / listChannels），裁掉 Mock 里 L07 还没有的：
-//   排序 tab（HOT/FOLLOWING 是 L23/L22）、搜索（L21）、热门标签/共创者榜（L21/L10）。
+// 数据走 L07 真 API（PublicApi.listPublicPosts / listChannels）。
+// 分区筛选：契约已加 channelId 参数（重新生成 client 后），点分区即筛选。
+// 仍裁掉 Mock 里 L07 没有的：排序 tab（L23/L22）、搜索（L21）、热门标签/共创者榜（L21/L10）。
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
@@ -18,12 +19,13 @@ const channels = ref<ChannelView[]>([])
 const total = ref(0)
 const page = ref(1)
 const size = ref(20)
+const activeChannelId = ref<number | undefined>(undefined)  // undefined = 全部分区
 const loading = ref(false)
 
 async function loadFeed() {
   loading.value = true
   try {
-    const resp = await publicApi.listPublicPosts(page.value, size.value)
+    const resp = await publicApi.listPublicPosts(page.value, size.value, activeChannelId.value)
     posts.value = resp.data.items ?? []
     total.value = resp.data.meta?.total ?? 0
   } catch (err: any) {
@@ -31,6 +33,13 @@ async function loadFeed() {
   } finally {
     loading.value = false
   }
+}
+
+// 点分区筛选：切换 channelId，回到第 1 页重新加载。
+function setChannel(id?: number) {
+  activeChannelId.value = id
+  page.value = 1
+  loadFeed()
 }
 
 async function loadChannels() {
@@ -44,14 +53,22 @@ onMounted(() => { loadFeed(); loadChannels() })
 
 <template>
   <div class="layout-grid feed-layout">
-    <!-- 左：分区栏（筛选 channelId 待 client 重新生成支持参数后接，本课先展示） -->
+    <!-- 左：分区栏，可点击筛选 -->
     <aside class="sidebar left-sidebar">
       <div class="section-card">
         <h3>内容分区</h3>
         <p>按你的开发兴趣探索</p>
-        <button class="sidebar-item active"><span>⌂</span><div>全部内容</div></button>
-        <button v-for="ch in channels" :key="ch.id" class="sidebar-item">
-          <span>#</span><div>{{ ch.name }}<small>{{ ch.postCount ?? 0 }} 篇</small></div>
+        <button class="sidebar-item" :class="{ active: activeChannelId === undefined }" @click="setChannel()">
+          <span>⌂</span><div>全部内容</div>
+        </button>
+        <button
+          v-for="ch in channels"
+          :key="ch.id"
+          class="sidebar-item"
+          :class="{ active: activeChannelId === ch.id }"
+          @click="setChannel(ch.id)"
+        >
+          <span>#</span><div>{{ ch.name }}</div>
         </button>
       </div>
       <div class="sidebar-note">

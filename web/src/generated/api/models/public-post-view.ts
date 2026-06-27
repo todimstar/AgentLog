@@ -35,6 +35,14 @@ export interface PublicPostView {
     'blocks': Array<ContentBlockView>;
     'attachments'?: Array<MediaView>;
     'contentOrigin'?: string;
+    /**
+     * 发布版本快照的分区名（详情页展示）
+     */
+    'channelName'?: string;
+    /**
+     * 发布时间（详情页展示）
+     */
+    'publishedAt'?: string;
     'metrics': PostMetrics;
 }
 

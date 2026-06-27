@@ -185,10 +185,11 @@ export const PublicApiAxiosParamCreator = function (configuration?: Configuratio
          * @summary Feed
          * @param {number} [page] 
          * @param {number} [size] 
+         * @param {number} [channelId] 按分区筛选 Feed（可选；不传&#x3D;全部分区）
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        listPublicPosts: async (page?: number, size?: number, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+        listPublicPosts: async (page?: number, size?: number, channelId?: number, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
             const localVarPath = `/api/v1/public/posts`;
             // use dummy base URL string because the URL constructor only accepts absolute URLs.
             const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
@@ -207,6 +208,10 @@ export const PublicApiAxiosParamCreator = function (configuration?: Configuratio
 
             if (size !== undefined) {
                 localVarQueryParameter['size'] = size;
+            }
+
+            if (channelId !== undefined) {
+                localVarQueryParameter['channelId'] = channelId;
             }
 
             localVarHeaderParameter['Accept'] = 'application/json';
@@ -350,11 +355,12 @@ export const PublicApiFp = function(configuration?: Configuration) {
          * @summary Feed
          * @param {number} [page] 
          * @param {number} [size] 
+         * @param {number} [channelId] 按分区筛选 Feed（可选；不传&#x3D;全部分区）
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        async listPublicPosts(page?: number, size?: number, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<PostPage>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.listPublicPosts(page, size, options);
+        async listPublicPosts(page?: number, size?: number, channelId?: number, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<PostPage>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.listPublicPosts(page, size, channelId, options);
             const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
             const localVarOperationServerBasePath = operationServerMap['PublicApi.listPublicPosts']?.[localVarOperationServerIndex]?.url;
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
@@ -439,11 +445,12 @@ export const PublicApiFactory = function (configuration?: Configuration, basePat
          * @summary Feed
          * @param {number} [page] 
          * @param {number} [size] 
+         * @param {number} [channelId] 按分区筛选 Feed（可选；不传&#x3D;全部分区）
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        listPublicPosts(page?: number, size?: number, options?: RawAxiosRequestConfig): AxiosPromise<PostPage> {
-            return localVarFp.listPublicPosts(page, size, options).then((request) => request(axios, basePath));
+        listPublicPosts(page?: number, size?: number, channelId?: number, options?: RawAxiosRequestConfig): AxiosPromise<PostPage> {
+            return localVarFp.listPublicPosts(page, size, channelId, options).then((request) => request(axios, basePath));
         },
         /**
          * 
@@ -521,11 +528,12 @@ export class PublicApi extends BaseAPI {
      * @summary Feed
      * @param {number} [page] 
      * @param {number} [size] 
+     * @param {number} [channelId] 按分区筛选 Feed（可选；不传&#x3D;全部分区）
      * @param {*} [options] Override http request option.
      * @throws {RequiredError}
      */
-    public listPublicPosts(page?: number, size?: number, options?: RawAxiosRequestConfig) {
-        return PublicApiFp(this.configuration).listPublicPosts(page, size, options).then((request) => request(this.axios, this.basePath));
+    public listPublicPosts(page?: number, size?: number, channelId?: number, options?: RawAxiosRequestConfig) {
+        return PublicApiFp(this.configuration).listPublicPosts(page, size, channelId, options).then((request) => request(this.axios, this.basePath));
     }
 
     /**

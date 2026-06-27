@@ -1,34 +1,25 @@
 <script setup lang="ts">
 // 单篇帖子详情页。调 GET /public/posts/{id}（后端 forum.getPublicPost）。
-// ⚠️ 注意：生成的 PublicPostView 模型字段（contract）与后端实际返回有出入
-//   （后端返回 summary/channelName/contentOrigin/versionNo/publishedAt，生成模型没有这些）。
-//   本页以【后端实际返回】为准，用一个本地类型描述真实结构，避免被生成类型卡住。
+// 契约已对齐：生成的 PublicPostView 与后端返回一致，直接用生成模型，无需 as 绕过。
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { PublicApi } from '@/generated/api'
+import type { PublicPostView } from '@/generated/api'
 import { httpClient, apiConfig } from '@/api/http'
-
-// 后端实际返回结构（与 forum/api/dto/response/PublicPostView.java 对齐）
-interface RealBlock { blockId: number; displayOrder: number; content: string; sourceTool: string | null }
-interface RealPostView {
-  postId: number; title: string; summary: string; channelName: string
-  contentOrigin: string; versionNo: number; publishedAt: string; blocks: RealBlock[]
-}
 
 const publicApi = new PublicApi(apiConfig, '', httpClient)
 const route = useRoute()
 const router = useRouter()
 
-const post = ref<RealPostView | null>(null)
+const post = ref<PublicPostView | null>(null)
 const loading = ref(false)
 
 async function load() {
   loading.value = true
   try {
     const id = Number(route.params.id)
-    const resp = await publicApi.getPublicPost(id)
-    post.value = resp.data as unknown as RealPostView
+    post.value = (await publicApi.getPublicPost(id)).data
   } catch (err: any) {
     ElMessage.error(err?.detail ?? '帖子不存在或未发布')
     post.value = null
@@ -61,6 +52,13 @@ onMounted(load)
           <p>{{ block.content }}</p>
           <small v-if="block.sourceTool" class="block-tool">— {{ block.sourceTool }}</small>
         </div>
+      </div>
+
+      <div class="article-actions">
+        <span>👁 {{ post.metrics?.viewCount ?? 0 }}</span>
+        <span>♥ {{ post.metrics?.likeCount ?? 0 }}</span>
+        <span>💬 {{ post.metrics?.commentCount ?? 0 }}</span>
+        <span>★ {{ post.metrics?.collectionCount ?? 0 }}</span>
       </div>
     </article>
 

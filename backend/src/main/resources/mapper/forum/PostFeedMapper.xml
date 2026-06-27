@@ -42,7 +42,8 @@
     <select id="selectPublishedVersionByPostId"
             resultType="com.agentlog.forum.infrastructure.persistence.dataobject.PublicPostVersionRow">
         SELECT pv.id, pv.version_no, pv.title_snapshot, pv.summary_snapshot,
-               pv.channel_name_snapshot, pv.content_origin, pv.published_at
+               pv.channel_name_snapshot, pv.content_origin, pv.published_at,
+               p.view_count, p.like_count, p.comment_count, p.collection_count, p.hot_score
         FROM post p
         JOIN post_version pv ON pv.id = p.current_published_version_id
         WHERE p.id = #{postId}

@@ -125,6 +125,7 @@ paths:
       parameters:
       - $ref: '#/components/parameters/Page'
       - $ref: '#/components/parameters/Size'
+      - $ref: '#/components/parameters/ChannelIdQuery'
   /api/v1/public/posts/{postId}:
     get:
       tags:
@@ -722,6 +723,14 @@ components:
         type: integer
         default: 20
         maximum: 100
+    ChannelIdQuery:
+      name: channelId
+      in: query
+      required: false
+      description: 按分区筛选 Feed（可选；不传=全部分区）
+      schema:
+        type: integer
+        format: int64
     PostId:
       name: postId
       in: path
@@ -1134,6 +1143,13 @@ components:
             $ref: '#/components/schemas/MediaView'
         contentOrigin:
           type: string
+        channelName:
+          type: string
+          description: 发布版本快照的分区名（详情页展示）
+        publishedAt:
+          type: string
+          format: date-time
+          description: 发布时间（详情页展示）
         metrics:
           $ref: '#/components/schemas/PostMetrics'
     ContributionViewResponse:

@@ -228,10 +228,12 @@ const apiInstance = new PublicApi(configuration);
 
 let page: number; // (optional) (default to 0)
 let size: number; // (optional) (default to 20)
+let channelId: number; //按分区筛选 Feed（可选；不传=全部分区） (optional) (default to undefined)
 
 const { status, data } = await apiInstance.listPublicPosts(
     page,
-    size
+    size,
+    channelId
 );
 ```
 
@@ -241,6 +243,7 @@ const { status, data } = await apiInstance.listPublicPosts(
 |------------- | ------------- | ------------- | -------------|
 | **page** | [**number**] |  | (optional) defaults to 0|
 | **size** | [**number**] |  | (optional) defaults to 20|
+| **channelId** | [**number**] | 按分区筛选 Feed（可选；不传&#x3D;全部分区） | (optional) defaults to undefined|
 
 
 ### Return type
