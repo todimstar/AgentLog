@@ -1,10 +1,8 @@
 package com.agentlog.content.application;
 
 import com.agentlog.content.api.dto.request.CreateOwnerDraftRequest;
-import com.agentlog.content.api.dto.response.ChannelView;
 import com.agentlog.content.api.dto.response.DraftView;
 import com.agentlog.content.api.dto.request.PublishDraftRequest;
-import com.agentlog.content.api.dto.response.PublicPostView;
 import com.agentlog.content.api.dto.response.PublishDraftResponse;
 import com.agentlog.content.domain.AuthorType;
 import com.agentlog.content.domain.ContentOrigin;
@@ -223,40 +221,5 @@ public class ContentService {
         return new PublishDraftResponse(post.getId(), version.getId(), nextVersionNo,
                 version.getModerationStatus(), post.getVisibilityStatus());
 
-    }
-
-
-    public PublicPostView getPublicPost(long postId) {
-        //从Post指针表往下找到对应正文块，在Post_version表里用PostId找，然后超级拼装
-
-        //找帖子指针及其是否已发布可被查看
-        PostDO post = postMapper.selectById(postId);
-        if(post == null
-            || post.getCurrentPublishedVersionId() == null  //若未发布版本
-                ||!PostVisibility.PUBLISHED.getCode().equals(post.getVisibilityStatus())//状态不是已发布状态
-        ){
-            throw new ApiException(ApiStatus.POST_NOT_FOUND);
-        }
-
-        //找到对应版本，用其id再找对应正文块
-        PostVersionDO version = postVersionMapper.selectById(post.getCurrentPublishedVersionId());
-
-        List<PostVersionBlockDO> blocks = postVersionBlockMapper.selectList(
-                Wrappers.<PostVersionBlockDO>lambdaQuery()
-                .eq(PostVersionBlockDO::getPostVersionId,version.getId())
-                .orderByAsc(PostVersionBlockDO::getDisplayOrder)
-        );
-
-        //超级拼装
-        return PublicPostView.form(postId,version,blocks);
-    }
-
-    /** 公开分区列表:发帖选分区、Feed 筛选都用。只列启用的,按 sort_order 排。 */
-    public List<ChannelView> listChannels() {
-        List<ForumChannelDO> channels = forumChannelMapper.selectList(
-                Wrappers.<ForumChannelDO>lambdaQuery()
-                        .eq(ForumChannelDO::getEnabled, true)
-                        .orderByAsc(ForumChannelDO::getSortOrder));
-        return channels.stream().map(ChannelView::from).toList();
     }
 }
