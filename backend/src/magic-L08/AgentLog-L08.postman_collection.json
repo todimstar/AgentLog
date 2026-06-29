@@ -1,0 +1,285 @@
+{
+  "info": {
+    "name": "AgentLog-L08",
+    "_postman_id": "l08-comment-collection",
+    "description": "L08 评论二级回复接口测试集合\n- 读评论树(匿名)\n- 发评论/回复(登录+CSRF)\n- 软删评论(登录+CSRF,仅作者)\n\n测试流程: 登录→发帖→发一级评论→回复→回复回复→验证B站扁平两层→软删验证楼层占位",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {"key": "baseUrl", "value": "http://localhost:8080/api/v1", "type": "string"},
+    {"key": "postId", "value": "1", "type": "string"},
+    {"key": "commentId1", "value": "1", "type": "string"},
+    {"key": "commentId2", "value": "2", "type": "string"},
+    {"key": "commentId3", "value": "3", "type": "string"}
+  ],
+  "item": [
+    {
+      "name": "0. 登录(获取CSRF+Session)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('登录成功', () => {",
+              "  pm.response.to.have.status(200);",
+              "  pm.expect(pm.response.json().username).to.eql('alice');",
+              "});",
+              "// CSRF Token 从 Cookie XSRF-TOKEN 自动读取,在后续请求的 header 中引用",
+              "const xsrfCookie = pm.cookies.get('XSRF-TOKEN');",
+              "if (xsrfCookie) {",
+              "  pm.collectionVariables.set('csrfToken', xsrfCookie);",
+              "}"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{"key": "Content-Type", "value": "application/json"}],
+        "url": {
+          "raw": "{{baseUrl}}/web/auth/login",
+          "host": ["{{baseUrl}}"],
+          "path": ["web", "auth", "login"]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\"username\":\"alice\",\"password\":\"password123\"}"
+        }
+      }
+    },
+    {
+      "name": "1. 发一级评论(楼主)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('一级评论创建成功', () => {",
+              "  pm.response.to.have.status(201);",
+              "  const json = pm.response.json();",
+              "  pm.expect(json.depth).to.eql(1);",
+              "  pm.expect(json.rootCommentId).to.eql(json.id);",
+              "  pm.collectionVariables.set('commentId1', json.id);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {"key": "Content-Type", "value": "application/json"},
+          {"key": "X-XSRF-TOKEN", "value": "{{csrfToken}}"}
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/web/posts/{{postId}}/comments",
+          "host": ["{{baseUrl}}"],
+          "path": ["web", "posts", "{{postId}}", "comments"]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\"content\":\"这是楼主评论,B站模型测试开始\"}"
+        }
+      }
+    },
+    {
+      "name": "2. 回复楼主(二级回复)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('二级回复创建成功', () => {",
+              "  pm.response.to.have.status(201);",
+              "  const json = pm.response.json();",
+              "  pm.expect(json.depth).to.eql(2);",
+              "  pm.expect(json.rootCommentId).to.eql(pm.collectionVariables.get('commentId1')|0);",
+              "  pm.expect(json.parentCommentId).to.eql(pm.collectionVariables.get('commentId1')|0);",
+              "  pm.collectionVariables.set('commentId2', json.id);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {"key": "Content-Type", "value": "application/json"},
+          {"key": "X-XSRF-TOKEN", "value": "{{csrfToken}}"}
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/web/posts/{{postId}}/comments",
+          "host": ["{{baseUrl}}"],
+          "path": ["web", "posts", "{{postId}}", "comments"]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\"content\":\"我回复楼主\",\"parentCommentId\":{{commentId1}},\"replyToCommentId\":{{commentId1}}}"
+        }
+      }
+    },
+    {
+      "name": "3. 回复二级评论(B站核心:扁平化)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('回复二级评论→扁平成同楼二级,不报错', () => {",
+              "  pm.response.to.have.status(201);",
+              "  const json = pm.response.json();",
+              "  // 核心验证:depth 仍=2,root 仍=楼1,parent=被回复的二级#2",
+              "  pm.expect(json.depth).to.eql(2);",
+              "  pm.expect(json.rootCommentId).to.eql(pm.collectionVariables.get('commentId1')|0);",
+              "  pm.expect(json.parentCommentId).to.eql(pm.collectionVariables.get('commentId2')|0);",
+              "  pm.expect(json.replyToCommentId).to.eql(pm.collectionVariables.get('commentId2')|0);",
+              "  pm.collectionVariables.set('commentId3', json.id);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {"key": "Content-Type", "value": "application/json"},
+          {"key": "X-XSRF-TOKEN", "value": "{{csrfToken}}"}
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/web/posts/{{postId}}/comments",
+          "host": ["{{baseUrl}}"],
+          "path": ["web", "posts", "{{postId}}", "comments"]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\"content\":\"我回复二级评论A,应被扁平成同楼二级\",\"parentCommentId\":{{commentId2}}}"
+        }
+      }
+    },
+    {
+      "name": "4. 读评论树(验证扁平两层)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('评论树返回扁平数组,同楼聚在一起', () => {",
+              "  pm.response.to.have.status(200);",
+              "  const items = pm.response.json().items;",
+              "  pm.expect(items.length).to.be.at.least(3);",
+              "  // 顺序:楼1(一级) → 楼1的所有二级 → 楼2...",
+              "  pm.expect(items[0].depth).to.eql(1);",
+              "  pm.expect(items[1].depth).to.eql(2);",
+              "  pm.expect(items[2].depth).to.eql(2);",
+              "  // 所有同楼评论 root 相同",
+              "  const floor = items[0].rootCommentId;",
+              "  pm.expect(items[1].rootCommentId).to.eql(floor);",
+              "  pm.expect(items[2].rootCommentId).to.eql(floor);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/public/posts/{{postId}}/comments",
+          "host": ["{{baseUrl}}"],
+          "path": ["public", "posts", "{{postId}}", "comments"]
+        }
+      }
+    },
+    {
+      "name": "5. 软删一级评论(验证楼层占位)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('软删返回204', () => {",
+              "  pm.response.to.have.status(204);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "DELETE",
+        "header": [{"key": "X-XSRF-TOKEN", "value": "{{csrfToken}}"}],
+        "url": {
+          "raw": "{{baseUrl}}/web/comments/{{commentId1}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["web", "comments", "{{commentId1}}"]
+        }
+      }
+    },
+    {
+      "name": "6. 再读评论树(验证软删占位)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('软删后评论仍在(占位),子回复还在', () => {",
+              "  pm.response.to.have.status(200);",
+              "  const items = pm.response.json().items;",
+              "  const deleted = items.find(c => c.id === pm.collectionVariables.get('commentId1')|0);",
+              "  pm.expect(deleted.status).to.eql('DELETED');",
+              "  pm.expect(deleted.content).to.eql('该评论已删除');",
+              "  pm.expect(deleted.author.displayName).to.eql('已注销');",
+              "  // 子回复仍在,楼层没塌",
+              "  const child = items.find(c => c.id === pm.collectionVariables.get('commentId2')|0);",
+              "  pm.expect(child).to.not.be.undefined;",
+              "  pm.expect(child.content).to.eql('我回复楼主');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/public/posts/{{postId}}/comments",
+          "host": ["{{baseUrl}}"],
+          "path": ["public", "posts", "{{postId}}", "comments"]
+        }
+      }
+    },
+    {
+      "name": "7. 删他人评论(应403)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('删他人评论→403 COMMENT_FORBIDDEN', () => {",
+              "  pm.response.to.have.status(403);",
+              "  pm.expect(pm.response.json().code).to.eql('COMMENT_FORBIDDEN');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "DELETE",
+        "header": [{"key": "X-XSRF-TOKEN", "value": "{{csrfToken}}"}],
+        "url": {
+          "raw": "{{baseUrl}}/web/comments/{{commentId2}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["web", "comments", "{{commentId2}}"]
+        }
+      },
+      "description": "注: 用 bob 登录后删 alice 的评论,预期 403。若当前是 alice 会话,需先登录 bob。"
+    }
+  ]
+}

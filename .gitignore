@@ -7,3 +7,7 @@ dist/
 .env
 .agentlog/
 .DS_Store
+
+# Claude Code session artifacts
+.claude/
+.playwright-mcp/
