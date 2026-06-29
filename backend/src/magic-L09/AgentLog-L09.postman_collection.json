@@ -1,0 +1,205 @@
+{
+  "info": {
+    "name": "AgentLog L09 点赞·收藏",
+    "description": "L09 点赞/收藏 toggle 接口测试集合。内置脚本自动处理 CSRF + 会话。\n\n用法：按顺序 Send\n1. 登录 (alice, 需已注册)\n2. 点赞帖 (第一次 → active=true, count+1)\n3. 再点同一个赞 (取消 → active=false, count-1)\n4. 收藏帖 (第一次 → active=true, count+1)\n5. 再点收藏 (取消 → active=false, count-1)\n\n前提：后端在 8080 跑, 库里有 PUBLISHED 帖 (postId=1, L08 已造好)\n核心验证：toggle 靠 affectedRows 判加/删——同一请求点两次效果相反。\nCSRF 范式：每个写操作前 prerequest 主动 GET /web/csrf 刷新 token。",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080/api/v1" },
+    { "key": "username", "value": "alice" },
+    { "key": "password", "value": "password123" },
+    { "key": "postId", "value": "1" }
+  ],
+  "item": [
+    {
+      "name": "1. 登录 (login)",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.sendRequest({ url: pm.variables.get('baseUrl') + '/web/csrf', method: 'GET' }, function (err, res) {",
+              "  if (!err && res) { pm.collectionVariables.set('csrfToken', res.json().token); }",
+              "});"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('登录 200', function () { pm.response.to.have.status(200); });",
+              "var j = pm.response.json();",
+              "pm.test('用户名正确', function () { pm.expect(j.username).to.eql(pm.variables.get('username')); });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "X-XSRF-TOKEN", "value": "{{csrfToken}}" }
+        ],
+        "body": { "mode": "raw", "raw": "{\n  \"username\": \"{{username}}\",\n  \"password\": \"{{password}}\"\n}" },
+        "url": { "raw": "{{baseUrl}}/web/auth/login", "host": ["{{baseUrl}}"], "path": ["web", "auth", "login"] }
+      }
+    },
+    {
+      "name": "2. 点赞帖 (第一次 → active=true, count+1) ★",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "// 关键：每次写操作前刷新 CSRF token (防止 token 过期导致 403)",
+              "pm.sendRequest({ url: pm.variables.get('baseUrl') + '/web/csrf', method: 'GET' }, function (err, res) {",
+              "  if (!err && res) { pm.collectionVariables.set('csrfToken', res.json().token); }",
+              "});"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "// ★ 核心验收：第一次点赞 → active=true, count 应该 ≥ 1",
+              "pm.test('点赞 200', function () { pm.response.to.have.status(200); });",
+              "var j = pm.response.json();",
+              "pm.test('active=true(刚加上)', function () { pm.expect(j.active).to.eql(true); });",
+              "pm.test('count >= 1', function () { pm.expect(j.count).to.be.at.least(1); });",
+              "console.log('点赞成功: active=' + j.active + ', count=' + j.count);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "X-XSRF-TOKEN", "value": "{{csrfToken}}" }
+        ],
+        "body": { "mode": "raw", "raw": "{\n  \"targetType\": \"POST\",\n  \"targetId\": {{postId}}\n}" },
+        "url": { "raw": "{{baseUrl}}/web/reactions/toggle", "host": ["{{baseUrl}}"], "path": ["web", "reactions", "toggle"] }
+      }
+    },
+    {
+      "name": "3. 再点同一个赞 (取消 → active=false, count-1) ★★",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.sendRequest({ url: pm.variables.get('baseUrl') + '/web/csrf', method: 'GET' }, function (err, res) {",
+              "  if (!err && res) { pm.collectionVariables.set('csrfToken', res.json().token); }",
+              "});"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "// ★★ 核心验收：同一个请求再点 → active=false(count-1),toggle 判加删逻辑生效",
+              "pm.test('取消赞 200', function () { pm.response.to.have.status(200); });",
+              "var j = pm.response.json();",
+              "pm.test('active=false(已取消)', function () { pm.expect(j.active).to.eql(false); });",
+              "// 如果一开始 count=0, 第一次点 →1, 这次取消 →0, count 应 =0",
+              "console.log('取消赞: active=' + j.active + ', count=' + j.count);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "X-XSRF-TOKEN", "value": "{{csrfToken}}" }
+        ],
+        "body": { "mode": "raw", "raw": "{\n  \"targetType\": \"POST\",\n  \"targetId\": {{postId}}\n}" },
+        "url": { "raw": "{{baseUrl}}/web/reactions/toggle", "host": ["{{baseUrl}}"], "path": ["web", "reactions", "toggle"] }
+      }
+    },
+    {
+      "name": "4. 收藏帖 (第一次 → active=true, count+1)",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.sendRequest({ url: pm.variables.get('baseUrl') + '/web/csrf', method: 'GET' }, function (err, res) {",
+              "  if (!err && res) { pm.collectionVariables.set('csrfToken', res.json().token); }",
+              "});"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('收藏 200', function () { pm.response.to.have.status(200); });",
+              "var j = pm.response.json();",
+              "pm.test('active=true', function () { pm.expect(j.active).to.eql(true); });",
+              "pm.test('count >= 1', function () { pm.expect(j.count).to.be.at.least(1); });",
+              "console.log('收藏成功: active=' + j.active + ', count=' + j.count);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "X-XSRF-TOKEN", "value": "{{csrfToken}}" }
+        ],
+        "body": { "mode": "raw", "raw": "{\n  \"postId\": {{postId}}\n}" },
+        "url": { "raw": "{{baseUrl}}/web/collections/toggle", "host": ["{{baseUrl}}"], "path": ["web", "collections", "toggle"] }
+      }
+    },
+    {
+      "name": "5. 再点收藏 (取消 → active=false, count-1)",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.sendRequest({ url: pm.variables.get('baseUrl') + '/web/csrf', method: 'GET' }, function (err, res) {",
+              "  if (!err && res) { pm.collectionVariables.set('csrfToken', res.json().token); }",
+              "});"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('取消收藏 200', function () { pm.response.to.have.status(200); });",
+              "var j = pm.response.json();",
+              "pm.test('active=false(已取消)', function () { pm.expect(j.active).to.eql(false); });",
+              "console.log('取消收藏: active=' + j.active + ', count=' + j.count);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "X-XSRF-TOKEN", "value": "{{csrfToken}}" }
+        ],
+        "body": { "mode": "raw", "raw": "{\n  \"postId\": {{postId}}\n}" },
+        "url": { "raw": "{{baseUrl}}/web/collections/toggle", "host": ["{{baseUrl}}"], "path": ["web", "collections", "toggle"] }
+      }
+    }
+  ]
+}
