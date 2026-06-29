@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.agentlog.forum.infrastructure.persistence.mapper.CommentMapper">
+
+    <!--
+      平铺查整帖评论 + JOIN 作者名，一次拉全（含软删占位行，前端渲染"已删除"）。
+      排序：先按 root_comment_id 把同一层楼聚到一起 → 楼内按 created_at。
+      => 平铺数组天然是「楼1(一级) + 楼1的所有二级回复 → 楼2 + 楼2的回复们」，前端顺序分组成两层。
+      一条 JOIN SQL 拉全 = 评论树零 N+1。不写 SELECT *（mybatis-guidelines），列全列出。
+    -->
+    <select id="selectCommentTree"
+            resultType="com.agentlog.forum.infrastructure.persistence.dataobject.CommentRow">
+        SELECT
+            c.id, c.root_comment_id, c.parent_comment_id, c.reply_to_comment_id, c.depth,
+            c.author_user_id, u.display_name AS author_name,
+            c.content, c.status, c.like_count, c.created_at
+        FROM comment c
+        JOIN user_account u ON u.id = c.author_user_id
+        WHERE c.post_id = #{postId}
+        ORDER BY c.root_comment_id ASC, c.created_at ASC, c.id ASC
+    </select>
+
+    <!--
+      评论计数原子增减。delta=+1 发评论 / -1 软删。
+      DB 端 comment_count = comment_count + ? 自增，并发安全（不走先读后写）。
+      返回受影响行数：0 表示帖子不存在 → Service 抛 POST_NOT_FOUND。
+    -->
+    <update id="bumpCommentCount">
+        UPDATE post
+        SET comment_count = comment_count + #{delta}
+        WHERE id = #{postId}
+    </update>
+</mapper>

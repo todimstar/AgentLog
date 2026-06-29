@@ -85,4 +85,31 @@ class FlywayMigrationTest {
                 Integer.class);
         assertThat(postForeignKeyCount).isEqualTo(3);
     }
+
+    /**
+     * L08 验收：V006 comment 表建出来 + 5 个外键（post/author/root/parent/reply_to）+ depth CHECK 约束。
+     * root/parent/reply_to 三个自引用外键能建成 = comment 表先于外键存在 = 自引用顺序正确。
+     */
+    @Test
+    void migratesCommentTableOnEmptyDatabase() {
+        Integer commentTableCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.tables "
+                        + "WHERE table_schema = DATABASE() AND table_name = 'comment'",
+                Integer.class);
+        assertThat(commentTableCount).isEqualTo(1);
+
+        Integer commentForeignKeyCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.table_constraints "
+                        + "WHERE constraint_type = 'FOREIGN KEY' AND table_name = 'comment'",
+                Integer.class);
+        assertThat(commentForeignKeyCount).isEqualTo(5);
+
+        // depth CHECK 不变量存在（MySQL 8 把 CHECK 记在 table_constraints，type=CHECK）。
+        Integer depthCheckCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.table_constraints "
+                        + "WHERE constraint_type = 'CHECK' AND table_name = 'comment' "
+                        + "AND constraint_name = 'ck_comment_depth'",
+                Integer.class);
+        assertThat(depthCheckCount).isEqualTo(1);
+    }
 }

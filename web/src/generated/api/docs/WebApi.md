@@ -6,6 +6,7 @@ All URIs are relative to *http://localhost:8080*
 |------------- | ------------- | -------------|
 |[**createComment**](#createcomment) | **POST** /api/v1/web/posts/{postId}/comments | 发表评论|
 |[**createReport**](#createreport) | **POST** /api/v1/web/reports | 举报内容|
+|[**deleteComment**](#deletecomment) | **DELETE** /api/v1/web/comments/{commentId} | 软删评论|
 |[**listNotifications**](#listnotifications) | **GET** /api/v1/web/notifications | 通知列表|
 |[**toggleCollection**](#togglecollection) | **POST** /api/v1/web/collections/toggle | 收藏切换|
 |[**toggleFollow**](#togglefollow) | **POST** /api/v1/web/follows/toggle | 关注切换|
@@ -113,6 +114,59 @@ No authorization required
 | Status code | Description | Response headers |
 |-------------|-------------|------------------|
 |**201** | created |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+# **deleteComment**
+> deleteComment()
+
+仅作者本人可删；软删留楼层占位，不物理删。
+
+### Example
+
+```typescript
+import {
+    WebApi,
+    Configuration
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new WebApi(configuration);
+
+let commentId: number; // (default to undefined)
+
+const { status, data } = await apiInstance.deleteComment(
+    commentId
+);
+```
+
+### Parameters
+
+|Name | Type | Description  | Notes|
+|------------- | ------------- | ------------- | -------------|
+| **commentId** | [**number**] |  | defaults to undefined|
+
+
+### Return type
+
+void (empty response body)
+
+### Authorization
+
+No authorization required
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**204** | deleted |  -  |
+|**403** | 非作者 |  -  |
+|**404** | 评论不存在 |  -  |
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
 

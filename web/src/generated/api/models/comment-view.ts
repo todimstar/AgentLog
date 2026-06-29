@@ -17,10 +17,33 @@
 // @ts-ignore
 import type { AuthorView } from './author-view';
 
+/**
+ * 单条评论视图。契约最小集(id/author/content/likeCount/createdAt) + 两层树前端组树必需的结构超集字段(L08 落地补齐)。 后端按楼层顺序吐扁平 items，前端按 rootCommentId 分组成两层。 
+ */
 export interface CommentView {
     'id': number;
     'author': AuthorView;
+    /**
+     * 楼：一级指向自己；二级指向所属一级。前端据此分组成两层。
+     */
+    'rootCommentId': number;
+    /**
+     * 直接父：一级为 null；二级指向被回复的那条。
+     */
+    'parentCommentId': number;
+    /**
+     * @谁，展示用，不加深层级。
+     */
+    'replyToCommentId': number;
+    /**
+     * 楼层深度，1=一级 / 2=二级（永远只有这两个值）。
+     */
+    'depth': number;
     'content': string;
+    /**
+     * VISIBLE / DELETED。DELETED 时前端渲染\"该评论已删除\"占位。
+     */
+    'status': string;
     'likeCount'?: number;
     'createdAt': string;
 }

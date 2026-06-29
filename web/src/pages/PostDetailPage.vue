@@ -1,12 +1,14 @@
 <script setup lang="ts">
 // 单篇帖子详情页。调 GET /public/posts/{id}（后端 forum.getPublicPost）。
 // 契约已对齐：生成的 PublicPostView 与后端返回一致，直接用生成模型，无需 as 绕过。
+// L08：底部挂评论区组件，承接后端扁平 items → 前端组两层树。
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { PublicApi } from '@/generated/api'
 import type { PublicPostView } from '@/generated/api'
 import { httpClient, apiConfig } from '@/api/http'
+import CommentSection from '@/components/CommentSection.vue'
 
 const publicApi = new PublicApi(apiConfig, '', httpClient)
 const route = useRoute()
@@ -61,6 +63,9 @@ onMounted(load)
         <span>★ {{ post.metrics?.collectionCount ?? 0 }}</span>
       </div>
     </article>
+
+    <!-- L08 评论区：扁平 items → 前端组两层树 -->
+    <CommentSection v-if="post" :post-id="Number(route.params.id)" />
 
     <el-empty v-else-if="!loading" description="帖子不存在或未发布" />
   </div>

@@ -30,6 +30,8 @@ import type { CreateReportRequest } from '../models';
 // @ts-ignore
 import type { NotificationPage } from '../models';
 // @ts-ignore
+import type { ProblemDetail } from '../models';
+// @ts-ignore
 import type { ToggleCollectionRequest } from '../models';
 // @ts-ignore
 import type { ToggleFollowRequest } from '../models';
@@ -109,6 +111,40 @@ export const WebApiAxiosParamCreator = function (configuration?: Configuration) 
             let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
             localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
             localVarRequestOptions.data = serializeDataIfNeeded(createReportRequest, localVarRequestOptions, configuration)
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * 仅作者本人可删；软删留楼层占位，不物理删。
+         * @summary 软删评论
+         * @param {number} commentId 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        deleteComment: async (commentId: number, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'commentId' is not null or undefined
+            assertParamExists('deleteComment', 'commentId', commentId)
+            const localVarPath = `/api/v1/web/comments/{commentId}`
+                .replace('{commentId}', encodeURIComponent(String(commentId)));
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'DELETE', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
 
             return {
                 url: toPathString(localVarUrlObj),
@@ -297,6 +333,19 @@ export const WebApiFp = function(configuration?: Configuration) {
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
         /**
+         * 仅作者本人可删；软删留楼层占位，不物理删。
+         * @summary 软删评论
+         * @param {number} commentId 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async deleteComment(commentId: number, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<void>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.deleteComment(commentId, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['WebApi.deleteComment']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
          * 
          * @summary 通知列表
          * @param {number} [page] 
@@ -380,6 +429,16 @@ export const WebApiFactory = function (configuration?: Configuration, basePath?:
             return localVarFp.createReport(createReportRequest, options).then((request) => request(axios, basePath));
         },
         /**
+         * 仅作者本人可删；软删留楼层占位，不物理删。
+         * @summary 软删评论
+         * @param {number} commentId 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        deleteComment(commentId: number, options?: RawAxiosRequestConfig): AxiosPromise<void> {
+            return localVarFp.deleteComment(commentId, options).then((request) => request(axios, basePath));
+        },
+        /**
          * 
          * @summary 通知列表
          * @param {number} [page] 
@@ -448,6 +507,17 @@ export class WebApi extends BaseAPI {
      */
     public createReport(createReportRequest: CreateReportRequest, options?: RawAxiosRequestConfig) {
         return WebApiFp(this.configuration).createReport(createReportRequest, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * 仅作者本人可删；软删留楼层占位，不物理删。
+     * @summary 软删评论
+     * @param {number} commentId 
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public deleteComment(commentId: number, options?: RawAxiosRequestConfig) {
+        return WebApiFp(this.configuration).deleteComment(commentId, options).then((request) => request(this.axios, this.basePath));
     }
 
     /**
