@@ -112,4 +112,31 @@ class FlywayMigrationTest {
                 Integer.class);
         assertThat(depthCheckCount).isEqualTo(1);
     }
+
+    /**
+     * L09 验收：V007 reaction + collection_record 建出来 + 各自唯一键（toggle 防重复赞/收藏的物理地基）。
+     * reaction 单外键（user），collection 双外键（user+post）——多态 reaction 不画到 post/comment 的外键。
+     */
+    @Test
+    void migratesReactionAndCollectionTablesOnEmptyDatabase() {
+        Integer tableCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.tables "
+                        + "WHERE table_schema = DATABASE() AND table_name IN ('reaction','collection_record')",
+                Integer.class);
+        assertThat(tableCount).isEqualTo(2);
+
+        // reaction 唯一键（user+target_type+target_id）= toggle INSERT IGNORE 的依据
+        Integer reactionUniqueKeys = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.statistics "
+                        + "WHERE table_schema = DATABASE() AND table_name = 'reaction' AND non_unique = 0",
+                Integer.class);
+        assertThat(reactionUniqueKeys).isGreaterThan(0);
+
+        // collection 唯一键（user+post）
+        Integer collectionUniqueKeys = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.statistics "
+                        + "WHERE table_schema = DATABASE() AND table_name = 'collection_record' AND non_unique = 0",
+                Integer.class);
+        assertThat(collectionUniqueKeys).isGreaterThan(0);
+    }
 }

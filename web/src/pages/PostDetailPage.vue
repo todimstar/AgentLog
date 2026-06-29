@@ -2,31 +2,66 @@
 // 单篇帖子详情页。调 GET /public/posts/{id}（后端 forum.getPublicPost）。
 // 契约已对齐：生成的 PublicPostView 与后端返回一致，直接用生成模型，无需 as 绕过。
 // L08：底部挂评论区组件，承接后端扁平 items → 前端组两层树。
+// L09：文章底部 ♥/★ 变成可点击的点赞/收藏 toggle 按钮，调 /web/reactions/toggle + /web/collections/toggle。
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { PublicApi } from '@/generated/api'
+import { PublicApi, WebApi } from '@/generated/api'
 import type { PublicPostView } from '@/generated/api'
 import { httpClient, apiConfig } from '@/api/http'
 import CommentSection from '@/components/CommentSection.vue'
 
 const publicApi = new PublicApi(apiConfig, '', httpClient)
+const webApi = new WebApi(apiConfig, '', httpClient)
 const route = useRoute()
 const router = useRouter()
 
 const post = ref<PublicPostView | null>(null)
 const loading = ref(false)
+// 点赞/收藏的本地状态：刚 toggle 后用接口回吐的 active/count 直接刷新按钮，不重拉全文。
+const liked = ref(false)
+const likeCount = ref(0)
+const collected = ref(false)
+const collectionCount = ref(0)
 
 async function load() {
   loading.value = true
   try {
     const id = Number(route.params.id)
     post.value = (await publicApi.getPublicPost(id)).data
+    // 用后端返的计数初始化按钮数字。是否已赞/已收藏需登录后单独查（L09 后端有 getReactionState 但
+    // 未在契约暴露，V1 简化：按钮初始未选中态，点了就 toggle，登录态会话下行为正确即可）。
+    likeCount.value = post.value?.metrics?.likeCount ?? 0
+    collectionCount.value = post.value?.metrics?.collectionCount ?? 0
   } catch (err: any) {
     ElMessage.error(err?.detail ?? '帖子不存在或未发布')
     post.value = null
   } finally {
     loading.value = false
+  }
+}
+
+async function toggleLike() {
+  const id = Number(route.params.id)
+  try {
+    const resp = await webApi.toggleReaction({ targetType: 'POST', targetId: id })
+    liked.value = resp.data.active
+    likeCount.value = resp.data.count
+  } catch (err: any) {
+    if (err?.response?.status === 401) { ElMessage.warning('请先登录'); router.push('/login') }
+    else ElMessage.error(err?.detail ?? '操作失败')
+  }
+}
+
+async function toggleCollect() {
+  const id = Number(route.params.id)
+  try {
+    const resp = await webApi.toggleCollection({ postId: id })
+    collected.value = resp.data.active
+    collectionCount.value = resp.data.count
+  } catch (err: any) {
+    if (err?.response?.status === 401) { ElMessage.warning('请先登录'); router.push('/login') }
+    else ElMessage.error(err?.detail ?? '操作失败')
   }
 }
 
@@ -58,9 +93,15 @@ onMounted(load)
 
       <div class="article-actions">
         <span>👁 {{ post.metrics?.viewCount ?? 0 }}</span>
-        <span>♥ {{ post.metrics?.likeCount ?? 0 }}</span>
+        <!-- ♥ 点赞 toggle 按钮：点了高亮，再点取消 -->
+        <button class="action-btn" :class="{ active: liked }" @click="toggleLike" :title="liked ? '取消点赞' : '点赞'">
+          {{ liked ? '♥' : '♡' }} {{ likeCount }}
+        </button>
         <span>💬 {{ post.metrics?.commentCount ?? 0 }}</span>
-        <span>★ {{ post.metrics?.collectionCount ?? 0 }}</span>
+        <!-- ★ 收藏 toggle -->
+        <button class="action-btn" :class="{ active: collected }" @click="toggleCollect" :title="collected ? '取消收藏' : '收藏'">
+          {{ collected ? '★' : '☆' }} {{ collectionCount }}
+        </button>
       </div>
     </article>
 
@@ -77,4 +118,8 @@ onMounted(load)
 .content-block { margin: 16px 0; }
 .content-block p { white-space: pre-wrap; }
 .block-tool { color: #9aa4b4; }
+.article-actions { display: flex; gap: 14px; align-items: center; margin-top: 20px; }
+.action-btn { background: none; border: 1px solid #e0e3e8; border-radius: 16px; padding: 4px 12px; cursor: pointer; color: #5a6473; font-size: 14px; }
+.action-btn:hover { border-color: #1677ff; color: #1677ff; }
+.action-btn.active { color: #ff4d4f; border-color: #ff4d4f; }
 </style>

@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.agentlog.forum.infrastructure.persistence.mapper.ReactionMapper">
+
+    <!--
+      INSERT IGNORE 点赞记录。
+      唯一键 uk_reaction_user_target 冲突时 IGNORE 跳过，affected rows=0（→Service 据此取消赞）。
+      不冲突则插入成功，affected rows=1（→Service 据此加赞计数）。
+      不写 SELECT count 先查：并发下来"先查后插"会双插，唯一键 + IGNORE 才是并发安全的判加删手段。
+    -->
+    <insert id="insertIgnore">
+        INSERT IGNORE INTO reaction (user_id, target_type, target_id, created_at)
+        VALUES (#{r.userId}, #{r.targetType}, #{r.targetId}, #{r.createdAt})
+    </insert>
+
+    <!--
+      帖子点赞计数原子增。GREATEST(0, like_count + #{delta})：并发或数据不一致导致 count 已是 0
+      时，再 -1 不会变 -1，被 GREATEST 钳到 0。防御性写法，杜绝"负赞数"丑数据。
+      原子 UPDATE（DB 端自增），无需先读后写，并发安全。
+    -->
+    <update id="bumpPostLikeCount">
+        UPDATE post SET like_count = GREATEST(0, like_count + #{delta}) WHERE id = #{postId}
+    </update>
+
+    <update id="bumpCommentLikeCount">
+        UPDATE comment SET like_count = GREATEST(0, like_count + #{delta}) WHERE id = #{commentId}
+    </update>
+</mapper>

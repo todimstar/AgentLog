@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.agentlog.forum.infrastructure.persistence.mapper.CollectionRecordMapper">
+
+    <!-- INSERT IGNORE 收藏记录，语义同 ReactionMapper.insertIgnore（toggle 复用）。 -->
+    <insert id="insertIgnore">
+        INSERT IGNORE INTO collection_record (user_id, post_id, created_at)
+        VALUES (#{c.userId}, #{c.postId}, #{c.createdAt})
+    </insert>
+
+    <!-- 帖子收藏计数原子增减，GREATEST 防负（与点赞计数同构）。 -->
+    <update id="bumpPostCollectionCount">
+        UPDATE post SET collection_count = GREATEST(0, collection_count + #{delta}) WHERE id = #{postId}
+    </update>
+</mapper>
