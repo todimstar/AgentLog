@@ -146,6 +146,18 @@ public class ReactionService {
         return new ToggleStateResponse(active, countReaction(targetType, targetId));
     }
 
+    /** 当前用户是否已收藏某帖 + 该帖总收藏数（给前端刷新后恢复按钮状态用）。 */
+    public ToggleStateResponse getCollectionState(long currentUserId, long postId) {
+        boolean active = collectionMapper.selectCount(
+                Wrappers.<CollectionRecordDO>lambdaQuery()
+                        .eq(CollectionRecordDO::getUserId, currentUserId)
+                        .eq(CollectionRecordDO::getPostId, postId)) > 0;
+        long count = collectionMapper.selectCount(
+                Wrappers.<CollectionRecordDO>lambdaQuery()
+                        .eq(CollectionRecordDO::getPostId, postId));
+        return new ToggleStateResponse(active, count);
+    }
+
     private long countReaction(String targetType, long targetId) {
         return reactionMapper.selectCount(
                 Wrappers.<ReactionDO>lambdaQuery()

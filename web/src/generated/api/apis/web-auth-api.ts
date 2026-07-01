@@ -68,6 +68,36 @@ export const WebAuthApiAxiosParamCreator = function (configuration?: Configurati
         },
         /**
          * 
+         * @summary 当前登录用户
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        getCurrentUser: async (options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            const localVarPath = `/api/v1/web/me`;
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'GET', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            localVarHeaderParameter['Accept'] = 'application/json,application/problem+json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * 
          * @summary 登录
          * @param {LoginRequest} loginRequest 
          * @param {*} [options] Override http request option.
@@ -188,6 +218,18 @@ export const WebAuthApiFp = function(configuration?: Configuration) {
         },
         /**
          * 
+         * @summary 当前登录用户
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async getCurrentUser(options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<UserView>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.getCurrentUser(options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['WebAuthApi.getCurrentUser']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * 
          * @summary 登录
          * @param {LoginRequest} loginRequest 
          * @param {*} [options] Override http request option.
@@ -244,6 +286,15 @@ export const WebAuthApiFactory = function (configuration?: Configuration, basePa
         },
         /**
          * 
+         * @summary 当前登录用户
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        getCurrentUser(options?: RawAxiosRequestConfig): AxiosPromise<UserView> {
+            return localVarFp.getCurrentUser(options).then((request) => request(axios, basePath));
+        },
+        /**
+         * 
          * @summary 登录
          * @param {LoginRequest} loginRequest 
          * @param {*} [options] Override http request option.
@@ -286,6 +337,16 @@ export class WebAuthApi extends BaseAPI {
      */
     public getCsrf(options?: RawAxiosRequestConfig) {
         return WebAuthApiFp(this.configuration).getCsrf(options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * 
+     * @summary 当前登录用户
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public getCurrentUser(options?: RawAxiosRequestConfig) {
+        return WebAuthApiFp(this.configuration).getCurrentUser(options).then((request) => request(this.axios, this.basePath));
     }
 
     /**

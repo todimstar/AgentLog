@@ -26,13 +26,15 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 /**
  * L09 点赞/收藏验收。forum 模块第二个集成测试。
  *
- * 覆盖 6 个验收点：
+ * 覆盖 8 个验收点：
  *  1. 点赞 toggle：第一次 active=true count+1；再点 active=false count-1
  *  2. 计数防变负：连续取消不会让 like_count 变 -1（GREATEST 兜底，间接验证：取消后再取消 count 保持 0）
  *  3. 收藏 toggle：同构验证
  *  4. 评论点赞（多态）：targetType=COMMENT + commentId，给 comment.like_count 增减
  *  5. 多态隔离：赞帖和赞评论互不影响（同 targetId 不同 targetType 是两条记录）
  *  6. 未登录 401：匿名点不了赞
+ *  7. 登录态 state 查询：刷新详情页后能恢复当前用户是否已赞/收藏
+ *  8. state 查询仍是登录态接口：匿名只能看公开详情，不能读"我是否已赞/收藏"
  *
  * 夹具：JdbcTemplate 直插 PUBLISHED 帖（聚焦测 toggle，不跑发帖全链路）+ 唯一后缀防 @BeforeEach 间唯一键残留。
  */
@@ -108,6 +110,19 @@ class ReactionIntegrationTest {
                 .andExpect(status().isOk()).andReturn();
     }
 
+    private MvcResult reactionState(MockHttpSession s, String targetType, long targetId) throws Exception {
+        return mockMvc.perform(get("/api/v1/web/reactions/state").session(s)
+                        .param("targetType", targetType)
+                        .param("targetId", String.valueOf(targetId)))
+                .andExpect(status().isOk()).andReturn();
+    }
+
+    private MvcResult collectionState(MockHttpSession s, long postId) throws Exception {
+        return mockMvc.perform(get("/api/v1/web/collections/state").session(s)
+                        .param("postId", String.valueOf(postId)))
+                .andExpect(status().isOk()).andReturn();
+    }
+
     private boolean active(MvcResult r) throws Exception {
         return objectMapper.readTree(r.getResponse().getContentAsString()).get("active").asBoolean();
     }
@@ -166,6 +181,28 @@ class ReactionIntegrationTest {
     }
 
     @Test
+    void stateEndpointsReturnCurrentUserActiveStateAndGlobalCount() throws Exception {
+        MockHttpSession alice = loginAs("alice");
+        MockHttpSession bob = loginAs("bob");
+
+        toggle(alice, "{\"targetType\":\"POST\",\"targetId\":" + postId + "}", "/api/v1/web/reactions/toggle");
+        toggle(bob, "{\"targetType\":\"POST\",\"targetId\":" + postId + "}", "/api/v1/web/reactions/toggle");
+        toggle(alice, "{\"postId\":" + postId + "}", "/api/v1/web/collections/toggle");
+
+        MvcResult aliceReaction = reactionState(alice, "POST", postId);
+        org.assertj.core.api.Assertions.assertThat(active(aliceReaction)).isTrue();
+        org.assertj.core.api.Assertions.assertThat(count(aliceReaction)).isEqualTo(2L);
+
+        MvcResult aliceCollection = collectionState(alice, postId);
+        org.assertj.core.api.Assertions.assertThat(active(aliceCollection)).isTrue();
+        org.assertj.core.api.Assertions.assertThat(count(aliceCollection)).isEqualTo(1L);
+
+        MvcResult bobCollection = collectionState(bob, postId);
+        org.assertj.core.api.Assertions.assertThat(active(bobCollection)).isFalse();
+        org.assertj.core.api.Assertions.assertThat(count(bobCollection)).isEqualTo(1L);
+    }
+
+    @Test
     void reactionOnCommentIsPolymorphic() throws Exception {
         // 点赞评论（多态 targetType=COMMENT）：给 comment.like_count 增减，不影响 post.like_count
         MockHttpSession alice = loginAs("alice");
@@ -191,6 +228,13 @@ class ReactionIntegrationTest {
                         .with(SecurityMockMvcRequestPostProcessors.csrf())
                         .contentType("application/json")
                         .content("{\"postId\":" + postId + "}"))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/v1/web/reactions/state")
+                        .param("targetType", "POST")
+                        .param("targetId", String.valueOf(postId)))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/v1/web/collections/state")
+                        .param("postId", String.valueOf(postId)))
                 .andExpect(status().isUnauthorized());
     }
 

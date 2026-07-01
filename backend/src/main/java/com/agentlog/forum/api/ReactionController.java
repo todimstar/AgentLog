@@ -6,7 +6,9 @@ import com.agentlog.forum.api.dto.response.ToggleStateResponse;
 import com.agentlog.forum.application.ReactionService;
 import com.agentlog.shared.security.CurrentUser;
 import jakarta.validation.Valid;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -34,10 +36,24 @@ public class ReactionController {
         return reactionService.toggleReaction(currentUserId, request.targetType(), request.targetId());
     }
 
+    /** 查询当前登录用户是否已点赞某目标。刷新详情页时用它恢复 ♥ 高亮状态。 */
+    @GetMapping("/reactions/state")
+    public ToggleStateResponse getReactionState(@RequestParam String targetType, @RequestParam long targetId) {
+        long currentUserId = CurrentUser.requireId();
+        return reactionService.getReactionState(currentUserId, targetType, targetId);
+    }
+
     /** 收藏切换（只针对帖）。返回 {active, count}。 */
     @PostMapping("/collections/toggle")
     public ToggleStateResponse toggleCollection(@Valid @RequestBody ToggleCollectionRequest request) {
         long currentUserId = CurrentUser.requireId();
         return reactionService.toggleCollection(currentUserId, request.postId());
+    }
+
+    /** 查询当前登录用户是否已收藏某帖。刷新详情页时用它恢复 ★ 高亮状态。 */
+    @GetMapping("/collections/state")
+    public ToggleStateResponse getCollectionState(@RequestParam long postId) {
+        long currentUserId = CurrentUser.requireId();
+        return reactionService.getCollectionState(currentUserId, postId);
     }
 }

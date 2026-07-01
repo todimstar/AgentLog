@@ -7,6 +7,8 @@ All URIs are relative to *http://localhost:8080*
 |[**createComment**](#createcomment) | **POST** /api/v1/web/posts/{postId}/comments | 发表评论|
 |[**createReport**](#createreport) | **POST** /api/v1/web/reports | 举报内容|
 |[**deleteComment**](#deletecomment) | **DELETE** /api/v1/web/comments/{commentId} | 软删评论|
+|[**getCollectionState**](#getcollectionstate) | **GET** /api/v1/web/collections/state | 收藏状态|
+|[**getReactionState**](#getreactionstate) | **GET** /api/v1/web/reactions/state | 点赞状态|
 |[**listNotifications**](#listnotifications) | **GET** /api/v1/web/notifications | 通知列表|
 |[**toggleCollection**](#togglecollection) | **POST** /api/v1/web/collections/toggle | 收藏切换|
 |[**toggleFollow**](#togglefollow) | **POST** /api/v1/web/follows/toggle | 关注切换|
@@ -167,6 +169,109 @@ No authorization required
 |**204** | deleted |  -  |
 |**403** | 非作者 |  -  |
 |**404** | 评论不存在 |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+# **getCollectionState**
+> ToggleStateResponse getCollectionState()
+
+
+### Example
+
+```typescript
+import {
+    WebApi,
+    Configuration
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new WebApi(configuration);
+
+let postId: number; // (default to undefined)
+
+const { status, data } = await apiInstance.getCollectionState(
+    postId
+);
+```
+
+### Parameters
+
+|Name | Type | Description  | Notes|
+|------------- | ------------- | ------------- | -------------|
+| **postId** | [**number**] |  | defaults to undefined|
+
+
+### Return type
+
+**ToggleStateResponse**
+
+### Authorization
+
+No authorization required
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**200** | state |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+# **getReactionState**
+> ToggleStateResponse getReactionState()
+
+
+### Example
+
+```typescript
+import {
+    WebApi,
+    Configuration
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new WebApi(configuration);
+
+let targetType: 'POST' | 'COMMENT'; // (default to undefined)
+let targetId: number; // (default to undefined)
+
+const { status, data } = await apiInstance.getReactionState(
+    targetType,
+    targetId
+);
+```
+
+### Parameters
+
+|Name | Type | Description  | Notes|
+|------------- | ------------- | ------------- | -------------|
+| **targetType** | [**&#39;POST&#39; | &#39;COMMENT&#39;**]**Array<&#39;POST&#39; &#124; &#39;COMMENT&#39;>** |  | defaults to undefined|
+| **targetId** | [**number**] |  | defaults to undefined|
+
+
+### Return type
+
+**ToggleStateResponse**
+
+### Authorization
+
+No authorization required
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**200** | state |  -  |
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
 

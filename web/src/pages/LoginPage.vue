@@ -2,13 +2,10 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { WebAuthApi } from '@/generated/api'
-import { httpClient, apiConfig } from '@/api/http'
-import { refreshCsrfToken } from '@/api/csrf'
+import { useSessionStore } from '@/stores/session'
 
-// 用生成的 WebAuthApi，传入带拦截器的 httpClient（自动带 Cookie + CSRF 头）。
-const authApi = new WebAuthApi(apiConfig, '', httpClient)
 const router = useRouter()
+const session = useSessionStore()
 
 const username = ref('')
 const password = ref('')
@@ -21,9 +18,7 @@ async function onLogin() {
   }
   loading.value = true
   try {
-    await authApi.loginWeb({ username: username.value, password: password.value })
-    // 登录成功后必须刷新 CSRF token（设计文档：登录态变化后 token 失效需重取）。
-    await refreshCsrfToken()
+    await session.login(username.value, password.value)
     ElMessage.success('登录成功')
     router.push('/')
   } catch (err: any) {

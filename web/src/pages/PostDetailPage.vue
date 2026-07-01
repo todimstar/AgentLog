@@ -6,7 +6,7 @@
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { PublicApi, WebApi } from '@/generated/api'
+import { GetReactionStateTargetTypeEnum, PublicApi, WebApi } from '@/generated/api'
 import type { PublicPostView } from '@/generated/api'
 import { httpClient, apiConfig } from '@/api/http'
 import CommentSection from '@/components/CommentSection.vue'
@@ -21,18 +21,22 @@ const loading = ref(false)
 // 点赞/收藏的本地状态：刚 toggle 后用接口回吐的 active/count 直接刷新按钮，不重拉全文。
 const liked = ref(false)
 const likeCount = ref(0)
+const likePending = ref(false)
 const collected = ref(false)
 const collectionCount = ref(0)
+const collectPending = ref(false)
 
 async function load() {
   loading.value = true
   try {
     const id = Number(route.params.id)
     post.value = (await publicApi.getPublicPost(id)).data
-    // 用后端返的计数初始化按钮数字。是否已赞/已收藏需登录后单独查（L09 后端有 getReactionState 但
-    // 未在契约暴露，V1 简化：按钮初始未选中态，点了就 toggle，登录态会话下行为正确即可）。
+    // 先用公开详情里的总数初始化；登录态下再拉"我是否已赞/收藏"状态，匿名 401 静默。
+    liked.value = false
+    collected.value = false
     likeCount.value = post.value?.metrics?.likeCount ?? 0
     collectionCount.value = post.value?.metrics?.collectionCount ?? 0
+    await loadInteractionState(id)
   } catch (err: any) {
     ElMessage.error(err?.detail ?? '帖子不存在或未发布')
     post.value = null
@@ -41,8 +45,25 @@ async function load() {
   }
 }
 
+async function loadInteractionState(postId: number) {
+  const [reaction, collection] = await Promise.allSettled([
+    webApi.getReactionState(GetReactionStateTargetTypeEnum.Post, postId),
+    webApi.getCollectionState(postId),
+  ])
+  if (reaction.status === 'fulfilled') {
+    liked.value = reaction.value.data.active
+    likeCount.value = reaction.value.data.count
+  }
+  if (collection.status === 'fulfilled') {
+    collected.value = collection.value.data.active
+    collectionCount.value = collection.value.data.count
+  }
+}
+
 async function toggleLike() {
+  if (likePending.value) return
   const id = Number(route.params.id)
+  likePending.value = true
   try {
     const resp = await webApi.toggleReaction({ targetType: 'POST', targetId: id })
     liked.value = resp.data.active
@@ -50,11 +71,15 @@ async function toggleLike() {
   } catch (err: any) {
     if (err?.response?.status === 401) { ElMessage.warning('请先登录'); router.push('/login') }
     else ElMessage.error(err?.detail ?? '操作失败')
+  } finally {
+    likePending.value = false
   }
 }
 
 async function toggleCollect() {
+  if (collectPending.value) return
   const id = Number(route.params.id)
+  collectPending.value = true
   try {
     const resp = await webApi.toggleCollection({ postId: id })
     collected.value = resp.data.active
@@ -62,6 +87,8 @@ async function toggleCollect() {
   } catch (err: any) {
     if (err?.response?.status === 401) { ElMessage.warning('请先登录'); router.push('/login') }
     else ElMessage.error(err?.detail ?? '操作失败')
+  } finally {
+    collectPending.value = false
   }
 }
 
@@ -94,12 +121,12 @@ onMounted(load)
       <div class="article-actions">
         <span>👁 {{ post.metrics?.viewCount ?? 0 }}</span>
         <!-- ♥ 点赞 toggle 按钮：点了高亮，再点取消 -->
-        <button class="action-btn" :class="{ active: liked }" @click="toggleLike" :title="liked ? '取消点赞' : '点赞'">
+        <button class="action-btn" :class="{ active: liked }" :disabled="likePending" :aria-pressed="liked" @click="toggleLike" :title="liked ? '取消点赞' : '点赞'">
           {{ liked ? '♥' : '♡' }} {{ likeCount }}
         </button>
         <span>💬 {{ post.metrics?.commentCount ?? 0 }}</span>
         <!-- ★ 收藏 toggle -->
-        <button class="action-btn" :class="{ active: collected }" @click="toggleCollect" :title="collected ? '取消收藏' : '收藏'">
+        <button class="action-btn" :class="{ active: collected }" :disabled="collectPending" :aria-pressed="collected" @click="toggleCollect" :title="collected ? '取消收藏' : '收藏'">
           {{ collected ? '★' : '☆' }} {{ collectionCount }}
         </button>
       </div>

@@ -5,6 +5,7 @@ All URIs are relative to *http://localhost:8080*
 |Method | HTTP request | Description|
 |------------- | ------------- | -------------|
 |[**getCsrf**](#getcsrf) | **GET** /api/v1/web/csrf | 获取 CSRF Token|
+|[**getCurrentUser**](#getcurrentuser) | **GET** /api/v1/web/me | 当前登录用户|
 |[**loginWeb**](#loginweb) | **POST** /api/v1/web/auth/login | 登录|
 |[**logoutWeb**](#logoutweb) | **POST** /api/v1/web/auth/logout | 登出|
 |[**registerUser**](#registeruser) | **POST** /api/v1/web/auth/register | 注册|
@@ -49,6 +50,50 @@ No authorization required
 | Status code | Description | Response headers |
 |-------------|-------------|------------------|
 |**200** | token |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+# **getCurrentUser**
+> UserView getCurrentUser()
+
+
+### Example
+
+```typescript
+import {
+    WebAuthApi,
+    Configuration
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new WebAuthApi(configuration);
+
+const { status, data } = await apiInstance.getCurrentUser();
+```
+
+### Parameters
+This endpoint does not have any parameters.
+
+
+### Return type
+
+**UserView**
+
+### Authorization
+
+No authorization required
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: application/json, application/problem+json
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**200** | user |  -  |
+|**401** | 未登录或 token 无效 |  -  |
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
 

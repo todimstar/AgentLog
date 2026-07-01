@@ -73,6 +73,22 @@ paths:
       responses:
         '204':
           description: logout
+  /api/v1/web/me:
+    get:
+      tags:
+      - WebAuth
+      summary: 当前登录用户
+      operationId: getCurrentUser
+      x-agentlog-phase: L05
+      responses:
+        '200':
+          description: user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserView'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
   /api/v1/public/channels:
     get:
       tags:
@@ -259,6 +275,35 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/ToggleReactionRequest'
+  /api/v1/web/reactions/state:
+    get:
+      tags:
+      - Web
+      summary: 点赞状态
+      operationId: getReactionState
+      x-agentlog-phase: L09
+      responses:
+        '200':
+          description: state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ToggleStateResponse'
+      parameters:
+      - name: targetType
+        in: query
+        required: true
+        schema:
+          type: string
+          enum:
+          - POST
+          - COMMENT
+      - name: targetId
+        in: query
+        required: true
+        schema:
+          type: integer
+          format: int64
   /api/v1/web/collections/toggle:
     post:
       tags:
@@ -279,6 +324,27 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/ToggleCollectionRequest'
+  /api/v1/web/collections/state:
+    get:
+      tags:
+      - Web
+      summary: 收藏状态
+      operationId: getCollectionState
+      x-agentlog-phase: L09
+      responses:
+        '200':
+          description: state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ToggleStateResponse'
+      parameters:
+      - name: postId
+        in: query
+        required: true
+        schema:
+          type: integer
+          format: int64
   /api/v1/web/follows/toggle:
     post:
       tags:
