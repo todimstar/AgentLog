@@ -474,6 +474,8 @@ if (affectedRows == 1) {
 
 **收藏 toggle 完全同构**——只是表不同（`collection_record` 只有 user_id+post_id,不需要 target_type）、计数列不同（`collection_count`）。
 
+补充一个后来前端验收才暴露的小坑:toggle 接口只能告诉前端「刚点完以后 active 是 true 还是 false」,但用户刷新页面或重新进入帖子详情时,公开详情接口只返回全站总数,不会返回「当前登录用户是否已赞/已收藏」,所以按钮会回到默认的 ♡/☆。修法是把公共读模型和登录态私有状态拆开:详情页先调匿名可读的 `/public/posts/{id}` 拿内容和总数,再在已登录时静默调 `/web/reactions/state`、`/web/collections/state` 拿当前用户的 active 状态。这样游客仍能看公开帖子,登录用户重进页面也能恢复 ♥/★ 高亮。
+
 ### 计数防负:GREATEST 钳到 0
 
 正常操作下计数不会变负——点赞 +1、取消 -1,配对操作。但万一数据不一致(比如手动 SQL 把 `like_count` 改成了 0 但 reaction 记录还在):
@@ -487,6 +489,9 @@ UPDATE post SET like_count = GREATEST(0, like_count + (-1)) WHERE id = 1;
 ```
 
 `GREATEST(0, x)` 取两个参数的最大值——如果 x 是 -1,结果仍是 0。相当于 `Math.max(0, x)`。这是防御性写法:**不依赖所有写入者都正确处理,万一 count 已经是 0 还要 -1,不会出现 -1 赞。**
+
+### 自述总结精华
+> toggle模式就是两种，一个insert情况，直接用insert ignore，然后根据返回影响行数判断是新点赞去post+1还是取消点赞-1。一个是update情况，用GREATEST当max保底0。用insert ignore巧妙躲避先查后插异步重复陷阱
 
 ### 面试自述
 

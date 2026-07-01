@@ -16,7 +16,7 @@ import java.time.Instant;
  *
  * 手写 getter/setter（无 Lombok）：DO 需可变 class，MyBatis-Plus 靠无参构造 + setter 回填。
  */
-@TableName("reaction")
+@TableName("reaction")//给MybatisPlus找表用的
 public class ReactionDO {
 
     @TableId(type = IdType.AUTO)

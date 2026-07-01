@@ -18,6 +18,8 @@
       帖子点赞计数原子增。GREATEST(0, like_count + #{delta})：并发或数据不一致导致 count 已是 0
       时，再 -1 不会变 -1，被 GREATEST 钳到 0。防御性写法，杜绝"负赞数"丑数据。
       原子 UPDATE（DB 端自增），无需先读后写，并发安全。
+      GREATEST(a,b) ==> Max(a,b)
+      greatest()最大值
     -->
     <update id="bumpPostLikeCount">
         UPDATE post SET like_count = GREATEST(0, like_count + #{delta}) WHERE id = #{postId}
