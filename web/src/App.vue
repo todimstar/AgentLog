@@ -8,7 +8,7 @@ import { useSessionStore } from '@/stores/session'
 const session = useSessionStore()
 
 onMounted(() => {
-  session.refresh().catch(() => {
+  session.ensureLoaded().catch(() => {
     // 后端暂不可用时不阻塞公开页面；用户执行登录/写入动作时再得到明确反馈。
   })
 })

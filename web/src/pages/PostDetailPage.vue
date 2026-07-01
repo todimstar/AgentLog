@@ -10,11 +10,13 @@ import { GetReactionStateTargetTypeEnum, PublicApi, WebApi } from '@/generated/a
 import type { PublicPostView } from '@/generated/api'
 import { httpClient, apiConfig } from '@/api/http'
 import CommentSection from '@/components/CommentSection.vue'
+import { useSessionStore } from '@/stores/session'
 
 const publicApi = new PublicApi(apiConfig, '', httpClient)
 const webApi = new WebApi(apiConfig, '', httpClient)
 const route = useRoute()
 const router = useRouter()
+const session = useSessionStore()
 
 const post = ref<PublicPostView | null>(null)
 const loading = ref(false)
@@ -36,7 +38,10 @@ async function load() {
     collected.value = false
     likeCount.value = post.value?.metrics?.likeCount ?? 0
     collectionCount.value = post.value?.metrics?.collectionCount ?? 0
-    await loadInteractionState(id)
+    await session.ensureLoaded().catch(() => undefined)
+    if (session.isAuthenticated) {
+      await loadInteractionState(id)
+    }
   } catch (err: any) {
     ElMessage.error(err?.detail ?? '帖子不存在或未发布')
     post.value = null
@@ -69,7 +74,10 @@ async function toggleLike() {
     liked.value = resp.data.active
     likeCount.value = resp.data.count
   } catch (err: any) {
-    if (err?.response?.status === 401) { ElMessage.warning('请先登录'); router.push('/login') }
+    if (err?.response?.status === 401) {
+      ElMessage.warning('请先登录')
+      router.push({ path: '/login', query: { redirect: route.fullPath } })
+    }
     else ElMessage.error(err?.detail ?? '操作失败')
   } finally {
     likePending.value = false
@@ -85,7 +93,10 @@ async function toggleCollect() {
     collected.value = resp.data.active
     collectionCount.value = resp.data.count
   } catch (err: any) {
-    if (err?.response?.status === 401) { ElMessage.warning('请先登录'); router.push('/login') }
+    if (err?.response?.status === 401) {
+      ElMessage.warning('请先登录')
+      router.push({ path: '/login', query: { redirect: route.fullPath } })
+    }
     else ElMessage.error(err?.detail ?? '操作失败')
   } finally {
     collectPending.value = false

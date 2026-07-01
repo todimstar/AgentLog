@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useSessionStore } from '@/stores/session'
 
 const router = useRouter()
+const route = useRoute()
 const session = useSessionStore()
 
 const username = ref('')
@@ -20,7 +21,9 @@ async function onLogin() {
   try {
     await session.login(username.value, password.value)
     ElMessage.success('登录成功')
-    router.push('/')
+    const rawRedirect = route.query.redirect
+    const redirect = typeof rawRedirect === 'string' && rawRedirect.startsWith('/') ? rawRedirect : '/'
+    router.push(redirect)
   } catch (err: any) {
     // 401 → 凭据错误；其余走 ProblemDetail 翻译出的 detail。
     ElMessage.error(err?.detail ?? '登录失败，请检查用户名或密码')
