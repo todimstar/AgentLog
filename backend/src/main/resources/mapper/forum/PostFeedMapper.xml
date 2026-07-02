@@ -36,6 +36,16 @@
         </foreach>
     </select>
 
+    <select id="selectAuthorsByUserIds"
+            resultType="com.agentlog.forum.infrastructure.persistence.dataobject.AuthorLookupRow">
+        SELECT id AS user_id, display_name, avatar_media_public_id AS avatar_media_id, status
+        FROM user_account
+        WHERE id IN
+        <foreach collection="ids" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </select>
+
     <!-- —— 单篇详情（L07 从 content 迁来，forum 只读投影直查物理表）—— -->
 
     <!-- 顺 post.current_published_version_id 指针读版本头；只认 PUBLISHED 的帖 -->

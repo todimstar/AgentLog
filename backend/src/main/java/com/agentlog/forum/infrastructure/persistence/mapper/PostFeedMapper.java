@@ -2,6 +2,7 @@ package com.agentlog.forum.infrastructure.persistence.mapper;
 
 import com.agentlog.forum.api.dto.FeedQuery;
 import com.agentlog.forum.api.dto.response.ChannelView;
+import com.agentlog.forum.infrastructure.persistence.dataobject.AuthorLookupRow;
 import com.agentlog.forum.infrastructure.persistence.dataobject.PostFeedRow;
 import com.agentlog.forum.infrastructure.persistence.dataobject.PublicPostBlockRow;
 import com.agentlog.forum.infrastructure.persistence.dataobject.PublicPostVersionRow;
@@ -40,9 +41,15 @@ public interface PostFeedMapper {
     /**
      * 批量查分区（按 id 集合 IN）。Feed 拼卡片的 channel 字段用——
      * 收集一页所有 channelId 后【一次 IN 查】，避免逐卡查 channel 的 N+1。
-     * 「批量查询」第一个真实落地：channel 现在就做（作者批量 L10 做头像组，本课占位）。
+     * 「批量查询」第一个真实落地：channel 先做；L10 用同一思路补 authors。
      */
     List<ChannelView> selectChannelsByIds(@Param("ids") Collection<Long> ids);
+
+    /**
+     * 批量查作者展示信息。和 selectChannelsByIds 一样，先收集本页 ownerUserId，再一次 IN 查。
+     * 只读 user_account 物理表，保持 forum 与 identity 的 Java 代码边界。
+     */
+    List<AuthorLookupRow> selectAuthorsByUserIds(@Param("ids") Collection<Long> ids);
 
     // —— 单篇详情（L07 从 content 迁来，forum 用只读投影直查物理表）——
 

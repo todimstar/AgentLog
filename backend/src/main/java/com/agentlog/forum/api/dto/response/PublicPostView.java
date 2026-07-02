@@ -11,7 +11,7 @@ import java.util.List;
  * 字段对齐 OpenAPI 契约 PublicPostView：postId/versionNo/title/summary/authors/blocks/
  * contentOrigin/channelName/publishedAt/metrics（attachments 媒体快照留 L11）。
  *
- * authors 本课 L07 是骨架（空数组占位），完整作者头像组 L10 做。
+ * authors 详情页暂保留骨架；L10 先补 Feed 卡片作者头像组。
  * metrics 从 post 表的冗余计数缓存列读（同 Feed 卡片）。
  */
 public record PublicPostView(
@@ -45,7 +45,7 @@ public record PublicPostView(
                 version.getVersionNo(),
                 version.getTitleSnapshot(),
                 version.getSummarySnapshot(),
-                List.of(),                        // authors 骨架：L10 头像组填充
+                List.of(),                        // authors 详情页骨架：Feed 卡片作者已在 L10 补齐
                 blocks,
                 version.getContentOrigin(),
                 version.getChannelNameSnapshot(),

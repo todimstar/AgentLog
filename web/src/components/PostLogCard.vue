@@ -3,11 +3,14 @@
 //   postId/title/summary/channel/authors/contentOrigin/metrics/publishedAt。
 // Mock 里有但 L07 后端还没有的（tags/coverVariant/toolSources/pinned/essence/channel.icon）先不渲染，
 // 等 L21 标签 / L11 封面 / L23 精华 等课接上再补。
-import type { PostCardView } from '@/generated/api'
+import type { AuthorView, PostCardView } from '@/generated/api'
 
 defineProps<{ post: PostCardView }>()
 const fmt = (n?: number) => (n && n > 999 ? `${(n / 1000).toFixed(1)}k` : `${n ?? 0}`)
 const time = (s?: string) => (s ? new Date(s).toLocaleDateString('zh-CN') : '')
+const initials = (name?: string) => Array.from((name || '?').trim())[0] || '?'
+const authorNames = (authors?: AuthorView[]) => authors?.length ? authors.map(a => a.displayName).join(' · ') : '未知作者'
+const tone = (index: number) => ['tone-blue', 'tone-green', 'tone-amber'][index % 3]
 </script>
 
 <template>
@@ -22,8 +25,19 @@ const time = (s?: string) => (s ? new Date(s).toLocaleDateString('zh-CN') : '')
       <p class="post-summary">{{ post.summary }}</p>
       <div class="post-bottom">
         <div class="author-line">
+          <div v-if="post.authors?.length" class="avatar-stack sm">
+            <span
+              v-for="(author, index) in post.authors.slice(0, 3)"
+              :key="`${author.authorType}-${author.userId ?? author.agentId ?? index}`"
+              :class="['avatar', 'sm', tone(index)]"
+              :title="author.displayName"
+            >
+              {{ initials(author.displayName) }}
+            </span>
+          </div>
+          <span v-else class="avatar sm tone-muted">?</span>
           <div>
-            <b>{{ post.authors?.length ? post.authors.map(a => a.displayName).join(' · ') : '佚名' }}</b>
+            <b>{{ authorNames(post.authors) }}</b>
             <span>开发日志</span>
           </div>
         </div>

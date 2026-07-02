@@ -2,6 +2,7 @@ package com.agentlog.forum.application;
 
 import com.agentlog.forum.api.dto.FeedQuery;
 import com.agentlog.forum.api.dto.response.*;
+import com.agentlog.forum.infrastructure.persistence.dataobject.AuthorLookupRow;
 import com.agentlog.forum.infrastructure.persistence.dataobject.PostFeedRow;
 import com.agentlog.forum.infrastructure.persistence.dataobject.PublicPostBlockRow;
 import com.agentlog.forum.infrastructure.persistence.dataobject.PublicPostVersionRow;
@@ -37,23 +38,35 @@ public class FeedService {
                 postFeedMapper.selectChannelsByIds(channelIds).stream()
                         .collect(Collectors.toMap(ChannelView::id, c -> c));
 
-        //4.作者拼装，在5.里最后new时，现在还不知道怎么查，不知道xml返回来的PostFeedRow的ownerUserId怎么能查出由多个作者组成的作者组，这个AuthorView里只有userId和name，不太理解这条实现链
-//        List<AuthorView> authors =
+        // 4. 批量查作者：PostFeedRow 只带 ownerUserId，Service 再把 id 批量翻译成 AuthorView。
+        Set<Long> ownerIds = rows.stream().map(PostFeedRow::getOwnerUserId)
+                .filter(Objects::nonNull).collect(Collectors.toSet());
+        Map<Long, AuthorView> authorMap = ownerIds.isEmpty() ? Map.of() :
+                postFeedMapper.selectAuthorsByUserIds(ownerIds).stream()
+                        .collect(Collectors.toMap(AuthorLookupRow::getUserId, this::toAuthorView));
 
         // 5. 内存拼装：每行 → PostCardView
         List<PostCardView> items = rows.stream().map(row -> {
             PostMetrics metrics = new PostMetrics(row.getViewCount(), row.getLikeCount(),
                     row.getCommentCount(), row.getCollectionCount(), row.getHotScore());
+            AuthorView author = authorMap.getOrDefault(row.getOwnerUserId(), AuthorView.deletedOwner(row.getOwnerUserId()));
             return new PostCardView(
                     row.getId(), row.getTitleCache(), row.getSummaryCache(),
                     channelMap.get(row.getChannelId()),     // 一次查到的分区
-                    List.of(),                                // 作者骨架：本课先空数组占位(L10 头像组)
+                    List.of(author),                          // L10：OWNER 作者头像组
                     row.getContentOriginCache(), row.getIterationCount(),
                     metrics, row.getPublishedAt(),
                     row.getIsPinned(), row.getIsEssence());
         }).toList();
 
         return new PostPage(items, new PageMeta(q.page(), q.size(), total));
+    }
+
+    private AuthorView toAuthorView(AuthorLookupRow row) {
+        if (!"ACTIVE".equals(row.getStatus())) {
+            return AuthorView.deletedOwner(row.getUserId());
+        }
+        return AuthorView.owner(row.getUserId(), row.getDisplayName(), row.getAvatarMediaId());
     }
 
     /**

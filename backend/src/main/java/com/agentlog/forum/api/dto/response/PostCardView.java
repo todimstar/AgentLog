@@ -12,7 +12,7 @@ import java.util.List;
  *   （若卡片字段去正文表取，一页 20 篇就 20 次正文查询，N+1 的另一面。）
  *
  * contentOrigin/pinned/essence 本课 L07 Feed 列表先展示用；HOT/精华排序 L23 才强化。
- * authors：本课骨架（L07 只批量取 id+name 占位，L10 做头像组）。
+ * authors：L10 批量补 OWNER 作者头像组。
  */
 public record PostCardView(
         Long postId,

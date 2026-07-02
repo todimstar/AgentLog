@@ -33,8 +33,8 @@ public record CommentView(
         boolean deleted = "DELETED".equals(row.getStatus());
         // 软删行：内容与作者脱敏，只保留楼层结构（id/root/parent/depth/时间）让前端撑出占位。
         AuthorView author = deleted
-                ? new AuthorView(null, "已注销")
-                : new AuthorView(row.getAuthorUserId(), row.getAuthorName());
+                ? AuthorView.deletedOwner(row.getAuthorUserId())
+                : AuthorView.owner(row.getAuthorUserId(), row.getAuthorName(), null);
         String content = deleted ? "该评论已删除" : row.getContent();
         return new CommentView(
                 row.getId(), author,
