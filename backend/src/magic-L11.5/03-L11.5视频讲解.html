@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>L11.5 邮箱登录重构 · 视频讲解 v3</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;background:#0d1117;color:#e6edf3;height:100vh;display:flex;flex-direction:column;overflow:hidden;font-size:14px}
+  header{padding:9px 16px;background:#161b22;border-bottom:1px solid #30363d;display:flex;align-items:center;gap:14px;flex-shrink:0}
+  header h1{font-size:15px}
+  .legend{display:flex;gap:6px;flex-wrap:wrap;margin-left:6px}
+  .lg{font-size:11px;padding:2px 8px;border-radius:10px;background:#21262d;border:1px solid #30363d;color:#8b949e}
+  .lg.on{color:#fff}
+  .spacer{flex:1}
+  #voice{font-size:11px;color:#7d8590}
+  .main{flex:1;display:flex;min-height:0}
+  .left{flex:1.35;display:flex;flex-direction:column;min-width:0;border-right:1px solid #30363d}
+  .tree{background:#0d1117;border-bottom:1px solid #30363d;max-height:34%;overflow:auto;padding:8px 0}
+  .tree .th{font-size:11px;color:#7d8590;padding:2px 14px 6px;text-transform:uppercase;letter-spacing:.5px}
+  .node{font-family:"SF Mono",Consolas,monospace;font-size:12.5px;padding:2px 14px;white-space:nowrap;color:#adbac7;cursor:pointer}
+  .node.dir{cursor:default}
+  .node .ic{opacity:.7;margin-right:5px}
+  .node.dir{color:#7d8590}
+  .node.file.on{background:#132a3e;color:#79c0ff;border-left:3px solid #1f6feb;padding-left:11px}
+  .breadcrumb{font-family:monospace;font-size:11.5px;color:#7d8590;padding:6px 16px;background:#0d1117;border-bottom:1px solid #21262d;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .breadcrumb b{color:#f0b429}
+  .code{flex:1;overflow:auto;background:#0d1117;padding:10px 0}
+  pre.code-pre{font-family:"SF Mono",Consolas,"Cascadia Code",monospace;font-size:13px;line-height:1.6}
+  .line{display:flex;padding:0 16px;white-space:pre;transition:background .2s;border-left:3px solid transparent}
+  .line .ln{color:#484f58;width:30px;text-align:right;margin-right:14px;user-select:none;flex-shrink:0}
+  .line.hot{background:#1f2d1f;border-left-color:#3fb950}
+  .line.dim{opacity:.34}
+  .right{flex:1;display:flex;flex-direction:column;min-width:320px}
+  .flow{flex:0 0 auto;max-height:52%;overflow:auto;background:#161b22;padding:12px 14px;border-bottom:1px solid #30363d}
+  .flow .th{font-size:11px;color:#7d8590;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px}
+  .lane{display:flex;align-items:center;gap:8px;margin-bottom:9px}
+  .lane-name{font-size:11.5px;width:104px;flex-shrink:0;color:#8b949e;text-align:right;line-height:1.2}
+  .lane.on .lane-name{color:#fff;font-weight:600}
+  .chips{display:flex;gap:6px;flex-wrap:wrap}
+  .chip{font-size:11px;padding:3px 9px;border-radius:12px;background:#21262d;border:1px solid #30363d;color:#8b949e;white-space:nowrap;cursor:pointer}
+  .chip.done{color:#3fb950;border-color:#238636}
+  .chip.on{background:#3fb950;color:#0d1117;border-color:#3fb950;font-weight:700;box-shadow:0 0 0 3px rgba(63,185,80,.25)}
+  .detail{flex:1;overflow:auto;padding:16px 18px;background:#0d1117}
+  .detail .th{font-size:11px;color:#3fb950;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px;font-weight:600}
+  .detail-body{font-size:14.5px;line-height:1.85;color:#c9d1d9}
+  .detail-body b{color:#f0b429}
+  .detail-body code{background:#161b22;padding:1px 5px;border-radius:4px;font-family:monospace;font-size:12.5px;color:#79c0ff}
+  .detail-body .warn{color:#ff7b72}
+  .subtitle{flex-shrink:0;background:#010409;border-top:1px solid #30363d;padding:14px 24px;min-height:64px;display:flex;align-items:center;justify-content:center}
+  .subtitle span{font-size:17px;line-height:1.6;text-align:center;color:#f0f6fc;max-width:1100px}
+  .controls{flex-shrink:0;padding:10px 16px;background:#161b22;border-top:1px solid #30363d}
+  .progress{height:4px;background:#30363d;border-radius:2px;margin-bottom:10px;overflow:hidden}
+  .progress-bar{height:100%;background:#3fb950;width:0;transition:width .3s}
+  .btns{display:flex;align-items:center;gap:9px}
+  button{background:#21262d;color:#e6edf3;border:1px solid #30363d;border-radius:6px;padding:7px 13px;cursor:pointer;font-size:14px}
+  button:hover{background:#30363d}
+  button.primary{background:#238636;border-color:#2ea043;font-weight:600}
+  button:disabled{opacity:.4;cursor:not-allowed}
+  label{font-size:12px;color:#7d8590;display:flex;align-items:center;gap:5px}
+  input[type=range]{width:80px}
+  .meta{font-size:12px;color:#7d8590}
+  .hint{font-size:11px;color:#7d8590;margin-top:8px}
+  kbd{background:#21262d;border:1px solid #30363d;border-radius:4px;padding:0 5px;font-family:monospace;font-size:11px;color:#adbac7}
+</style>
+</head>
+<body>
+<header>
+  <h1>🎬 L11.5 邮箱登录重构（插入课）</h1>
+  <div class="legend" id="legend"></div>
+  <div class="spacer"></div>
+  <span id="voice">语音加载中…</span>
+</header>
+
+<div class="main">
+  <div class="left">
+    <div class="tree"><div class="th">📁 项目结构 (identity 模块 + 收敛面)</div><div id="tree"></div></div>
+    <div class="breadcrumb" id="crumb">— 点击 ▶ 开始 —</div>
+    <div class="code"><pre class="code-pre" id="code"></pre></div>
+  </div>
+  <div class="right">
+    <div class="flow"><div class="th">🧭 本课流程图 · 共 <span id="threadCount">0</span> 条线</div><div id="flow"></div></div>
+    <div class="detail"><div class="th">💡 深入详解</div><div class="detail-body" id="detail">点右下方 ▶ 开始播放。左上结构树告诉你「现在讲的代码在整个模块的哪个位置」，右上流程图告诉你「这段属于哪条线的哪个环节」，底部是字幕，这里是深入解释。可点结构树文件或流程图节点直接跳转，也可用键盘 <kbd>空格</kbd> 播放/暂停、<kbd>←</kbd><kbd>→</kbd> 上/下一步。</div></div>
+  </div>
+</div>
+
+<div class="subtitle"><span id="subtitle">准备好了吗？点 ▶ 开始播放。中文语音会一句句讲，讲到哪段代码，左边高亮那几行、结构树定位那个文件、流程图点亮那个环节。</span></div>
+
+<div class="controls">
+  <div class="progress"><div class="progress-bar" id="bar"></div></div>
+  <div class="btns">
+    <button id="playBtn" class="primary">▶ 开始播放</button>
+    <button id="prevBtn">⏮</button>
+    <button id="nextBtn">⏭</button>
+    <span class="spacer"></span>
+    <label><input type="checkbox" id="autoChk" checked> 自动播放</label>
+    <label>语速 <input type="range" id="speed" min="0.6" max="1.4" step="0.1" value="0.95"></label>
+    <span class="meta" id="counter">0 / 0</span>
+  </div>
+  <div class="hint">若没声音，先点页面任意处再播放（浏览器要求用户交互后才发声）；优先「云健 Online (Natural)」音色，没有则回退，无语音时按字幕长度自动定时推进。字幕始终显示。</div>
+</div>
+
+<script>
+// ============ 视频内容模型（L11.5 邮箱登录重构） ============
+const MODEL = {
+  threads: [
+    { id:"t0", name:"线0 数据模型·V009" },
+    { id:"t1", name:"线1 发验证码" },
+    { id:"t2", name:"线2 注册落库" },
+    { id:"t3", name:"线3 邮箱登录" },
+    { id:"t4", name:"线4 全栈收敛" }
+  ],
+  fileTree: [
+    { path:"db/migration/V009__add_email_login.sql", label:"V009", threadIds:["t0"] },
+    { path:"identity/application/EmailVerificationService.java", label:"EmailVerificationService", threadIds:["t1","t2"] },
+    { path:"identity/application/IdentityService.java", label:"IdentityService", threadIds:["t1","t2"] },
+    { path:"identity/application/LoginAttemptService.java", label:"LoginAttemptService", threadIds:["t3"] },
+    { path:"identity/application/AppUserDetailsService.java", label:"AppUserDetailsService", threadIds:["t3"] },
+    { path:"identity/api/WebAuthController.java", label:"WebAuthController", threadIds:["t1","t3"] },
+    { path:"forum/dto/AuthorView.java", label:"AuthorView", threadIds:["t4"] },
+    { path:"web/pages/LoginPage.vue", label:"LoginPage.vue", threadIds:["t4"] }
+  ],
+  steps: [
+    { thread:"t0", file:"db/migration/V009__add_email_login.sql",
+      structurePath:"V009 ▸ 退避式加约束 ▸ 四步走",
+      flowNode:"线0·退避迁移",
+      codeSnippet:`-- ① 先加可空列（存量行先容忍 NULL）
+ALTER TABLE user_account ADD COLUMN email VARCHAR(255) NULL AFTER username;
+-- ② 回填：email 用 display_name 造；username 收敛成 display_name
+UPDATE user_account SET email = CONCAT(LOWER(display_name),'@demo.agentlog.local') WHERE email IS NULL;
+UPDATE user_account SET username = display_name WHERE display_name <> '';
+-- ③ 收紧成 NOT NULL + 唯一键
+ALTER TABLE user_account MODIFY COLUMN email VARCHAR(255) NOT NULL;
+ALTER TABLE user_account ADD UNIQUE KEY uk_user_email (email);
+-- ④ 砍掉 display_name（职责并入 username）
+ALTER TABLE user_account DROP COLUMN display_name;`,
+      highlightLines:[2,6,8,9,11],
+      subtitle:"V009 退避式加约束：可空 → 回填 → 收紧 → 删列。",
+      narration:"先看数据模型这条线。难点在于，email 要非空且唯一，但表里已经有数据了，直接加非空唯一列会因为存量行 email 为空而失败。标准姿势是退避式四步走：第一步先加可空列容忍存量；第二步回填，给老用户造邮箱、把 username 收敛成原来的展示名；第三步回填完了再收紧成非空唯一；第四步删掉 display_name。一加一删，列数还是十三，Flyway 那个断言列数的测试自动继续绿。",
+      detail:"<b>退避式加约束</b>：可空→回填→收紧，是给运行中的表加非空唯一列的通用套路（零停机雏形）。<b>净零列数</b>：加 email 减 display_name，<code>user_account</code> 仍 13 列，<code>FlywayMigrationTest</code> 断言 <code>columnCount==13</code> 自动继续绿。" },
+
+    { thread:"t1", file:"identity/api/WebAuthController.java",
+      structurePath:"WebAuthController ▸ sendCode ▸ 匿名入口",
+      flowNode:"线1·发码入口",
+      codeSnippet:`@PostMapping("/auth/send-code")
+@ResponseStatus(HttpStatus.NO_CONTENT)
+public void sendCode(@RequestBody SendCodeRequest request) {
+    identityService.sendRegisterCode(request.email());
+}`,
+      highlightLines:[1,4],
+      subtitle:"发码是匿名入口：permitAll + CSRF 忽略。",
+      narration:"第一条线，发验证码。这是注册前的第一步，是个匿名入口，因为用户还没账号也没登录，所以要放进白名单并忽略 CSRF。Controller 只接 HTTP，真正的活儿转给 IdentityService 的 sendRegisterCode。",
+      detail:"发码属<b>认证入口</b>：没登录也没 token，走 <code>permitAll</code> + CSRF 忽略。Controller 只做 HTTP 编排，业务下沉到应用服务。" },
+
+    { thread:"t1", file:"identity/application/EmailVerificationService.java",
+      structurePath:"EmailVerificationService ▸ issueRegisterCode ▸ 防刷+存码",
+      flowNode:"线1·防刷+存 Redis",
+      codeSnippet:`String key = CODE_KEY_PREFIX + email;
+// 防刷：上一条码还没过期就再发 → 拒绝
+if (Boolean.TRUE.equals(redis.hasKey(key)))
+    throw new ApiException(ApiStatus.CODE_SEND_TOO_FREQUENT);
+String code = generateCode();               // 6 位
+redis.opsForValue().set(key, code, CODE_TTL); // TTL 10min
+sendOrLog(email, code);                      // 发邮件，失败降级打日志`,
+      highlightLines:[3,4,6],
+      subtitle:"验证码存 Redis：一个 SET 带 TTL，10 分钟自过期。",
+      narration:"进 EmailVerificationService。为什么验证码存 Redis 不存数据库？因为它短命、高频、带过期，塞 MySQL 又要建表又要清理，Redis 一个 SET 带 EX 就自带过期，读写还快。这里用框架自带的 StringRedisTemplate，验证码就是字符串，零配置零魔法。存之前先防刷：上一条码还没过期就再发直接拒。",
+      detail:"验证码=<b>短命/高频/带过期</b>数据，Redis 天生场景。用框架自带 <code>StringRedisTemplate</code>（比旧项目自定义 <code>RedisTemplate&lt;String,Object&gt;</code>+JSON 更透明）。防刷复用「键存在即拒」。" },
+
+    { thread:"t1", file:"identity/application/EmailVerificationService.java",
+      structurePath:"EmailVerificationService ▸ sendOrLog ▸ 优雅降级",
+      flowNode:"线1·邮件降级",
+      codeSnippet:`if (fromEmail == null || fromEmail.isBlank()) {
+    log.info("【DEV·未配 SMTP】验证码 {} → {}", code, email);
+    return;   // 没配邮箱 → 只打日志，不阻断
+}
+try { mailSender.send(message); }
+catch (Exception e) { log.error("发送失败，降级：验证码 {}", code); }`,
+      highlightLines:[1,2,5,6],
+      subtitle:"邮件优雅降级：没配 SMTP 或发失败 → 只打日志，不阻断。",
+      narration:"发邮件这里有个优雅降级的设计：没配 SMTP 账号，或者发送失败，都不阻断注册流程，只把验证码打进日志。这样本地和测试环境不配真邮箱也能跑通全链路，配了真账号就真发邮件。测试里就是从 Redis 直接读这个码，相当于用户从邮箱拿。",
+      detail:"<b>优雅降级</b>：SMTP 未配或发送异常 → 只 <code>log</code> 验证码，注册流程照走。本地/测试无需真邮箱即可端到端；集成测试从 Redis 读码模拟收信。" },
+
+    { thread:"t2", file:"identity/application/IdentityService.java",
+      structurePath:"IdentityService ▸ register ▸ 验码→查重→落库",
+      flowNode:"线2·注册三关",
+      codeSnippet:`// 1. 验证码校验（Redis 取码比对，通过即删——一次性防重放）
+emailVerificationService.verifyRegisterCode(request.email(), request.verCode());
+// 2. 唯一性查重（uk_user_email / uk_user_username 库层兜底）
+if (emailExists(request.email()))    throw new ApiException(EMAIL_TAKEN);
+if (usernameExists(request.username())) throw new ApiException(USERNAME_TAKEN);
+// 3. bcrypt 加密落库（永不存明文，bcrypt 自带盐）
+account.setPasswordHash(passwordEncoder.encode(request.password()));`,
+      highlightLines:[2,4,5,7],
+      subtitle:"注册三关：验码（通过即删）→ 唯一查重 → bcrypt 落库。",
+      narration:"第二条线，注册。三道关卡顺序很讲究：先验证码，Redis 取码比对，通过就立刻删，一次性防重放，这道放最前面挡住没走验证码的注册。再唯一查重，email 和 username 各查一次，库层还有唯一键双重兜底防并发。最后 bcrypt 加密落库，永不存明文，bcrypt 自带盐，同样的密码每次哈希都不同。",
+      detail:"顺序即防线：<b>验码优先</b>（通过即删=一次性防重放）→ 应用层查重 + <b>库层唯一键兜底</b>（防并发）→ <code>bcrypt</code> 存哈希不存明文。" },
+
+    { thread:"t3", file:"identity/api/WebAuthController.java",
+      structurePath:"WebAuthController ▸ login ▸ 限流→认证→存Session",
+      flowNode:"线3·登录编排",
+      codeSnippet:`// 0. 失败限流：连续失败 5 次锁 15 分钟（认证前先拦）
+loginAttemptService.assertNotLocked(email);
+try {
+    authentication = authenticationManager.authenticate(
+        new UsernamePasswordAuthenticationToken(email, request.password()));
+} catch (AuthenticationException ex) {
+    loginAttemptService.recordFailure(email);  // 失败 +1
+    throw ex;
+}
+loginAttemptService.clear(email);              // 成功清零
+securityContextRepository.saveContext(context, httpRequest, httpResponse);`,
+      highlightLines:[2,7,10,11],
+      subtitle:"登录：Redis 失败限流 → 认证 → 存 SecurityContext 进 Session。",
+      narration:"第三条线，登录。认证前先做失败限流，连续失败五次锁十五分钟，key 用 email，因为这时候还没 userId，用 email 能更早拦住暴力撞库。认证交给 Spring Security，失败就计数加一并抛出，成功就清零。最关键的铁律：本项目是 Session 不是 JWT，所以验证通过后要手动把 SecurityContext 存进 HttpSession，后续请求才能刷新仍登录。",
+      detail:"限流 key 用 <b>email</b>（认证前无 userId，更早拦截）。铁律：本项目是 <b>Session 不是 JWT</b>——通过后手动 <code>saveContext</code> 进 HttpSession，这才让「刷新仍登录」成立。" },
+
+    { thread:"t3", file:"identity/application/AppUserDetailsService.java",
+      structurePath:"AppUserDetailsService ▸ loadUserByUsername ▸ 按 email 查",
+      flowNode:"线3·按邮箱查库",
+      codeSnippet:`// 方法名是 Spring 接口定的改不了，但方法体改成按 email 查
+public UserDetails loadUserByUsername(String email) {
+    UserAccount account = userAccountMapper.selectOne(
+        Wrappers.<UserAccount>lambdaQuery().eq(UserAccount::getEmail, email));
+    // principal 仍是 userId（下游取当前用户不变）
+    return User.withUsername(String.valueOf(account.getId())) ...;
+}`,
+      highlightLines:[2,3,4],
+      subtitle:"loadUserByUsername 方法名不变，方法体改成按 email 查库。",
+      narration:"这里有个容易踩的点：loadUserByUsername 这个方法名是 Spring 接口定死的改不了，但方法体里我们改成按 email 查。传进来的那个叫 username 的参数，其实装的是 email，框架无所谓，认得就行。而 principal 仍然放 userId，下游用 CurrentUser 取当前用户的逻辑完全不用动。",
+      detail:"接口方法名 <code>loadUserByUsername</code> 不可改，<b>方法体按 email 查</b>；入参名义是 username 实际装 email。<b>principal 仍是 userId</b>，下游 <code>CurrentUser.requireId()</code> 零改动。" },
+
+    { thread:"t4", file:"forum/dto/AuthorView.java",
+      structurePath:"AuthorView ▸ display_name 并入 username",
+      flowNode:"线4·后端收敛",
+      codeSnippet:`// display_name 列已删，作者卡同步用 username（一个名到处用）
+public static AuthorView owner(Long userId, String username, String avatarMediaId) {
+    return new AuthorView("OWNER", userId, null, username, avatarMediaId, false);
+}
+// 作者查询 SQL：SELECT ... username ...（原 display_name 已替换）`,
+      highlightLines:[2,3],
+      subtitle:"forum 收敛：作者卡从 display_name 改用 username。",
+      narration:"第四条线，全栈收敛。display_name 这一列删了，凡是用到它的地方都要统一改，不能留死角。forum 模块的作者卡片原来读 display_name，现在改读 username。这就是你当初点破的痛点：一个用户从此只有一个名字给人看，一个邮箱给系统认，不再一人两名。",
+      detail:"<b>统一改不留死角</b>：<code>display_name</code> 删列后，forum 作者卡、查询 SQL、注销占位全改用 <code>username</code>。一人一名到处用。" },
+
+    { thread:"t4", file:"web/pages/LoginPage.vue",
+      structurePath:"LoginPage.vue ▸ 双模式 ▸ 邮箱登录 / 验证码注册",
+      flowNode:"线4·前端双模式",
+      codeSnippet:`// 登录：邮箱 + 密码
+await session.login(email.value, password.value)
+// 注册：邮箱 → 发码（60s 倒计时防连点）→ 用户名 + 密码 → 自动登录
+await session.sendRegisterCode(email.value)   // 体验层防刷
+await session.register(email, username, password, verCode)
+await session.login(email, password)          // 注册只建号，登录才建会话`,
+      highlightLines:[2,4,5,6],
+      subtitle:"前端双模式：邮箱登录 / 邮箱+验证码注册，注册后自动登录。",
+      narration:"最后落到前端。登录页做成双模式：登录是邮箱加密码；注册是邮箱、发验证码、用户名、密码，发码有个六十秒倒计时做体验层防连点，和后端十分钟的 Redis 防刷是两条独立防线。要注意注册只建账号，会话是由随后的登录建立的，不是注册。契约先改 OpenAPI，再重新生成前端客户端，全栈类型一致。",
+      detail:"前端 60s 倒计时=<b>体验层</b>防连点，与后端 10min Redis 防刷<b>相互独立</b>。<b>注册只建号，登录才建会话</b>。改动顺序：OpenAPI 契约 → 重新生成客户端 → 页面，全栈类型对齐。" }
+  ]
+};
+
+// ============ 播放器引擎 v3 ============
+const $ = id => document.getElementById(id);
+let idx=-1, playing=false, currentFile=null, zhVoice=null, fallbackTimer=null;
+
+$('threadCount').textContent = MODEL.threads.length;
+$('legend').innerHTML = MODEL.threads.map(t=>`<span class="lg" data-t="${t.id}">${t.name}</span>`).join('');
+
+// —— 文件结构树 ——
+function buildTree(){
+  const root={};
+  MODEL.fileTree.forEach(f=>{
+    const parts=f.path.split('/');
+    let cur=root;
+    parts.forEach((p,i)=>{
+      const isFile=i===parts.length-1;
+      cur[p]=cur[p]||{__file:isFile?f:null,__children:{}};
+      cur=cur[p].__children;
+    });
+  });
+  const out=[];
+  (function walk(node,depth){
+    Object.keys(node).forEach(name=>{
+      const n=node[name];
+      const isFile=n.__file;
+      out.push(`<div class="node ${isFile?'file':'dir'}" ${isFile?`data-file="${isFile.path}"`:''} style="padding-left:${14+depth*16}px"><span class="ic">${isFile?'📄':'📁'}</span>${name}</div>`);
+      if(!isFile) walk(n.__children,depth+1);
+    });
+  })(root,0);
+  $('tree').innerHTML=out.join('');
+  // v3：点文件跳到该文件的第一个 step
+  [...document.querySelectorAll('.node.file')].forEach(node=>{
+    node.onclick=()=>{
+      const i=MODEL.steps.findIndex(s=>s.file===node.dataset.file);
+      if(i>=0)jumpTo(i);
+    };
+  });
+}
+buildTree();
+
+// —— 流程图 swimlanes ——
+function buildFlow(){
+  const byThread={};
+  MODEL.steps.forEach((s,i)=>{(byThread[s.thread]=byThread[s.thread]||[]).push({...s,i});});
+  $('flow').innerHTML = MODEL.threads.map(t=>{
+    const chips=(byThread[t.id]||[]).map(s=>`<span class="chip" data-i="${s.i}">${s.flowNode}</span>`).join('');
+    return `<div class="lane" data-t="${t.id}"><span class="lane-name">${t.name}</span><span class="chips">${chips||'<span class="chip" style="opacity:.4;cursor:default">—</span>'}</span></div>`;
+  }).join('');
+  // v3：点流程图节点跳转
+  [...document.querySelectorAll('.chip[data-i]')].forEach(c=>{ c.onclick=()=>jumpTo(+c.dataset.i); });
+}
+buildFlow();
+
+// —— 语音：v3 健壮加载（voices 异步就绪，重试直到拿到中文音色） ——
+function pickVoice(){
+  const vs=speechSynthesis.getVoices();
+  if(!vs.length) return false;
+  zhVoice = vs.find(v=>/云健|Yunjian/i.test(v.name))
+        || vs.find(v=>/Natural/i.test(v.name)&&/zh|Chinese|Mandarin/i.test(v.name+v.lang))
+        || vs.find(v=>v.lang==='zh-CN')
+        || vs.find(v=>/zh/i.test(v.lang)) || null;
+  $('voice').textContent = zhVoice ? ('🔊 '+zhVoice.name) : '🔊 默认语音';
+  return true;
+}
+speechSynthesis.onvoiceschanged=pickVoice;
+(function ensureVoices(tries){        // v3：轮询兜底（部分浏览器不触发 onvoiceschanged）
+  if(pickVoice()||tries<=0) return;
+  setTimeout(()=>ensureVoices(tries-1), 250);
+})(20);
+
+// —— 渲染一步 ——
+function renderCode(snippet,hi){
+  $('code').innerHTML='';
+  const hiset=new Set(hi||[]);
+  let first=null;
+  snippet.split('\n').forEach((ln,i)=>{
+    const n=i+1, div=document.createElement('div');
+    div.className='line'+(hi&&hi.length?(hiset.has(n)?' hot':' dim'):'');
+    const num=document.createElement('span');num.className='ln';num.textContent=n;
+    const tx=document.createElement('span');tx.textContent=ln;
+    div.appendChild(num);div.appendChild(tx);$('code').appendChild(div);
+    if(hiset.has(n)&&!first)first=div;
+  });
+  if(first)first.scrollIntoView({block:'center',behavior:'smooth'});
+}
+function showStep(i){
+  idx=i; const s=MODEL.steps[i];
+  currentFile=s.file;
+  [...document.querySelectorAll('.node.file')].forEach(n=>n.classList.toggle('on',n.dataset.file===s.file));
+  const onNode=document.querySelector('.node.file.on'); if(onNode)onNode.scrollIntoView({block:'nearest'});
+  $('crumb').innerHTML='📄 '+s.file.split('/').pop()+' &nbsp;›&nbsp; <b>'+s.structurePath+'</b>';
+  renderCode(s.codeSnippet,s.highlightLines);
+  [...document.querySelectorAll('.chip[data-i]')].forEach(c=>{const ci=+c.dataset.i;c.classList.toggle('on',ci===i);c.classList.toggle('done',ci<i);});
+  [...document.querySelectorAll('.lane')].forEach(l=>l.classList.toggle('on',l.dataset.t===s.thread));
+  [...document.querySelectorAll('.lg')].forEach(l=>l.classList.toggle('on',l.dataset.t===s.thread));
+  const onChip=document.querySelector('.chip.on'); if(onChip)onChip.scrollIntoView({block:'nearest',inline:'nearest'});
+  $('detail').innerHTML=s.detail;
+  $('subtitle').textContent=s.subtitle;
+  $('bar').style.width=((i+1)/MODEL.steps.length*100)+'%';
+  $('counter').textContent=(i+1)+' / '+MODEL.steps.length;
+  $('prevBtn').disabled=i===0; $('nextBtn').disabled=i===MODEL.steps.length-1;
+}
+function speak(text,onEnd){
+  speechSynthesis.cancel();
+  if(fallbackTimer){clearTimeout(fallbackTimer);fallbackTimer=null;}
+  const rate=parseFloat($('speed').value);
+  if(!zhVoice && !speechSynthesis.getVoices().length){
+    // v3：无语音兜底——按字幕字数估算停留时长自动推进
+    const ms=Math.max(2600, text.length*180/rate);
+    if(onEnd)fallbackTimer=setTimeout(onEnd,ms);
+    return;
+  }
+  const u=new SpeechSynthesisUtterance(text);
+  if(zhVoice)u.voice=zhVoice; u.lang='zh-CN'; u.rate=rate;
+  u.onend=()=>{if(onEnd)onEnd();};
+  u.onerror=()=>{ if(onEnd){const ms=Math.max(2600,text.length*180/rate);fallbackTimer=setTimeout(onEnd,ms);} };
+  speechSynthesis.speak(u);
+}
+function playFrom(i){
+  if(i>=MODEL.steps.length){stop();return;}
+  showStep(i);
+  speak(MODEL.steps[i].narration,()=>{ if(playing&&$('autoChk').checked)playFrom(i+1); });
+}
+function play(){playing=true;$('playBtn').textContent='⏸ 暂停';$('playBtn').classList.remove('primary');playFrom(idx<0?0:idx);}
+function stop(){playing=false;speechSynthesis.cancel();if(fallbackTimer){clearTimeout(fallbackTimer);fallbackTimer=null;}$('playBtn').textContent=idx>=MODEL.steps.length-1?'↺ 重播':'▶ 继续';$('playBtn').classList.add('primary');}
+function jumpTo(i){ // v3：点击跳转（保持播放态则从该步接着讲）
+  showStep(i);
+  if(playing){speechSynthesis.cancel();if(fallbackTimer)clearTimeout(fallbackTimer);playFrom(i);}
+}
+$('playBtn').onclick=()=>{ if(playing)stop(); else {if(idx>=MODEL.steps.length-1)idx=-1; play();} };
+$('prevBtn').onclick=()=>{const i=Math.max(0,idx-1);jumpTo(i);};
+$('nextBtn').onclick=()=>{const i=Math.min(MODEL.steps.length-1,idx+1);jumpTo(i);};
+// v3：键盘快捷键
+document.addEventListener('keydown',e=>{
+  if(e.target.tagName==='INPUT')return;
+  if(e.code==='Space'){e.preventDefault();$('playBtn').click();}
+  else if(e.code==='ArrowRight'){e.preventDefault();$('nextBtn').click();}
+  else if(e.code==='ArrowLeft'){e.preventDefault();$('prevBtn').click();}
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>L11 媒体预签名上传 · 视频讲解 v2</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;background:#0d1117;color:#e6edf3;height:100vh;display:flex;flex-direction:column;overflow:hidden;font-size:14px}
+  header{padding:9px 16px;background:#161b22;border-bottom:1px solid #30363d;display:flex;align-items:center;gap:14px;flex-shrink:0}
+  header h1{font-size:15px}
+  .legend{display:flex;gap:6px;flex-wrap:wrap;margin-left:6px}
+  .lg{font-size:11px;padding:2px 8px;border-radius:10px;background:#21262d;border:1px solid #30363d;color:#8b949e}
+  .lg.on{color:#fff}
+  .spacer{flex:1}
+  #voice{font-size:11px;color:#7d8590}
+  .main{flex:1;display:flex;min-height:0}
+  .left{flex:1.35;display:flex;flex-direction:column;min-width:0;border-right:1px solid #30363d}
+  .tree{background:#0d1117;border-bottom:1px solid #30363d;max-height:34%;overflow:auto;padding:8px 0}
+  .tree .th{font-size:11px;color:#7d8590;padding:2px 14px 6px;text-transform:uppercase;letter-spacing:.5px}
+  .node{font-family:"SF Mono",Consolas,monospace;font-size:12.5px;padding:2px 14px;white-space:nowrap;color:#adbac7;cursor:default}
+  .node .ic{opacity:.7;margin-right:5px}
+  .node.dir{color:#7d8590}
+  .node.file.on{background:#132a3e;color:#79c0ff;border-left:3px solid #1f6feb;padding-left:11px}
+  .breadcrumb{font-family:monospace;font-size:11.5px;color:#7d8590;padding:6px 16px;background:#0d1117;border-bottom:1px solid #21262d;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .breadcrumb b{color:#f0b429}
+  .code{flex:1;overflow:auto;background:#0d1117;padding:10px 0}
+  pre.code-pre{font-family:"SF Mono",Consolas,"Cascadia Code",monospace;font-size:13px;line-height:1.6}
+  .line{display:flex;padding:0 16px;white-space:pre;transition:background .2s;border-left:3px solid transparent}
+  .line .ln{color:#484f58;width:30px;text-align:right;margin-right:14px;user-select:none;flex-shrink:0}
+  .line.hot{background:#1f2d1f;border-left-color:#3fb950}
+  .line.dim{opacity:.34}
+  .right{flex:1;display:flex;flex-direction:column;min-width:320px}
+  .flow{flex:0 0 auto;max-height:52%;overflow:auto;background:#161b22;padding:12px 14px;border-bottom:1px solid #30363d}
+  .flow .th{font-size:11px;color:#7d8590;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px}
+  .lane{display:flex;align-items:center;gap:8px;margin-bottom:9px}
+  .lane-name{font-size:11.5px;width:96px;flex-shrink:0;color:#8b949e;text-align:right;line-height:1.2}
+  .lane.on .lane-name{color:#fff;font-weight:600}
+  .chips{display:flex;gap:6px;flex-wrap:wrap}
+  .chip{font-size:11px;padding:3px 9px;border-radius:12px;background:#21262d;border:1px solid #30363d;color:#8b949e;white-space:nowrap}
+  .chip.done{color:#3fb950;border-color:#238636}
+  .chip.on{background:#3fb950;color:#0d1117;border-color:#3fb950;font-weight:700;box-shadow:0 0 0 3px rgba(63,185,80,.25)}
+  .detail{flex:1;overflow:auto;padding:16px 18px;background:#0d1117}
+  .detail .th{font-size:11px;color:#3fb950;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px;font-weight:600}
+  .detail-body{font-size:14.5px;line-height:1.85;color:#c9d1d9}
+  .detail-body b{color:#f0b429}
+  .detail-body code{background:#161b22;padding:1px 5px;border-radius:4px;font-family:monospace;font-size:12.5px;color:#79c0ff}
+  .detail-body .warn{color:#ff7b72}
+  .subtitle{flex-shrink:0;background:#010409;border-top:1px solid #30363d;padding:14px 24px;min-height:64px;display:flex;align-items:center;justify-content:center}
+  .subtitle span{font-size:17px;line-height:1.6;text-align:center;color:#f0f6fc;max-width:1100px}
+  .controls{flex-shrink:0;padding:10px 16px;background:#161b22;border-top:1px solid #30363d}
+  .progress{height:4px;background:#30363d;border-radius:2px;margin-bottom:10px;overflow:hidden}
+  .progress-bar{height:100%;background:#3fb950;width:0;transition:width .3s}
+  .btns{display:flex;align-items:center;gap:9px}
+  button{background:#21262d;color:#e6edf3;border:1px solid #30363d;border-radius:6px;padding:7px 13px;cursor:pointer;font-size:14px}
+  button:hover{background:#30363d}
+  button.primary{background:#238636;border-color:#2ea043;font-weight:600}
+  button:disabled{opacity:.4;cursor:not-allowed}
+  label{font-size:12px;color:#7d8590;display:flex;align-items:center;gap:5px}
+  input[type=range]{width:80px}
+  .meta{font-size:12px;color:#7d8590}
+  .hint{font-size:11px;color:#7d8590;margin-top:8px}
+</style>
+</head>
+<body>
+<header>
+  <h1>🎬 L11 媒体预签名上传</h1>
+  <div class="legend" id="legend"></div>
+  <div class="spacer"></div>
+  <span id="voice">语音加载中…</span>
+</header>
+
+<div class="main">
+  <div class="left">
+    <div class="tree"><div class="th">📁 项目结构 (media 模块)</div><div id="tree"></div></div>
+    <div class="breadcrumb" id="crumb">— 点击 ▶ 开始 —</div>
+    <div class="code"><pre class="code-pre" id="code"></pre></div>
+  </div>
+  <div class="right">
+    <div class="flow"><div class="th">🧭 本课流程图 · 共 <span id="threadCount">0</span> 条线</div><div id="flow"></div></div>
+    <div class="detail"><div class="th">💡 深入详解</div><div class="detail-body" id="detail">点右下方 ▶ 开始播放。左上结构树告诉你「现在讲的代码在整个模块的哪个位置」,右上流程图告诉你「这段属于哪条线的哪个环节」,底部是字幕,这里是深入解释。</div></div>
+  </div>
+</div>
+
+<div class="subtitle"><span id="subtitle">准备好了吗?点 ▶ 开始播放。中文语音会一句句讲,讲到哪段代码,左边高亮那几行、结构树定位那个文件、流程图点亮那个环节。</span></div>
+
+<div class="controls">
+  <div class="progress"><div class="progress-bar" id="bar"></div></div>
+  <div class="btns">
+    <button id="playBtn" class="primary">▶ 开始播放</button>
+    <button id="prevBtn">⏮</button>
+    <button id="nextBtn">⏭</button>
+    <span class="spacer"></span>
+    <label><input type="checkbox" id="autoChk" checked> 自动播放</label>
+    <label>语速 <input type="range" id="speed" min="0.6" max="1.4" step="0.1" value="0.95"></label>
+    <span class="meta" id="counter">0 / 0</span>
+  </div>
+  <div class="hint">若没声音,先点页面任意处再播放(浏览器要求用户交互后才发声);优先用「云健 Online (Natural)」音色,没有则回退。字幕始终显示。</div>
+</div>
+
+<script>
+// ============ 视频内容模型(样本;工作流产出后整体替换 MODEL) ============
+const MODEL = {
+  threads: [
+    { id:"t0", name:"线0 配置·横切" },
+    { id:"t1", name:"线1 建槽签发" },
+    { id:"t2", name:"线2 前端直传" },
+    { id:"t3", name:"线3 finalize" },
+    { id:"t4", name:"线4 读重定向" }
+  ],
+  fileTree: [
+    { path:"media/infrastructure/S3Configurations.java", label:"S3Configurations", threadIds:["t0"] },
+    { path:"media/infrastructure/MediaProperties.java", label:"MediaProperties", threadIds:["t0"] },
+    { path:"media/application/MediaService.java", label:"MediaService", threadIds:["t1","t3","t4"] },
+    { path:"media/api/OwnerMediaController.java", label:"OwnerMediaController", threadIds:["t1","t3"] },
+    { path:"media/api/PublicMediaController.java", label:"PublicMediaController", threadIds:["t4"] }
+  ],
+  steps: [
+    { thread:"t0", file:"media/infrastructure/S3Configurations.java",
+      structurePath:"S3Configurations ▸ s3Presigner() ▸ pathStyle",
+      flowNode:"线0·地基",
+      codeSnippet:`.serviceConfiguration(S3Configuration.builder()
+    .pathStyleAccessEnabled(true)   // ← MinIO 必须
+    .build())`,
+      highlightLines:[2],
+      subtitle:"先打地基:pathStyle 必须 true,否则连不上 MinIO。",
+      narration:"开讲前先看这条地基。配S3客户端时,pathStyleAccessEnabled设为true。为什么?AWS默认把桶名拼进域名,MinIO却要求桶名在路径里,不设这行,请求根本发不到MinIO,直接404。",
+      detail:"AWS 默认 <b>virtual-host</b>:<code>http://bucket.host/key</code>。MinIO 用 <b>path-style</b>:<code>http://host/bucket/key</code>。不设 → SDK 拼错地址 → <span class='warn'>404 / UnknownHost</span>。" },
+    { thread:"t1", file:"media/application/MediaService.java",
+      structurePath:"MediaService ▸ createUploadSlot ▸ 校验",
+      flowNode:"线1·第1步 校验",
+      codeSnippet:`if (!ALLOWED_TYPES.contains(req.contentType()))
+    throw MEDIA_TYPE_NOT_ALLOWED;   // 仅 jpeg/png/webp
+if (req.declaredSizeBytes() > 5MB)
+    throw MEDIA_TOO_LARGE;`,
+      highlightLines:[1,2,3,4],
+      subtitle:"建槽第1步:后端兜底校验类型和大小。",
+      narration:"进第一条线,建槽。第一步校验:类型只允许三种图片,大小不超五兆。注意这是后端兜底,前端可能绕过契约直接调接口,所以后端必须自己再守一道。",
+      detail:"<b>不信任客户端</b>的第一处:类型/大小前端校验只是体验,后端才是底线。" },
+    { thread:"t1", file:"media/application/MediaService.java",
+      structurePath:"MediaService ▸ createUploadSlot ▸ 建PENDING",
+      flowNode:"线1·第2步 建PENDING",
+      codeSnippet:`media.setStatus("PENDING");
+media.setExpiresAt(now + 5分钟);
+mediaObjectMapper.insert(media);`,
+      highlightLines:[1,2,3],
+      subtitle:"建槽第2步:先在库里建一条 PENDING 占位记录。",
+      narration:"第二步,先在数据库建一条PENDING记录。为什么不直接ACTIVE?因为这一刻文件还没传呢。PENDING意思是位置留好了、通行证也发了,但传没传我还不知道。带个五分钟过期,没确认的将来由清理Worker回收。",
+      detail:"状态机起点:<code>PENDING</code>=占位待确认。<code>expiresAt</code> 给 L17 清理 Worker 做回收依据。" },
+    { thread:"t1", file:"media/application/MediaService.java",
+      structurePath:"MediaService ▸ createUploadSlot ▸ 签发URL",
+      flowNode:"线1·第3步 签发通行证",
+      codeSnippet:`PresignedPutObjectRequest presigned =
+    s3Presigner.presignPutObject(...);
+return new UploadSlotResponse(
+    publicId, presigned.url(), "PUT", 过期时间);`,
+      highlightLines:[1,2],
+      subtitle:"建槽第3步:签发预签名 PUT URL,后端没碰文件。",
+      narration:"第三步核心一行:签发预签名PUT地址。Presigner用你的密钥,对往这个桶这个键、PUT、五分钟有效这件事算出一个带签名的URL。MinIO以后收到请求验一下签名,对就放行。授权信息全编进URL,和文件传输解耦了。",
+      detail:"<b>预签名 URL</b>=后端用 secret-key 对「PUT 某 key、限时」算的签名编进 URL。授权与传输<b>解耦</b>——后端只签,不传。" },
+    { thread:"t2", file:"media/api/OwnerMediaController.java",
+      structurePath:"(前端) fetch PUT → MinIO",
+      flowNode:"线2·直传(后端不在链路)",
+      codeSnippet:`// 前端:fetch(uploadUrl, {method:'PUT', body: 文件})
+//   —— 不带 Cookie、不带 CSRF ——
+// 因为这个 PUT 是发给 MinIO 的,不是发给后端的`,
+      highlightLines:[2,3],
+      subtitle:"线2:前端直传 MinIO,不带 Cookie/CSRF,后端不在链路。",
+      narration:"第二条线在前端,后端完全不参与。前端就一句fetch,PUT那个url,body放文件。关键:不带Cookie、不带CSRF令牌。为什么?因为它是发给MinIO的,MinIO不认你的登录会话,只认URL里那个签名。验收时我特意用不带任何Cookie的独立客户端做这步,照样成功。",
+      detail:"直传<span class='warn'>不带 Cookie/CSRF</span>——发给的是 MinIO 不是后端。这正是「文件不经后端」的字面兑现。" },
+    { thread:"t3", file:"media/application/MediaService.java",
+      structurePath:"MediaService ▸ finalizeMedia ▸ HEAD",
+      flowNode:"线3·第1步 HEAD核实",
+      codeSnippet:`try {
+    head = s3Client.headObject(bucket, objectKey);
+} catch (NoSuchKeyException e) {
+    throw MEDIA_NOT_UPLOADED;   // 没传/传失败
+}`,
+      highlightLines:[1,2,3,4,5],
+      subtitle:"finalize 第1步:后端 HEAD 亲自向 MinIO 核实对象在不在。",
+      narration:"第三条线,finalize,整课不信任客户端的精髓。前端说我传完了,后端信吗?不信。后端亲自发一个HEAD请求问MinIO:这对象真在吗多大?查不到就抛异常,说明前端根本没传。HEAD就是只要头、不要体的请求,专门用来确认存在和拿元数据,不下载整个文件。",
+      detail:"<b>HEAD 请求</b>=只取响应头不取响应体,用来问「存在吗?多大?」而不下载文件。finalize 用它核实,<b>不信前端自报</b>。" },
+    { thread:"t3", file:"media/application/MediaService.java",
+      structurePath:"MediaService ▸ finalizeMedia ▸ 转ACTIVE",
+      flowNode:"线3·第2步 转ACTIVE",
+      codeSnippet:`media.setStatus("ACTIVE");
+media.setActualSizeBytes(head.contentLength());
+media.setExpiresAt(null);   // 不再被清理`,
+      highlightLines:[1,2,3],
+      subtitle:"finalize 第2步:核实通过 → 转 ACTIVE,记真实大小。",
+      narration:"确认存在、大小也没超限,状态转ACTIVE,而且记的是HEAD拿回来的真实大小,不是前端声明的。到这一步,这张图才算正式可用。finalize还是幂等的,前端重复调也不报错。",
+      detail:"状态机终点:<code>PENDING→ACTIVE</code>。<b>用真实大小</b>覆盖声明值(防谎报)。幂等:重复 finalize 直接返回。" },
+    { thread:"t4", file:"media/api/PublicMediaController.java",
+      structurePath:"PublicMediaController ▸ redirectMedia ▸ 302",
+      flowNode:"线4·302重定向",
+      codeSnippet:`String url = mediaService.createReadRedirectUrl(mediaId);
+return ResponseEntity.status(302)
+    .location(URI.create(url)).build();`,
+      highlightLines:[1,2,3],
+      subtitle:"线4:读图用 302 重定向到预签名 GET URL,后端不当下载管道。",
+      narration:"最后一条线,读图。桶是私有的,前端不能直接摸。后端签一个十五分钟的预签名GET地址,回一个302重定向,浏览器跟着跳转,直接从MinIO把图拉下来。后端全程不经手文件字节。前端img标签的src指向这个读端点,浏览器自动跟随302,用户无感。这跟上传的不经后端是对称的。",
+      detail:"读也<b>不经后端</b>:签短时 GET URL,<code>302</code> 让浏览器直接找 MinIO。<code>&lt;img src=/public/media/{id}&gt;</code> 自动跟随。上传下载对称。" }
+  ]
+};
+
+// ============ 播放器引擎 ============
+const $ = id => document.getElementById(id);
+let idx=-1, playing=false, currentFile=null, zhVoice=null;
+
+// —— 顶部线例 ——
+$('threadCount').textContent = MODEL.threads.length;
+$('legend').innerHTML = MODEL.threads.map(t=>`<span class="lg" data-t="${t.id}">${t.name}</span>`).join('');
+
+// —— 文件结构树(由 fileTree 的 path 构建) ——
+function buildTree(){
+  const root={};
+  MODEL.fileTree.forEach(f=>{
+    const parts=f.path.split('/');
+    let cur=root;
+    parts.forEach((p,i)=>{
+      const isFile=i===parts.length-1;
+      cur[p]=cur[p]||{__file:isFile?f:null,__children:{}};
+      cur=cur[p].__children;
+    });
+  });
+  const out=[];
+  (function walk(node,depth){
+    Object.keys(node).forEach(name=>{
+      const n=node[name];
+      const isFile=n.__file;
+      out.push(`<div class="node ${isFile?'file':'dir'}" ${isFile?`data-file="${isFile.path}"`:''} style="padding-left:${14+depth*16}px"><span class="ic">${isFile?'📄':'📁'}</span>${name}</div>`);
+      if(!isFile) walk(n.__children,depth+1);
+    });
+  })(root,0);
+  $('tree').innerHTML=out.join('');
+}
+buildTree();
+
+// —— 流程图 swimlanes ——
+function buildFlow(){
+  const byThread={};
+  MODEL.steps.forEach((s,i)=>{(byThread[s.thread]=byThread[s.thread]||[]).push({...s,i});});
+  $('flow').innerHTML = MODEL.threads.map(t=>{
+    const chips=(byThread[t.id]||[]).map(s=>`<span class="chip" data-i="${s.i}">${s.flowNode}</span>`).join('');
+    return `<div class="lane" data-t="${t.id}"><span class="lane-name">${t.name}</span><span class="chips">${chips||'<span class="chip" style="opacity:.4">—</span>'}</span></div>`;
+  }).join('');
+}
+buildFlow();
+
+// —— 语音:优先云健 Online (Natural) ——
+function pickVoice(){
+  const vs=speechSynthesis.getVoices();
+  zhVoice = vs.find(v=>/云健|Yunjian/i.test(v.name))
+        || vs.find(v=>/Natural/i.test(v.name)&&/zh|Chinese|Mandarin/i.test(v.name+v.lang))
+        || vs.find(v=>v.lang==='zh-CN')
+        || vs.find(v=>/zh/i.test(v.lang)) || null;
+  $('voice').textContent = zhVoice ? ('🔊 '+zhVoice.name) : (vs.length?'🔊 默认语音':'🔇 无语音·看字幕');
+}
+speechSynthesis.onvoiceschanged=pickVoice; pickVoice();
+
+// —— 渲染一步 ——
+function renderCode(snippet,hi){
+  $('code').innerHTML='';
+  const hiset=new Set(hi||[]);
+  let first=null;
+  snippet.split('\n').forEach((ln,i)=>{
+    const n=i+1, div=document.createElement('div');
+    div.className='line'+(hi&&hi.length?(hiset.has(n)?' hot':' dim'):'');
+    const num=document.createElement('span');num.className='ln';num.textContent=n;
+    const tx=document.createElement('span');tx.textContent=ln;
+    div.appendChild(num);div.appendChild(tx);$('code').appendChild(div);
+    if(hiset.has(n)&&!first)first=div;
+  });
+  if(first)first.scrollIntoView({block:'center',behavior:'smooth'});
+}
+function showStep(i){
+  idx=i; const s=MODEL.steps[i];
+  // 结构树高亮
+  currentFile=s.file;
+  [...document.querySelectorAll('.node.file')].forEach(n=>n.classList.toggle('on',n.dataset.file===s.file));
+  const onNode=document.querySelector('.node.file.on'); if(onNode)onNode.scrollIntoView({block:'nearest'});
+  $('crumb').innerHTML='📄 '+s.file.split('/').pop()+' &nbsp;›&nbsp; <b>'+s.structurePath+'</b>';
+  renderCode(s.codeSnippet,s.highlightLines);
+  // 流程图高亮:当前 chip + 之前的标 done;当前 lane 高亮;顶部 legend 高亮
+  [...document.querySelectorAll('.chip')].forEach(c=>{const ci=+c.dataset.i;c.classList.toggle('on',ci===i);c.classList.toggle('done',ci<i);});
+  [...document.querySelectorAll('.lane')].forEach(l=>l.classList.toggle('on',l.dataset.t===s.thread));
+  [...document.querySelectorAll('.lg')].forEach(l=>l.classList.toggle('on',l.dataset.t===s.thread));
+  const onChip=document.querySelector('.chip.on'); if(onChip)onChip.scrollIntoView({block:'nearest',inline:'nearest'});
+  // 详解 + 字幕
+  $('detail').innerHTML=s.detail;
+  $('subtitle').textContent=s.subtitle;
+  $('bar').style.width=((i+1)/MODEL.steps.length*100)+'%';
+  $('counter').textContent=(i+1)+' / '+MODEL.steps.length;
+  $('prevBtn').disabled=i===0; $('nextBtn').disabled=i===MODEL.steps.length-1;
+}
+function speak(text,onEnd){
+  speechSynthesis.cancel();
+  if(!speechSynthesis.getVoices().length){if(onEnd)setTimeout(onEnd,2800);return;}
+  const u=new SpeechSynthesisUtterance(text);
+  if(zhVoice)u.voice=zhVoice; u.lang='zh-CN'; u.rate=parseFloat($('speed').value);
+  u.onend=()=>{if(onEnd)onEnd();}; speechSynthesis.speak(u);
+}
+function playFrom(i){
+  if(i>=MODEL.steps.length){stop();return;}
+  showStep(i);
+  speak(MODEL.steps[i].narration,()=>{ if(playing&&$('autoChk').checked)playFrom(i+1); });
+}
+function play(){playing=true;$('playBtn').textContent='⏸ 暂停';$('playBtn').classList.remove('primary');playFrom(idx<0?0:idx);}
+function stop(){playing=false;speechSynthesis.cancel();$('playBtn').textContent=idx>=MODEL.steps.length-1?'↺ 重播':'▶ 继续';$('playBtn').classList.add('primary');}
+$('playBtn').onclick=()=>{ if(playing)stop(); else {if(idx>=MODEL.steps.length-1)idx=-1; play();} };
+$('prevBtn').onclick=()=>{const i=Math.max(0,idx-1);showStep(i);if(playing){speechSynthesis.cancel();playFrom(i);}};
+$('nextBtn').onclick=()=>{const i=Math.min(MODEL.steps.length-1,idx+1);showStep(i);if(playing){speechSynthesis.cancel();playFrom(i);}};
+</script>
+</body>
+</html>

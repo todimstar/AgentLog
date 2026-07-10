@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>L10-L11 头像修复 · 上传→绑定→展示 · 视频讲解 v3</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;background:#0d1117;color:#e6edf3;height:100vh;display:flex;flex-direction:column;overflow:hidden;font-size:14px}
+  header{padding:9px 16px;background:#161b22;border-bottom:1px solid #30363d;display:flex;align-items:center;gap:14px;flex-shrink:0}
+  header h1{font-size:15px}
+  .legend{display:flex;gap:6px;flex-wrap:wrap;margin-left:6px}
+  .lg{font-size:11px;padding:2px 8px;border-radius:10px;background:#21262d;border:1px solid #30363d;color:#8b949e;cursor:pointer}
+  .lg.on{color:#fff}
+  .spacer{flex:1}
+  #voice{font-size:11px;color:#7d8590}
+  .main{flex:1;display:flex;min-height:0}
+  .left{flex:1.35;display:flex;flex-direction:column;min-width:0;border-right:1px solid #30363d}
+  .tree{background:#0d1117;border-bottom:1px solid #30363d;max-height:34%;overflow:auto;padding:8px 0}
+  .tree .th{font-size:11px;color:#7d8590;padding:2px 14px 6px;text-transform:uppercase;letter-spacing:.5px}
+  .node{font-family:"SF Mono",Consolas,monospace;font-size:12.5px;padding:2px 14px;white-space:nowrap;color:#adbac7;cursor:pointer}
+  .node .ic{opacity:.7;margin-right:5px}
+  .node.dir{color:#7d8590}
+  .node.file.on{background:#132a3e;color:#79c0ff;border-left:3px solid #1f6feb;padding-left:11px}
+  .breadcrumb{font-family:monospace;font-size:11.5px;color:#7d8590;padding:6px 16px;background:#0d1117;border-bottom:1px solid #21262d;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .breadcrumb b{color:#f0b429}
+  .code{flex:1;overflow:auto;background:#0d1117;padding:10px 0}
+  pre.code-pre{font-family:"SF Mono",Consolas,"Cascadia Code",monospace;font-size:13px;line-height:1.6}
+  .line{display:flex;padding:0 16px;white-space:pre;transition:background .2s;border-left:3px solid transparent}
+  .line .ln{color:#484f58;width:30px;text-align:right;margin-right:14px;user-select:none;flex-shrink:0}
+  .line.hot{background:#1f2d1f;border-left-color:#3fb950}
+  .line.dim{opacity:.34}
+  .right{flex:1;display:flex;flex-direction:column;min-width:320px}
+  .flow{flex:0 0 auto;max-height:52%;overflow:auto;background:#161b22;padding:12px 14px;border-bottom:1px solid #30363d}
+  .flow .th{font-size:11px;color:#7d8590;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px}
+  .lane{display:flex;align-items:center;gap:8px;margin-bottom:9px}
+  .lane-name{font-size:11.5px;width:96px;flex-shrink:0;color:#8b949e;text-align:right;line-height:1.2}
+  .lane.on .lane-name{color:#fff;font-weight:600}
+  .chips{display:flex;gap:6px;flex-wrap:wrap}
+  .chip{font-size:11px;padding:3px 9px;border-radius:12px;background:#21262d;border:1px solid #30363d;color:#8b949e;white-space:nowrap;cursor:pointer}
+  .chip.done{color:#3fb950;border-color:#238636}
+  .chip.on{background:#3fb950;color:#0d1117;border-color:#3fb950;font-weight:700;box-shadow:0 0 0 3px rgba(63,185,80,.25)}
+  .detail{flex:1;overflow:auto;padding:16px 18px;background:#0d1117}
+  .detail .th{font-size:11px;color:#3fb950;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px;font-weight:600}
+  .detail-body{font-size:14.5px;line-height:1.85;color:#c9d1d9}
+  .detail-body b{color:#f0b429}
+  .detail-body code{background:#161b22;padding:1px 5px;border-radius:4px;font-family:monospace;font-size:12.5px;color:#79c0ff}
+  .detail-body .warn{color:#ff7b72}
+  .subtitle{flex-shrink:0;background:#010409;border-top:1px solid #30363d;padding:14px 24px;min-height:64px;display:flex;align-items:center;justify-content:center}
+  .subtitle span{font-size:17px;line-height:1.6;text-align:center;color:#f0f6fc;max-width:1100px}
+  .controls{flex-shrink:0;padding:10px 16px;background:#161b22;border-top:1px solid #30363d}
+  .progress{height:4px;background:#30363d;border-radius:2px;margin-bottom:10px;overflow:hidden}
+  .progress-bar{height:100%;background:#3fb950;width:0;transition:width .3s}
+  .btns{display:flex;align-items:center;gap:9px}
+  button{background:#21262d;color:#e6edf3;border:1px solid #30363d;border-radius:6px;padding:7px 13px;cursor:pointer;font-size:14px}
+  button:hover{background:#30363d}
+  button.primary{background:#238636;border-color:#2ea043;font-weight:600}
+  button:disabled{opacity:.4;cursor:not-allowed}
+  label{font-size:12px;color:#7d8590;display:flex;align-items:center;gap:5px}
+  input[type=range]{width:80px}
+  .meta{font-size:12px;color:#7d8590}
+  .hint{font-size:11px;color:#7d8590;margin-top:8px}
+</style>
+</head>
+<body>
+<header>
+  <h1>🎬 L10-L11 头像修复 · 上传→绑定→展示</h1>
+  <div class="legend" id="legend"></div>
+  <div class="spacer"></div>
+  <span id="voice">语音加载中…</span>
+</header>
+
+<div class="main">
+  <div class="left">
+    <div class="tree"><div class="th">📁 涉及文件（跨 media / identity / forum）</div><div id="tree"></div></div>
+    <div class="breadcrumb" id="crumb">— 点击 ▶ 开始 —</div>
+    <div class="code"><pre class="code-pre" id="code"></pre></div>
+  </div>
+  <div class="right">
+    <div class="flow"><div class="th">🧭 本课流程图 · 共 <span id="threadCount">0</span> 条线</div><div id="flow"></div></div>
+    <div class="detail"><div class="th">💡 深入详解</div><div class="detail-body" id="detail">点右下方 ▶ 开始播放。这一集讲「头像从上传到展示」为什么之前断了，以及补哪一环让它通。左上文件树、右上流程图、底部字幕会跟着讲解联动。</div></div>
+  </div>
+</div>
+
+<div class="subtitle"><span id="subtitle">准备好了吗？点 ▶ 开始播放。讲到哪段代码，左边高亮那几行、文件树定位那个文件、流程图点亮那个环节。</span></div>
+
+<div class="controls">
+  <div class="progress"><div class="progress-bar" id="bar"></div></div>
+  <div class="btns">
+    <button id="playBtn" class="primary">▶ 开始播放</button>
+    <button id="prevBtn">⏮</button>
+    <button id="nextBtn">⏭</button>
+    <span class="spacer"></span>
+    <label><input type="checkbox" id="autoChk" checked> 自动播放</label>
+    <label>语速 <input type="range" id="speed" min="0.6" max="1.4" step="0.1" value="0.95"></label>
+    <span class="meta" id="counter">0 / 0</span>
+  </div>
+  <div class="hint">空格=播放/暂停，←→=上一步/下一步。若没声音，先点页面任意处再播放（浏览器要求用户交互后才发声）；字幕始终显示。</div>
+</div>
+
+<script>
+// ============ 视频内容模型 ============
+const MODEL = {
+  threads: [
+    { id:"t0", name:"线0 病灶诊断" },
+    { id:"t1", name:"线1 上传直传" },
+    { id:"t2", name:"线2 绑定头像" },
+    { id:"t3", name:"线3 展示读图" },
+    { id:"t4", name:"线4 端到端验" }
+  ],
+  fileTree: [
+    { path:"identity/application/IdentityService.java", label:"IdentityService.setAvatar", threadIds:["t0","t2"] },
+    { path:"identity/api/WebAuthController.java", label:"PUT /me/avatar", threadIds:["t2"] },
+    { path:"media/application/MediaService.java", label:"MediaService", threadIds:["t1","t3"] },
+    { path:"web/src/pages/SettingsPage.vue", label:"SettingsPage.vue", threadIds:["t1","t2"] },
+    { path:"web/src/components/PostLogCard.vue", label:"PostLogCard.vue", threadIds:["t3"] },
+    { path:"web/src/stores/session.ts", label:"session.setAvatar", threadIds:["t2"] }
+  ],
+  steps: [
+    { thread:"t0", file:"identity/application/IdentityService.java",
+      structurePath:"病灶 ▸ avatar_media_public_id 无人写",
+      flowNode:"线0·断点定位",
+      codeSnippet:`// L10：user_account.avatar_media_public_id 列有了
+// L11：媒体能上传、能 finalize、能 302 读了
+// 但——没有任何代码把「已 finalize 的 mediaId」
+//     写回 user_account.avatar_media_public_id
+//     ↑↑↑ 链条就断在这一环 ↑↑↑`,
+      highlightLines:[3,4,5],
+      subtitle:"病灶：上传能传、展示能读，但中间「绑定」这一环从来没人写。",
+      narration:"先诊断病情。L10给用户表加了头像列，L11把媒体上传整条线打通了：能申请槽、能直传、能finalize、能302读图。可头像还是显示不出来。为什么？因为这两段各自都对，却从来没有一行代码把已经finalize的mediaId，写回到用户表的头像列。上传是上传，用户是用户，中间那座桥没建。链条就断在绑定这一环。",
+      detail:"经典的<b>「两端都对、中间没接」</b>：媒体子系统能产出一个 ACTIVE 的 <code>mediaId</code>，用户表也留好了 <code>avatar_media_public_id</code> 列，但没有任何写入把二者连起来。<span class='warn'>展示端读到的永远是 null。</span>" },
+    { thread:"t1", file:"web/src/pages/SettingsPage.vue",
+      structurePath:"SettingsPage ▸ onFileChange ▸ 申请槽+直传",
+      flowNode:"线1·第1-2步 传",
+      codeSnippet:`const slot = (await ownerApi.createUploadSlot({
+    originalFilename:file.name, contentType:file.type,
+    declaredSizeBytes:file.size, aiGeneratedDeclared:false })).data
+// 直传 MinIO：原生 fetch，不经后端、不带 Cookie/CSRF
+await fetch(slot.uploadUrl,{method:'PUT',
+    headers:{'Content-Type':file.type}, body:file})`,
+      highlightLines:[1,5,6],
+      subtitle:"线1：复用 L11 上传——申请槽拿预签名 URL，前端直传 MinIO。",
+      narration:"第一条线，上传，直接复用L11建好的能力。前端先调createUploadSlot申请一个上传槽，后端建PENDING记录、签发预签名PUT地址。然后用原生fetch把文件PUT到那个地址，直传MinIO，不经后端、不带Cookie。这一段L11就验收过了，我们原样拿来用。",
+      detail:"不重复造轮子：<b>上传链路 L11 已验收</b>。SettingsPage 只是它的第一个真实调用方——申请槽、直传，两步和 L11 集成测试里做的完全一致。" },
+    { thread:"t1", file:"media/application/MediaService.java",
+      structurePath:"MediaService ▸ finalizeMedia ▸ HEAD 核实",
+      flowNode:"线1·第3步 finalize",
+      codeSnippet:`await ownerApi.finalizeMedia(slot.mediaId)
+// 后端 HEAD 向 MinIO 核实对象在不在
+//   → 在：PENDING 转 ACTIVE
+//   → 不在：MEDIA_NOT_UPLOADED`,
+      highlightLines:[1],
+      subtitle:"线1收尾：finalize——后端 HEAD 核实对象真在，PENDING 转 ACTIVE。",
+      narration:"传完调finalize。后端亲自发HEAD请求问MinIO这对象在不在，在就把状态从PENDING转成ACTIVE。到这一步，一张ACTIVE的图就准备好了，它有一个public id。但注意，此刻它还只是一张「孤儿图」——存在，但不属于任何用户。下一条线才把它认领。",
+      detail:"finalize 后我们手里有一个 <b>ACTIVE 的 mediaId</b>，但它还没有归属。这正是断点的上游终点——一切就绪，只差「绑定」。" },
+    { thread:"t2", file:"identity/api/WebAuthController.java",
+      structurePath:"WebAuthController ▸ PUT /me/avatar",
+      flowNode:"线2·第1步 新端点",
+      codeSnippet:`@PutMapping("/me/avatar")
+public UserView setMyAvatar(@RequestBody SetAvatarRequest req){
+    return identityService.setAvatar(
+        CurrentUser.requireId(), req.mediaId());
+}`,
+      highlightLines:[1,2,3,4],
+      subtitle:"线2核心：补上缺失的端点 PUT /me/avatar——这就是断掉的那座桥。",
+      narration:"第二条线，就是本次修复的心脏：补一个新端点，PUT斜杠me斜杠avatar。它接收一个mediaId，交给IdentityService的setAvatar方法，作用在当前登录用户身上。这个端点之前根本不存在，头像链就是断在这里。现在桥建起来了。",
+      detail:"修复的<b>关键一环</b>：<code>PUT /me/avatar</code>。归 identity 模块（写的是 user_account），用 <code>CurrentUser.requireId()</code> 锁定「只能改自己的头像」。" },
+    { thread:"t2", file:"identity/application/IdentityService.java",
+      structurePath:"IdentityService ▸ setAvatar ▸ 三重校验+写回",
+      flowNode:"线2·第2步 校验写回",
+      codeSnippet:`// 查 media_object：存在？是我传的？已 ACTIVE？
+if (rows.isEmpty()) throw MEDIA_NOT_FOUND;
+if (uploader != userId) throw MEDIA_FORBIDDEN;   // 只能设自己的图
+if (!"ACTIVE".equals(status)) throw MEDIA_NOT_UPLOADED;
+account.setAvatarMediaPublicId(mediaId);         // ← 补上断掉的写入
+userAccountMapper.updateById(account);           // @Version 乐观锁`,
+      highlightLines:[3,5],
+      subtitle:"setAvatar：三重校验（存在/属主/ACTIVE）后，写回头像列。",
+      narration:"setAvatar里三道校验缺一不可。第一，这mediaId在媒体表里存在吗。第二，是当前用户自己传的吗——不能拿别人的图当自己头像，这是行级授权。第三，它finalize过、是ACTIVE吗——不能把没传完的PENDING设成头像。三关都过，才把mediaId写进用户的头像列。这一行setAvatarMediaPublicId，就是之前整条链缺的那一笔。",
+      detail:"三重校验体现<b>不信任客户端</b>：<code>MEDIA_NOT_FOUND</code> / <code>MEDIA_FORBIDDEN</code>（属主）/ <code>MEDIA_NOT_UPLOADED</code>（状态）。跨模块读 media_object 用直查，写只碰自己的 user_account——模块边界清晰。" },
+    { thread:"t2", file:"web/src/stores/session.ts",
+      structurePath:"session ▸ setAvatar ▸ 刷新本地用户",
+      flowNode:"线2·第3步 前端回写",
+      codeSnippet:`async setAvatar(mediaId){
+    this.user = (await authApi.setMyAvatar({mediaId})).data
+}   // 返回的新 UserView 里已带 avatarMediaId → UI 立即变`,
+      highlightLines:[2],
+      subtitle:"前端 session.setAvatar：拿回带新头像的 UserView，UI 即时更新。",
+      narration:"前端这边，session store加一个setAvatar动作，调新端点，把返回的UserView存回本地状态。因为返回体里已经带上了新的avatarMediaId，Pinia的响应式会让顶栏和设置页的头像立刻变，不用刷新页面。",
+      detail:"闭环最后一步：后端返回<b>更新后的 UserView</b>，前端直接replace本地 user，响应式驱动 UI。无需二次请求。" },
+    { thread:"t3", file:"web/src/components/PostLogCard.vue",
+      structurePath:"PostLogCard ▸ avatarUrl ▸ img src",
+      flowNode:"线3·展示读图",
+      codeSnippet:`const avatarUrl = (id) => id
+    ? \`/api/v1/public/media/\${id}\` : ''
+// <img :src="avatarUrl(author.avatarMediaId)">
+//   后端 302 跳 MinIO 预签名 GET，浏览器无感跟随`,
+      highlightLines:[1,2,3],
+      subtitle:"线3：展示端把 avatarMediaId 拼成 /public/media/{id}，img 直接用。",
+      narration:"第三条线，展示。Feed卡片、顶栏、设置页，凡是要显示头像的地方，把avatarMediaId拼成斜杠public斜杠media斜杠id这个读端点，塞进img的src。后端收到会签一个短时预签名GET地址、回302，浏览器自动跟着跳到MinIO把图拉下来。私有桶，前端却能显示，靠的就是这个302重定向。",
+      detail:"展示复用 L11 的<b>读重定向</b>：<code>&lt;img src=/public/media/{id}&gt;</code> → 后端 302 → MinIO 预签名 GET。私有桶也能安全展示。avatarMediaId 非空时才渲染，否则回退首字母占位。" },
+    { thread:"t4", file:"web/src/pages/SettingsPage.vue",
+      structurePath:"端到端 ▸ 四步串成一条链",
+      flowNode:"线4·全链闭环",
+      codeSnippet:`// SettingsPage.onFileChange 一次点击串起全链：
+// 1) createUploadSlot  →  2) fetch PUT MinIO
+// 3) finalizeMedia     →  4) session.setAvatar
+//   ↑ 上传（线1）            ↑ 绑定（线2）
+// 完成后 avatarUrl 立即渲染出真图（线3）`,
+      highlightLines:[2,3,4],
+      subtitle:"线4：一次选图，四步自动串成上传→绑定→展示完整闭环。",
+      narration:"最后把四步串起来看。用户在设置页选一张图，onFileChange里依次跑：申请槽、直传MinIO、finalize、绑定头像。前三步是L11的上传线，第四步是这次新补的绑定线。绑定成功后展示线立刻把真图渲染出来。四步一气呵成，用户只点了一次。",
+      detail:"这就是<b>「功能纵切」</b>：一个用户动作，穿过 media、identity、前端三层。之前缺第 4 步，链断；补上后，<span style='color:#3fb950'>上传→绑定→展示三段接成一条完整的线</span>。" },
+    { thread:"t4", file:"media/application/MediaService.java",
+      structurePath:"验收 ▸ 浏览器实测 + 集成测试",
+      flowNode:"线4·双重验收",
+      codeSnippet:`// 集成测试：upload→finalize→setAvatar→/me 回读
+//   断言 avatarMediaId == 刚上传的 mediaId ✅
+// 浏览器实测：设置页选图 → 占位「E」变成真图
+//   naturalWidth=1, complete=true, DB 已写入 ✅`,
+      highlightLines:[1,2,3,4],
+      subtitle:"双重验收：集成测试断言回读一致 + 浏览器实测占位变真图。",
+      narration:"验收走两条腿。一是集成测试：真MinIO加真Redis，跑完上传、finalize、setAvatar，再查me接口，断言返回的头像id就是刚传的那个。二是浏览器实测：设置页选图，占位的首字母E变成真图片，img的naturalWidth有值、加载完成，数据库里头像列也确实写进去了。测试绿加肉眼可见，才算真修好。",
+      detail:"<b>验证优先</b>：不止「代码写了」，而是「行为对了」。集成测试锁回归，浏览器实测锁体验。两者都过 = 断链真正接上。" }
+  ]
+};
+
+// ============ 播放器引擎 v3 ============
+const $ = id => document.getElementById(id);
+let idx=-1, playing=false, zhVoice=null, voiceReady=false;
+
+$('threadCount').textContent = MODEL.threads.length;
+$('legend').innerHTML = MODEL.threads.map(t=>`<span class="lg" data-t="${t.id}">${t.name}</span>`).join('');
+
+function buildTree(){
+  const root={};
+  MODEL.fileTree.forEach(f=>{
+    const parts=f.path.split('/'); let cur=root;
+    parts.forEach((p,i)=>{ const isFile=i===parts.length-1;
+      cur[p]=cur[p]||{__file:isFile?f:null,__children:{}}; cur=cur[p].__children; });
+  });
+  const out=[];
+  (function walk(node,depth){
+    Object.keys(node).forEach(name=>{
+      const n=node[name], isFile=n.__file;
+      out.push(`<div class="node ${isFile?'file':'dir'}" ${isFile?`data-file="${isFile.path}"`:''} style="padding-left:${14+depth*16}px"><span class="ic">${isFile?'📄':'📁'}</span>${name}</div>`);
+      if(!isFile) walk(n.__children,depth+1);
+    });
+  })(root,0);
+  $('tree').innerHTML=out.join('');
+}
+buildTree();
+
+function buildFlow(){
+  const byThread={};
+  MODEL.steps.forEach((s,i)=>{(byThread[s.thread]=byThread[s.thread]||[]).push({...s,i});});
+  $('flow').innerHTML = MODEL.threads.map(t=>{
+    const chips=(byThread[t.id]||[]).map(s=>`<span class="chip" data-i="${s.i}">${s.flowNode}</span>`).join('');
+    return `<div class="lane" data-t="${t.id}"><span class="lane-name">${t.name}</span><span class="chips">${chips||'<span class="chip" style="opacity:.4">—</span>'}</span></div>`;
+  }).join('');
+  // 点 chip 跳到对应步
+  [...document.querySelectorAll('.chip[data-i]')].forEach(c=>c.onclick=()=>{const i=+c.dataset.i;showStep(i);if(playing){speechSynthesis.cancel();playFrom(i);}});
+}
+buildFlow();
+
+// —— 语音：健壮异步加载（v3 修 v2「首帧无音色」）——
+function pickVoice(){
+  const vs=speechSynthesis.getVoices();
+  if(!vs.length) return;
+  voiceReady=true;
+  zhVoice = vs.find(v=>/云健|Yunjian/i.test(v.name))
+        || vs.find(v=>/Natural/i.test(v.name)&&/zh|Chinese|Mandarin/i.test(v.name+v.lang))
+        || vs.find(v=>v.lang==='zh-CN')
+        || vs.find(v=>/zh/i.test(v.lang)) || null;
+  $('voice').textContent = zhVoice ? ('🔊 '+zhVoice.name) : '🔊 默认语音';
+}
+speechSynthesis.onvoiceschanged=pickVoice; pickVoice();
+
+function renderCode(snippet,hi){
+  $('code').innerHTML=''; const hiset=new Set(hi||[]); let first=null;
+  snippet.split('\n').forEach((ln,i)=>{
+    const n=i+1, div=document.createElement('div');
+    div.className='line'+(hi&&hi.length?(hiset.has(n)?' hot':' dim'):'');
+    const num=document.createElement('span');num.className='ln';num.textContent=n;
+    const tx=document.createElement('span');tx.textContent=ln;
+    div.appendChild(num);div.appendChild(tx);$('code').appendChild(div);
+    if(hiset.has(n)&&!first)first=div;
+  });
+  if(first)first.scrollIntoView({block:'center',behavior:'smooth'});
+}
+function showStep(i){
+  idx=i; const s=MODEL.steps[i];
+  [...document.querySelectorAll('.node.file')].forEach(n=>n.classList.toggle('on',n.dataset.file===s.file));
+  const onNode=document.querySelector('.node.file.on'); if(onNode)onNode.scrollIntoView({block:'nearest'});
+  $('crumb').innerHTML='📄 '+s.file.split('/').pop()+' &nbsp;›&nbsp; <b>'+s.structurePath+'</b>';
+  renderCode(s.codeSnippet,s.highlightLines);
+  [...document.querySelectorAll('.chip[data-i]')].forEach(c=>{const ci=+c.dataset.i;c.classList.toggle('on',ci===i);c.classList.toggle('done',ci<i);});
+  [...document.querySelectorAll('.lane')].forEach(l=>l.classList.toggle('on',l.dataset.t===s.thread));
+  [...document.querySelectorAll('.lg')].forEach(l=>l.classList.toggle('on',l.dataset.t===s.thread));
+  const onChip=document.querySelector('.chip.on'); if(onChip)onChip.scrollIntoView({block:'nearest',inline:'nearest'});
+  $('detail').innerHTML=s.detail;
+  $('subtitle').textContent=s.subtitle;
+  $('bar').style.width=((i+1)/MODEL.steps.length*100)+'%';
+  $('counter').textContent=(i+1)+' / '+MODEL.steps.length;
+  $('prevBtn').disabled=i===0; $('nextBtn').disabled=i===MODEL.steps.length-1;
+}
+function speak(text,onEnd){
+  speechSynthesis.cancel();
+  if(!voiceReady){ if(onEnd)setTimeout(onEnd,3000); return; }
+  const u=new SpeechSynthesisUtterance(text);
+  if(zhVoice)u.voice=zhVoice; u.lang='zh-CN'; u.rate=parseFloat($('speed').value);
+  u.onend=()=>{if(onEnd)onEnd();}; speechSynthesis.speak(u);
+}
+function playFrom(i){ if(i>=MODEL.steps.length){stop();return;} showStep(i);
+  speak(MODEL.steps[i].narration,()=>{ if(playing&&$('autoChk').checked)playFrom(i+1); }); }
+function play(){playing=true;$('playBtn').textContent='⏸ 暂停';$('playBtn').classList.remove('primary');playFrom(idx<0?0:idx);}
+function stop(){playing=false;speechSynthesis.cancel();$('playBtn').textContent=idx>=MODEL.steps.length-1?'↺ 重播':'▶ 继续';$('playBtn').classList.add('primary');}
+$('playBtn').onclick=()=>{ if(playing)stop(); else {if(idx>=MODEL.steps.length-1)idx=-1; play();} };
+$('prevBtn').onclick=()=>{const i=Math.max(0,idx-1);showStep(i);if(playing){speechSynthesis.cancel();playFrom(i);}};
+$('nextBtn').onclick=()=>{const i=Math.min(MODEL.steps.length-1,idx+1);showStep(i);if(playing){speechSynthesis.cancel();playFrom(i);}};
+[...document.querySelectorAll('.node.file')].forEach(n=>n.onclick=()=>{const t=MODEL.steps.findIndex(s=>s.file===n.dataset.file);if(t>=0){showStep(t);if(playing){speechSynthesis.cancel();playFrom(t);}}});
+// 键盘：空格 播放/暂停，←→ 步进
+document.addEventListener('keydown',e=>{
+  if(e.code==='Space'){e.preventDefault();$('playBtn').click();}
+  else if(e.code==='ArrowRight'){e.preventDefault();$('nextBtn').click();}
+  else if(e.code==='ArrowLeft'){e.preventDefault();$('prevBtn').click();}
+});
+</script>
+</body>
+</html>

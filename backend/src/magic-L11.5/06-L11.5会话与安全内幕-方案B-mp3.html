@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>L11.5+ 会话与安全内幕 · 方案B（edge-tts 预生成 mp3 · 真进度条）</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;background:#0d1117;color:#e6edf3;height:100vh;display:flex;flex-direction:column;overflow:hidden;font-size:14px}
+  header{padding:9px 16px;background:#161b22;border-bottom:1px solid #30363d;display:flex;align-items:center;gap:14px;flex-shrink:0}
+  header h1{font-size:15px}
+  .legend{display:flex;gap:6px;flex-wrap:wrap;margin-left:6px}
+  .lg{font-size:11px;padding:2px 8px;border-radius:10px;background:#21262d;border:1px solid #30363d;color:#8b949e}
+  .lg.on{color:#fff}
+  .spacer{flex:1}
+  #voice{font-size:11px;color:#7d8590}
+  .main{flex:1;display:flex;min-height:0}
+  .left{flex:1.35;display:flex;flex-direction:column;min-width:0;border-right:1px solid #30363d}
+  .tree{background:#0d1117;border-bottom:1px solid #30363d;max-height:30%;overflow:auto;padding:8px 0}
+  .tree .th{font-size:11px;color:#7d8590;padding:2px 14px 6px;text-transform:uppercase;letter-spacing:.5px}
+  .node{font-family:"SF Mono",Consolas,monospace;font-size:12.5px;padding:2px 14px;white-space:nowrap;color:#adbac7;cursor:pointer}
+  .node.dir{cursor:default;color:#7d8590}
+  .node .ic{opacity:.7;margin-right:5px}
+  .node.file.on{background:#132a3e;color:#79c0ff;border-left:3px solid #1f6feb;padding-left:11px}
+  .breadcrumb{font-family:monospace;font-size:11.5px;color:#7d8590;padding:6px 16px;background:#0d1117;border-bottom:1px solid #21262d;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .breadcrumb b{color:#f0b429}
+  .code{flex:1;overflow:auto;background:#0d1117;padding:10px 0;transition:box-shadow .3s}
+  .code.glow{box-shadow:inset 0 0 0 2px #3fb950}
+  pre.code-pre{font-family:"SF Mono",Consolas,"Cascadia Code",monospace;font-size:13px;line-height:1.6}
+  .line{display:flex;padding:0 16px;white-space:pre;transition:background .25s,opacity .25s;border-left:3px solid transparent}
+  .line .ln{color:#484f58;width:38px;text-align:right;margin-right:14px;user-select:none;flex-shrink:0}
+  .line.hot{background:#1f2d1f;border-left-color:#3fb950;animation:pulse .8s ease 1}
+  .line.hot .ln{color:#3fb950;font-weight:700}
+  .line.dim{opacity:.30}
+  @keyframes pulse{0%{background:#2e4a2e}100%{background:#1f2d1f}}
+  /* IDEA Darcula 风语法高亮 */
+  .tk-kw{color:#cc7832;font-weight:600}
+  .tk-str{color:#6a8759}
+  .tk-cm{color:#7a7a73;font-style:italic}
+  .tk-ann{color:#bbb529}
+  .tk-num{color:#6897bb}
+  .tk-call{color:#ffc66d}
+  .tk-type{color:#a9b7c6}
+  .right{flex:1;display:flex;flex-direction:column;min-width:320px}
+  .flow{flex:0 0 auto;max-height:46%;overflow:auto;background:#161b22;padding:12px 14px;border-bottom:1px solid #30363d}
+  .flow .th{font-size:11px;color:#7d8590;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px}
+  .lane{display:flex;align-items:center;gap:8px;margin-bottom:9px}
+  .lane-name{font-size:11.5px;width:104px;flex-shrink:0;color:#8b949e;text-align:right;line-height:1.2}
+  .lane.on .lane-name{color:#fff;font-weight:600}
+  .chips{display:flex;gap:6px;flex-wrap:wrap}
+  .chip{font-size:11px;padding:3px 9px;border-radius:12px;background:#21262d;border:1px solid #30363d;color:#8b949e;white-space:nowrap;cursor:pointer}
+  .chip.done{color:#3fb950;border-color:#238636}
+  .chip.on{background:#3fb950;color:#0d1117;border-color:#3fb950;font-weight:700;box-shadow:0 0 0 3px rgba(63,185,80,.25)}
+  .detail{flex:1;overflow:auto;padding:16px 18px;background:#0d1117;transition:box-shadow .3s}
+  .detail.glow{box-shadow:inset 0 0 0 2px #f0b429}
+  .detail .th{font-size:11px;color:#3fb950;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px;font-weight:600}
+  .detail-body{font-size:14.5px;line-height:1.85;color:#c9d1d9}
+  .detail-body b{color:#f0b429}
+  .detail-body code{background:#161b22;padding:1px 5px;border-radius:4px;font-family:monospace;font-size:12.5px;color:#79c0ff}
+  .subtitle{flex-shrink:0;background:#010409;border-top:1px solid #30363d;padding:12px 24px;min-height:64px;display:flex;align-items:center;gap:16px}
+  .focusbadge{flex-shrink:0;font-size:12px;padding:4px 10px;border-radius:12px;background:#161b22;border:1px solid #30363d;color:#8b949e;white-space:nowrap;transition:all .25s}
+  .focusbadge.code{color:#3fb950;border-color:#238636}
+  .focusbadge.detail{color:#f0b429;border-color:#9e6a03}
+  .subtitle .txt{font-size:17px;line-height:1.6;color:#f0f6fc;transition:all .25s}
+  /* 字幕跟随注视区换边：看左侧代码 → [字幕, 徽章] 靠左；看右侧详解 → [徽章, 字幕] 靠右 */
+  .subtitle.focus-code .txt{order:1;text-align:left;margin-right:auto;max-width:58%}
+  .subtitle.focus-code .focusbadge{order:2}
+  .subtitle.focus-detail .focusbadge{order:1}
+  .subtitle.focus-detail .txt{order:2;text-align:right;margin-left:auto;max-width:58%}
+  /* 片尾测验 */
+  .quiz-mask{position:fixed;inset:0;background:rgba(1,4,9,.82);display:none;align-items:center;justify-content:center;z-index:30}
+  .quiz-mask.show{display:flex}
+  .quiz{width:min(860px,92vw);max-height:86vh;overflow:auto;background:#161b22;border:1px solid #30363d;border-radius:12px;padding:22px 26px}
+  .quiz h2{font-size:17px;margin-bottom:4px;color:#f0f6fc}
+  .quiz .sub{font-size:12px;color:#7d8590;margin-bottom:14px}
+  .quiz details{border:1px solid #30363d;border-radius:8px;margin-bottom:10px;background:#0d1117}
+  .quiz summary{cursor:pointer;padding:11px 14px;font-size:14.5px;line-height:1.65;color:#e6edf3;list-style:none}
+  .quiz summary::before{content:'▸ ';color:#3fb950}
+  .quiz details[open] summary::before{content:'▾ '}
+  .quiz .lv{font-size:11px;padding:1px 8px;border-radius:9px;margin-right:8px;border:1px solid}
+  .quiz .lv1{color:#3fb950;border-color:#238636}.quiz .lv2{color:#58a6ff;border-color:#1f6feb}.quiz .lv3{color:#f0b429;border-color:#9e6a03}.quiz .lv4{color:#ff7b72;border-color:#da3633}
+  .quiz .ans{padding:4px 16px 14px;font-size:13.5px;line-height:1.9;color:#c9d1d9;border-top:1px dashed #30363d}
+  .quiz .ans b{color:#f0b429}.quiz .ans code{background:#161b22;padding:1px 5px;border-radius:4px;font-family:monospace;font-size:12px;color:#79c0ff}
+  .quiz .close{margin-top:6px;width:100%}
+  .controls{flex-shrink:0;padding:10px 16px;background:#161b22;border-top:1px solid #30363d}
+  .progress{position:relative;height:14px;border-radius:4px;margin-bottom:10px;background:#21262d;cursor:pointer;overflow:hidden}
+  .progress .fill{position:absolute;left:0;top:0;bottom:0;background:linear-gradient(90deg,#238636,#3fb950);width:0;pointer-events:none}
+  .progress .tick{position:absolute;top:0;bottom:0;width:1px;background:#0d1117;pointer-events:none;opacity:.75}
+  .progress .tick.step{width:2px;background:#010409;opacity:1}
+  .progress:hover{filter:brightness(1.2)}
+  .btns{display:flex;align-items:center;gap:9px}
+  button{background:#21262d;color:#e6edf3;border:1px solid #30363d;border-radius:6px;padding:7px 13px;cursor:pointer;font-size:14px}
+  button:hover{background:#30363d}
+  button.primary{background:#238636;border-color:#2ea043;font-weight:600}
+  button:disabled{opacity:.4;cursor:not-allowed}
+  label{font-size:12px;color:#7d8590;display:flex;align-items:center;gap:5px}
+  input[type=range]{width:110px}
+  .meta{font-size:12px;color:#7d8590}
+  .time{font-family:monospace;font-size:12px;color:#adbac7}
+  .hint{font-size:11px;color:#7d8590;margin-top:8px}
+  .missing{background:#3d1d1d;border:1px solid #f85149;color:#ffa198;padding:8px 12px;border-radius:6px;font-size:12.5px;margin-bottom:8px;display:none}
+  kbd{background:#21262d;border:1px solid #30363d;border-radius:4px;padding:0 5px;font-family:monospace;font-size:11px;color:#adbac7}
+</style>
+</head>
+<body>
+<header>
+  <h1>🎬 L11.5+ 会话与安全内幕（Session 最小单元）· 方案B</h1>
+  <div class="legend" id="legend"></div>
+  <div class="spacer"></div>
+  <span id="voice">🎧 预生成 mp3 · 云健（edge-tts）</span>
+</header>
+
+<div class="main">
+  <div class="left">
+    <div class="tree"><div class="th">📁 涉及文件（行号=真实源文件行号）</div><div id="tree"></div></div>
+    <div class="breadcrumb" id="crumb">— 点击 ▶ 开始 —</div>
+    <div class="code" id="codePanel"><pre class="code-pre" id="code"></pre></div>
+  </div>
+  <div class="right">
+    <div class="flow"><div class="th">🧭 四条线 · 点节点可跳转</div><div id="flow"></div></div>
+    <div class="detail" id="detailPanel"><div class="th">💡 深入详解</div><div class="detail-body" id="detail">方案B（预生成 mp3）：旁白是 edge-tts 离线生成的一整条音频，所以这是<b>真·进度条</b>——任意位置点击秒级跳转、暂停从当前字续播（不回头）、<b>语速实时调</b>（0.6×~2.0×，立即生效不重读）。字幕/代码高亮由音频时间轴驱动，讲到哪句左侧高亮哪几行真实行号。快捷键：<kbd>空格</kbd> 播放/暂停，<kbd>←</kbd><kbd>→</kbd> 上/下一句，<kbd>Shift+←/→</kbd> 上/下一步。</div></div>
+  </div>
+</div>
+
+<div class="subtitle focus-code" id="subtitleBar">
+  <span class="focusbadge" id="focusBadge">👀 焦点</span>
+  <span class="txt" id="subtitle">准备好了吗？点 ▶ 开始。这次是真音频：随点随跳、随停随续、语速即时变。</span>
+</div>
+
+<div class="controls">
+  <div class="missing" id="missing">⚠ 找不到 06-assets/L11.5-session.mp3 或 timeline.js —— 在仓库根目录运行 <code>.venv-tts/Scripts/python backend/src/magic-L11.5/06-make-audio.py</code> 生成后刷新本页。</div>
+  <div class="progress" id="progress"><div class="fill" id="fill"></div></div>
+  <div class="btns">
+    <button id="playBtn" class="primary">▶ 开始播放</button>
+    <button id="prevBtn" title="上一句（Shift=上一步）">⏮ 句</button>
+    <button id="nextBtn" title="下一句（Shift=下一步）">句 ⏭</button>
+    <button id="quizBtn" title="片尾测验（听完自动弹出）">📝 测验</button>
+    <span class="time" id="timeLabel">0:00 / 0:00</span>
+    <span class="spacer"></span>
+    <label>语速 <input type="range" id="speed" min="0.6" max="2.0" step="0.1" value="1.0"><span id="speedVal">1.0×</span></label>
+    <span class="meta" id="counter">步 0/0 · 句 0/0</span>
+  </div>
+  <div class="hint">进度条上细线=句边界、粗线=步边界，点任意位置精确跳转；语速立即生效（变速不变调）。代码为 IDEA 风语法高亮 + 真实源文件行号；字幕自动待在该注视的一侧下方。听完自动弹出 📝 递进测验。</div>
+</div>
+
+<audio id="au" src="06-assets/L11.5-session.mp3" preload="auto"></audio>
+
+<!-- 片尾测验：由浅入深 5 题，点开看答案。听完音频自动弹出，也可随时点 📝 测验。 -->
+<div class="quiz-mask" id="quizMask">
+  <div class="quiz">
+    <h2>📝 课后测验 · Session 登录最小单元</h2>
+    <div class="sub">由浅入深 5 题。先自己说出答案再点开对照——能讲顺 = 真懂了，卡壳的题回到对应线重听。</div>
+    <details><summary><span class="lv lv1">①基础</span>登录成功后，"记住你"靠哪两样东西配合？各存在哪一端？</summary>
+      <div class="ans">柜子 = <b>HttpSession</b>，存在<b>服务端</b>（Tomcat JVM 堆内存的 Map）；钥匙 = <b>JSESSIONID Cookie</b>，存在<b>浏览器</b>。登录时 <code>saveContext</code>（WebAuthController <code>L100</code>）把 SecurityContext 放进柜子，并经 resp 发 <code>Set-Cookie</code> 把钥匙交给浏览器 → 对应视频「线2·存的一半」。</div></details>
+    <details><summary><span class="lv lv1">①基础</span>为什么登录接口要同时传 HttpServletRequest 和 HttpServletResponse？</summary>
+      <div class="ans"><b>req</b> 用来拿到/创建 HttpSession（柜子）；<b>resp</b> 用来写 <code>Set-Cookie: JSESSIONID</code>（把钥匙递出去）。只有 req 存不了新钥匙，只有 resp 找不到柜子——一存一发，缺一不可。</div></details>
+    <details><summary><span class="lv lv2">②链路</span>从 <code>authenticationManager.authenticate(token)</code> 到密码比对，中间经过哪两层？你写的代码在哪一环被回调？</summary>
+      <div class="ans"><code>AuthenticationManager</code>（接口）→ 默认实现 <b>ProviderManager</b>（只分发不干活）→ <b>DaoAuthenticationProvider</b>（真正干活）。它内部三步：① 回调<b>你写的</b> <code>AppUserDetailsService.loadUserByUsername(email)</code>（<code>L33</code>）查库拿 UserDetails；② <code>PasswordEncoder.matches(明文, bcrypt哈希)</code> 比对；③ 对→返回已认证 Authentication，错→抛 <code>BadCredentialsException</code>（Controller catch 后计失败数再抛给 Security 翻 401）。</div></details>
+    <details><summary><span class="lv lv3">③原理</span>后续请求为什么不用写任何"读 Cookie 恢复登录"的代码？是谁在哪个环节做了哪四步？</summary>
+      <div class="ans">Security 过滤器链前排的 <b><code>SecurityContextHolderFilter</code></b> 自动做：① 用请求带来的 JSESSIONID 找到服务端 HttpSession；② 取出登录时存的 SecurityContext；③ 放回 <code>SecurityContextHolder</code>（线程上下文）——所以 <code>CurrentUser.requireId()</code> 才有值；④ 请求结束清空线程上下文防串号。你只写"存"，"取"是框架的——这就是在源码里找不到那段代码的原因。<b>csrfController 与此无关</b>：它只发 XSRF-TOKEN（防伪造请求），JSESSIONID 才管"你是谁"。</div></details>
+    <details><summary><span class="lv lv4">④设计</span>服务器重启后用户为什么全掉线？要"重启不掉线"接什么？再一句话说清 Session vs JWT 的撤销差异（面试版）。</summary>
+      <div class="ans">柜子是 <b>JVM 堆内存</b>的 Map，进程一停全清 → 全员重新登录。要不掉线：接 <b>Spring Session + Redis</b> 把会话搬进外部存储（蓝图排在多实例部署课）。面试一句话：<b>Session 把状态放服务端，logout 时 <code>invalidate()</code> 即时作废、服务端说了算；JWT 把状态放令牌里，签发后收不回，只能等过期或额外维护黑名单</b>。同源 SPA 选 Session 更简单。追问"换 email 登录要改多少"：只换 <code>UserDetailsService</code> 查法（<code>eq(getEmail)</code>），认证流水线零改动。</div></details>
+    <button class="close" id="quizClose">关闭，回到视频</button>
+  </div>
+</div>
+
+<script src="06-assets/timeline.js"></script>
+<script>
+// ============ 内容模型（与方案A同文同序；行号=2026-07-08 加固后真实行号） ============
+const MODEL = {
+  threads: [
+    { id:"t0", name:"线0 登录编排" },
+    { id:"t1", name:"线1 认证内幕" },
+    { id:"t2", name:"线2 Session记住身份" },
+    { id:"t3", name:"线3 边界防线" }
+  ],
+  fileTree: [
+    { path:"identity/api/WebAuthController.java", label:"WebAuthController" },
+    { path:"identity/api/dto/LoginRequest.java", label:"LoginRequest" },
+    { path:"identity/application/AppUserDetailsService.java", label:"AppUserDetailsService" },
+    { path:"shared/security/ApiSecurityConfiguration.java", label:"ApiSecurityConfiguration" }
+  ],
+  steps: [
+    { thread:"t0", file:"identity/api/WebAuthController.java", fileStart:72,
+      structurePath:"login ▸ 四拍编排", flowNode:"登录四拍",
+      codeSnippet:`    @PostMapping("/auth/login")
+    public UserView login(
+            @Valid @RequestBody LoginRequest request,
+            HttpServletRequest httpRequest,
+            HttpServletResponse httpResponse) {
+        String email = request.email();
+
+        // 0. 失败限流：连续失败 5 次锁 15 分钟（Redis）。认证前先拦，防暴力撞库。
+        //    注：@Valid 已挡掉非法邮箱格式（400），到这里的 email 一定是合法格式——
+        //    随机垃圾串不会进 Redis 建失败计数键。
+        loginAttemptService.assertNotLocked(email);
+
+        // 1. 交给 Spring Security 验证 email+密码（内部调 AppUserDetailsService 按 email 查 + PasswordEncoder）。
+        Authentication authentication;
+        try {
+            authentication = authenticationManager.authenticate(
+                    new UsernamePasswordAuthenticationToken(email, request.password()));
+        } catch (AuthenticationException ex) {
+            loginAttemptService.recordFailure(email); // 失败计数 +1（首次失败开始计时）
+            throw ex;                                 // 交给 Security 翻成 401
+        }
+
+        // 2. 验证通过 → 清失败记录 + 把身份放进 SecurityContext，并显式持久化到 HttpSession。
+        //    Session 模式必须手动存，后续请求才能由内置过滤器从 Session 复原。
+        loginAttemptService.clear(email);
+        SecurityContext context = SecurityContextHolder.createEmptyContext();
+        context.setAuthentication(authentication);
+        SecurityContextHolder.setContext(context);
+        securityContextRepository.saveContext(context, httpRequest, httpResponse);
+
+        return identityService.currentUserView(Long.parseLong(authentication.getName()));`,
+      detail:"登录入口只有 30 行，节奏是<b>四拍</b>：限流 → 认证 → 存会话 → 回视图。Controller 不碰任何“密码对不对”的逻辑——那是 <code>AuthenticationManager</code> 的事（线1 拆）。<b>L100 的 saveContext 是“记住你”的开关</b>（线2 拆）。",
+      sentences:[
+        { t:"登录整个入口就这三十行，四拍节奏：先限流，再认证，然后存会话，最后回用户视图。", lines:[72,102] },
+        { t:"第零拍，八十二行，先问 Redis：这个邮箱是不是已经连错五次被锁十五分钟。认证之前先拦，防暴力撞库。", lines:[82] },
+        { t:"第一拍，八十七行，把邮箱和明文密码包成一个 Token，整个交给 AuthenticationManager。密码对不对，完全不归 Controller 管。", lines:[87,88] },
+        { t:"失败走八十九到九十一行：失败计数加一，然后原样抛出，由 Security 统一翻成四零一。", lines:[89,90,91] },
+        { t:"第二拍，九十六到一百行：成功后清掉失败计数，把认证结果装进一个全新的 SecurityContext，再显式存进 HttpSession。一百行这个 saveContext，就是整个记住你的开关，线二专门拆它。", lines:[96,97,98,99,100] },
+        { t:"最后一百零二行，从认证结果里取 Name，解析成用户 id 查库回视图。为什么 Name 里是 id 不是名字？线一揭晓。", lines:[102] }
+      ] },
+
+    { thread:"t0", file:"identity/api/dto/LoginRequest.java", fileStart:14,
+      structurePath:"LoginRequest ▸ 注解校验（今晨加固）", flowNode:"入参校验",
+      codeSnippet:`public record LoginRequest(
+        @NotBlank @Pattern(regexp = EmailRules.EMAIL_REGEX, message = "邮箱格式不正确") String email,
+        @NotBlank String password) {
+}`,
+      detail:"今晨加固：record 组件上的 Jakarta 注解 + Controller 的 <code>@Valid</code>。非法格式在<b>进方法体之前</b>就 400，Redis 里再也不会出现 <code>auth:login:fail:1</code> 这种垃圾键（你实测发现的洞）。已实测：email=\"1\" → 400，Redis 零键。",
+      sentences:[
+        { t:"今晨刚加固的一环：登录请求体上了注解校验。十五行的 Pattern 要求邮箱必须是合法格式，Controller 参数标了 Valid，非法格式在进方法体之前就被四百打回。", lines:[15] },
+        { t:"这一下顺手堵了你实测出来的洞：以前拿字符 1 当邮箱登录，Redis 也会老实建一个失败计数键；现在垃圾串根本进不了门，Redis 干干净净。", focus:"detail" },
+        { t:"十六行密码只查非空、不查长度——登录不该复述注册策略，存量账号和演示账号的密码规则可能不一样。", lines:[16] }
+      ] },
+
+    { thread:"t1", file:null, fileStart:null,
+      structurePath:"Spring Security 内部 ▸ authenticate 委托链", flowNode:"一行里的三步",
+      codeSnippet:`authenticationManager.authenticate(token)   // ← 你写的只有这一行
+  └─ ProviderManager                        // AuthenticationManager 的默认实现
+       └─ DaoAuthenticationProvider         // 真正干活的
+            ├─ ① loadUserByUsername(email)  // 回调你写的 AppUserDetailsService
+            │       → UserDetails(id, 密码哈希, 权限)
+            ├─ ② passwordEncoder.matches(明文, 哈希)   // bcrypt 比对
+            └─ ③ 对 → 返回“已认证”的 Authentication
+                   错 → 抛 BadCredentialsException`,
+      detail:"<b>AuthenticationManager 是接口</b>（认证总入口），默认实现 <code>ProviderManager</code> 自己不干活，分发给一串 Provider；用户名密码这类登录由 <code>DaoAuthenticationProvider</code> 接手：<b>查用户 → 比密码 → 出结果</b>。旧项目手写的那堆“查库+比对”，等于重新发明了这个 Provider。",
+      sentences:[
+        { t:"现在拆那一行 authenticate。它是接口 AuthenticationManager 的方法，默认实现叫 ProviderManager。它自己不干活，把认证请求分发给一串 Provider。", lines:[1,2] },
+        { t:"对用户名密码这种登录，接活的是 DaoAuthenticationProvider，内部就三步。", lines:[3] },
+        { t:"第一步，回调 loadUserByUsername，按邮箱把用户查出来。注意，这个方法是你自己写的，框架只是来调它。", lines:[4,5] },
+        { t:"第二步，用 PasswordEncoder 把前端传来的明文，和库里的 bcrypt 哈希做比对。", lines:[6] },
+        { t:"第三步，对，就返回一个已认证的 Authentication；错，就抛异常。你旧项目自己写的那一堆查库比密码，其实就是在重新发明这个 Provider。", lines:[7,8] }
+      ] },
+
+    { thread:"t1", file:"identity/application/AppUserDetailsService.java", fileStart:32,
+      structurePath:"loadUserByUsername ▸ 按 email 查 + principal=id", flowNode:"你写的那一环",
+      codeSnippet:`    @Override
+    public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
+        // L11.5：登录凭据改成 email。方法名/参数名是 Spring 接口定死的（改不了），
+        // 但参数里实际装的是登录接口传来的 email，所以按 email 查库。
+        UserAccount account = userAccountMapper.selectOne(
+                Wrappers.<UserAccount>lambdaQuery().eq(UserAccount::getEmail, username));
+        if (account == null) {
+            throw new UsernameNotFoundException("user not found");
+        }
+        // principal 的 name 存数据库 id（字符串），密码存 bcrypt 哈希。
+        // 后续 CurrentUser.id() 从 authentication.getName() 解析回 Long。
+        return new User(
+                String.valueOf(account.getId()),
+                account.getPasswordHash(),
+                List.of(new SimpleGrantedAuthority("ROLE_USER")));
+    }`,
+      detail:"两个关键约定：<b>①方法名是接口的，查法是你的</b>——参数名义叫 username，实际装 email，按 email 查库即可，认证流水线零改动；<b>②principal 的 name 塞数据库 id</b>——认证成功后 <code>authentication.getName()</code> 直接就是 id，下游 <code>CurrentUser.requireId()</code> 与行级授权全靠它。<b>换登录字段 ≠ 重写认证</b>，这是本课的道。",
+      sentences:[
+        { t:"这就是被框架回调的那个类。三十三行，方法名 loadUserByUsername 是接口定死的，改不了；但三十六三十七行的方法体，我们改成按 email 查库——参数名义上叫 username，装的其实是邮箱。", lines:[33,36,37] },
+        { t:"所以换登录字段不等于重写认证：整条 Provider 流水线一行不动，只换这一个查法。你旧项目为邮箱登录写的那一大堆，正是没吃到这个复用。", lines:[36,37] },
+        { t:"四十三到四十六行是第二个关键约定：返回的 User，name 字段塞的不是用户名，是数据库主键 id 的字符串。", lines:[43,44,45,46] },
+        { t:"这样认证成功后 authentication.getName 拿到的直接就是 id，Controller 一百零二行 parseLong 回来就是 currentUserId，后面所有行级授权都靠它。", lines:[44] }
+      ] },
+
+    { thread:"t1", file:"shared/security/ApiSecurityConfiguration.java", fileStart:71,
+      structurePath:"两个 Bean ▸ 编码器 + 认证入口", flowNode:"Bean 从哪来",
+      codeSnippet:`    /** 密码编码器：bcrypt（自带盐、慢哈希抗暴力破解）。注册存哈希、登录比对都用它。 */
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
+    }
+
+    /** 暴露 AuthenticationManager 供登录接口调用（内部会用 AppUserDetailsService + PasswordEncoder）。 */
+    @Bean
+    public AuthenticationManager authenticationManager(AuthenticationConfiguration configuration)
+            throws Exception {
+        return configuration.getAuthenticationManager();
+    }`,
+      detail:"你问“我哪里用到了 AuthenticationManager”——两处：<b>L79 把它暴露成 Bean</b>，Controller 构造器注入的就是它；Controller L87 调它的 <code>authenticate()</code>。而 <code>DaoAuthenticationProvider</code> 需要的 UserDetailsService 和 PasswordEncoder，是 Spring 启动时<b>看容器里有这两种 Bean 就自动装配</b>进去的——“没写却在跑”的部分就在这。",
+      sentences:[
+        { t:"你问 AuthenticationManager 到底在哪用到了。除了 Controller 那一行，还有这里：七十九行把它注册成 Bean，Controller 构造器里才注入得到它。", lines:[78,79,80,81] },
+        { t:"七十三行的 bcrypt 编码器同理：注册时 encode 存哈希，登录时 matches 比对，用的是同一个 Bean。", lines:[72,73,74] },
+        { t:"那 Provider 怎么知道用你的 UserDetailsService 和这个编码器？Spring 启动时发现容器里有这两种 Bean，自动装配进 DaoAuthenticationProvider。你没写的那部分装配，就发生在这一步。", focus:"detail" }
+      ] },
+
+    { thread:"t2", file:"identity/api/WebAuthController.java", fileStart:94,
+      structurePath:"saveContext ▸ 存柜子 + 发钥匙", flowNode:"存的一半",
+      codeSnippet:`        // 2. 验证通过 → 清失败记录 + 把身份放进 SecurityContext，并显式持久化到 HttpSession。
+        //    Session 模式必须手动存，后续请求才能由内置过滤器从 Session 复原。
+        loginAttemptService.clear(email);
+        SecurityContext context = SecurityContextHolder.createEmptyContext();
+        context.setAuthentication(authentication);
+        SecurityContextHolder.setContext(context);
+        securityContextRepository.saveContext(context, httpRequest, httpResponse);`,
+      detail:"<b>“记住身份”你只写“存”这一半</b>。L100 的 <code>saveContext</code> 做两件事：①把 SecurityContext 存进 <b>HttpSession</b>（req 用来拿到/创建 session）；②首次建会话时向 resp 写 <code>Set-Cookie: JSESSIONID=…</code>（把钥匙发给浏览器）。<b>比喻</b>：柜子在服务端（HttpSession），钥匙在浏览器（JSESSIONID Cookie）。",
+      sentences:[
+        { t:"线二，记住身份的最小单元。你说没找到取 Cookie 恢复上下文的代码——因为要你写的只有存这一半，取那一半是框架的。", lines:[100] },
+        { t:"一百行 saveContext 一口气干两件事：把 SecurityContext 塞进 HttpSession；如果这是第一次建会话，还往响应里写一个 Set-Cookie，JSESSIONID 等于一串随机数。", lines:[100] },
+        { t:"这就回答了为什么要传 req 和 resp：req 用来拿到或者创建 HttpSession，resp 用来把钥匙发给浏览器。", lines:[100] },
+        { t:"记牢这个比喻：柜子在服务端，是 HttpSession；钥匙在浏览器，是 JSESSIONID 这个 Cookie。saveContext 就是把东西放进柜子，再把钥匙递出去。", focus:"detail" }
+      ] },
+
+    { thread:"t2", file:null, fileStart:null,
+      structurePath:"Spring Security 内部 ▸ 后续请求自动复原", flowNode:"取的一半(你没写)",
+      codeSnippet:`后续每次请求（这段你一行都没写，Security 过滤器链自动做）：
+
+浏览器自动带上  Cookie: JSESSIONID=a1b2c3...
+  └─ SecurityContextHolderFilter（过滤器链前排）
+       ├─ ① 用 JSESSIONID 找到服务端对应的 HttpSession
+       ├─ ② 从 session 里取出登录时存的 SecurityContext
+       ├─ ③ 放回 SecurityContextHolder（当前线程上下文）
+       └─ ④ 请求结束清空线程上下文（防串号）
+
+之后 CurrentUser.requireId() 读的就是 ③ 放回去的东西`,
+      detail:"“取 Cookie → 恢复上下文”由 <code>SecurityContextHolderFilter</code> 自动完成，<b>这就是你找不到那段代码的原因</b>。<code>CurrentUser.requireId()</code> 读的是线程上下文里被它放回来的身份。<b>csrfController 与此无关</b>——它只负责发 CSRF 令牌（线3）。",
+      sentences:[
+        { t:"取的那一半在这。浏览器对同域请求会自动带上 JSESSIONID，你一行代码都不用写。", lines:[3] },
+        { t:"服务端的 SecurityContextHolderFilter 在过滤器链前排接住它：拿钥匙开柜子，把登录时存的 SecurityContext 取出来，放回线程上下文。", lines:[4,5,6,7] },
+        { t:"所以你项目里 CurrentUser.requireId 才总能拿到人——它读的就是这个线程上下文。", lines:[10] },
+        { t:"请求一结束，线程上下文就清空，下个请求重新从 session 恢复，线程复用也不会串号。至于 csrfController，跟这套完全无关：它只负责发 CSRF 令牌，防的是另一种攻击，线三讲。", lines:[8] }
+      ] },
+
+    { thread:"t2", file:"shared/security/ApiSecurityConfiguration.java", fileStart:46,
+      structurePath:"IF_REQUIRED ▸ 柜子存哪/重启还在吗", flowNode:"柜子在哪",
+      codeSnippet:`                // Session 策略：需要时创建（登录后保存认证用）。区别于旧项目的 STATELESS。
+                .sessionManagement(session -> session
+                        .sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))`,
+      detail:"<b>柜子本体 = Tomcat 进程里 JVM 堆内存的一个 Map</b>（sessionId → session 对象）。<b>重启即全没</b>——内存态，所有人重新登录。要“重启不掉线”就接 <b>Spring Session + Redis</b>（蓝图排在多实例部署时引入，现在不接）。<b>IF_REQUIRED vs STATELESS</b> 是本项目与旧项目（JWT）的分水岭。",
+      sentences:[
+        { t:"柜子本体存在哪？就是 Tomcat 进程里、JVM 堆内存中的一个 Map：键是 session id，值是 session 对象。", focus:"detail" },
+        { t:"所以你那个问题的答案是：重启后全没。内存态，进程一停柜子全清，所有人重新登录。", focus:"detail" },
+        { t:"要重启不掉线，就把柜子搬出去——接 Spring Session 加 Redis，把会话存进外部存储。蓝图里排在多实例部署那课，现在不接。", focus:"detail" },
+        { t:"四十七四十八行的 IF_REQUIRED 是本项目跟旧项目的分水岭：旧项目 JWT 是 STATELESS，永不建会话；本项目需要时就建。这一行，就是 Session 派的宣言。", lines:[47,48] }
+      ] },
+
+    { thread:"t2", file:"identity/api/WebAuthController.java", fileStart:105,
+      structurePath:"logout / me ▸ 闭环", flowNode:"销柜子+试金石",
+      codeSnippet:`    @PostMapping("/auth/logout")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void logout(HttpServletRequest httpRequest) {
+        // 使 Session 失效 + 清空上下文。Cookie 由浏览器在 Session 失效后自然作废。
+        httpRequest.getSession().invalidate();
+        SecurityContextHolder.clearContext();
+    }
+
+    /** 当前登录用户（"刷新仍登录"靠它验证：带 Session Cookie 请求应返回用户而非 401）。 */
+    @GetMapping("/me")
+    public UserView me() {`,
+      detail:"<b>Session 三件套到此凑齐</b>：①登录 <code>saveContext</code>（存柜子发钥匙）②每次请求过滤器自动开柜子 ③登出 <code>invalidate</code>（销柜子）。销毁发生在<b>服务端</b>，钥匙立即失效——这是 Session 对 JWT 的核心优势：<b>可即时撤销</b>。<code>/me</code> 是“刷新仍登录”的试金石。",
+      sentences:[
+        { t:"闭环的另外两个端点。一百零九行登出：invalidate 直接把柜子销毁。钥匙还在浏览器里，但已经开不了任何柜子——服务端说了算。这是 Session 相对 JWT 的核心优势：可即时撤销。", lines:[109,110] },
+        { t:"一百一十四行的 me 是刷新仍登录的试金石：带着 Cookie 来，过滤器恢复上下文，返回用户；柜子没了，就四零一。", lines:[114,115] },
+        { t:"到这，Session 管登录的最小单元凑齐了，就三件：登录时 saveContext，存柜子发钥匙；每次请求，过滤器拿钥匙开柜子；登出 invalidate，销柜子。其他全是这三件的周边。", focus:"detail" }
+      ] },
+
+    { thread:"t3", file:"shared/security/ApiSecurityConfiguration.java", fileStart:52,
+      structurePath:"白名单 ▸ anyRequest ▸ 401", flowNode:"门禁规则",
+      codeSnippet:`                .authorizeHttpRequests(authorize -> authorize
+                        // 白名单：探针 + 匿名可读 + 认证入口（注册/登录/获取CSRF）
+                        .requestMatchers("/actuator/health", "/api/v1/system/ping").permitAll()
+                        .requestMatchers("/api/v1/web/csrf").permitAll()
+                        .requestMatchers("/api/v1/web/auth/register", "/api/v1/web/auth/login").permitAll()
+                        .requestMatchers("/api/v1/web/auth/send-code").permitAll()
+                        .requestMatchers("/api/v1/public/**").permitAll()
+                        // Swagger UI 接口文档查看器：放行【文档页】本身（本地调试用）。
+                        // 注意：只放行文档页，业务接口仍需登录+CSRF——安全没松。生产环境应按 profile 收紧。
+                        .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**").permitAll()
+                        // 其余一律需要登录（区别于 L01 的 denyAll——那时连登录都没有）
+                        .anyRequest().authenticated())
+                // 未认证访问受保护资源时返回 401（语义："不知道你是谁，去登录"）。
+                // Spring Security 默认返回 403，但 401 更准确，前端收到可直接跳登录页。
+                .exceptionHandling(ex -> ex
+                        .authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)))`,
+      detail:"门禁规则一句话：<b>白名单匿名可进，其余必须有会话</b>。未带有效钥匙 → 统一 <b>401</b>（“不知道你是谁，去登录”），比默认 403（“知道你是谁但不许”）语义更准，前端拿到 401 直接跳登录页。",
+      sentences:[
+        { t:"线三，边界防线。五十六五十七行，登录、注册、发码必须匿名可进——还没登录的人，才需要这几个门。", lines:[56,57] },
+        { t:"六十三行一句 anyRequest authenticated，把其余所有接口都关进要有会话的门里。", lines:[63] },
+        { t:"没带有效钥匙的，六十六六十七行统一回四零一——语义是不知道你是谁，去登录。前端拿到四零一就跳登录页。", lines:[66,67] }
+      ] },
+
+    { thread:"t3", file:"shared/security/ApiSecurityConfiguration.java", fileStart:31,
+      structurePath:"CSRF ▸ double-submit ▸ 豁免", flowNode:"两个Cookie分工",
+      codeSnippet:`        // CSRF token 仓库：放进【JS 可读】的 XSRF-TOKEN Cookie（不设 HttpOnly），
+        // 前端读出后回传到 X-XSRF-TOKEN Header，服务端比对（double-submit 防护）。
+        CookieCsrfTokenRepository csrfTokenRepository = CookieCsrfTokenRepository.withHttpOnlyFalse();
+        CsrfTokenRequestAttributeHandler csrfRequestHandler = new CsrfTokenRequestAttributeHandler();
+
+        return http
+                // 启用 CSRF（旧项目 disable，本项目必须开——因为用 Cookie 认证）。
+                .csrf(csrf -> csrf
+                        .csrfTokenRepository(csrfTokenRepository)
+                        .csrfTokenRequestHandler(csrfRequestHandler)
+                        .ignoringRequestMatchers(           // ← 加这个
+                                "/api/v1/web/auth/register",
+                                "/api/v1/web/auth/login",
+                                "/api/v1/web/auth/send-code",
+                                "/api/v1/web/csrf"))`,
+      detail:"<b>两个 Cookie 各管一件事</b>：<code>JSESSIONID</code>（HttpOnly，脚本读不到）管“你是谁”；<code>XSRF-TOKEN</code>（故意 JS 可读）管“这请求真是你发的”——前端读出放进 Header，服务端比对 Cookie 与 Header 是否一致。攻击者能让你的浏览器<b>带</b> Cookie，却<b>读不到</b>你域下的值 → 伪造断在这。<b>认证靠 Cookie 所以 CSRF 必须开</b>；旧项目 JWT 放 Header 不自动携带，才敢关。",
+      sentences:[
+        { t:"最后分清两个 Cookie 的职责——你之前把 csrfController 和会话恢复混到一起了。JSESSIONID 负责你是谁，它是 HttpOnly 的，脚本读不到。", focus:"detail" },
+        { t:"XSRF-TOKEN 负责这个请求真是你发的：三十三行故意不设 HttpOnly，让前端 JS 读出来放进请求头，服务端比对 Cookie 和 Header 是否一致。攻击者能让你的浏览器带 Cookie，却读不到你域下的这个值，伪造请求就断在这。", lines:[31,32,33] },
+        { t:"四十一到四十五行给登录注册发码开了 CSRF 豁免：这时候人还没会话，没有可被冒用的身份。", lines:[41,42,43,44,45] },
+        { t:"正因为认证靠 Cookie，CSRF 必须开；旧项目 JWT 放 Header，浏览器不会自动携带，才敢关。一开一关，背后是同一条逻辑。", focus:"detail" }
+      ] },
+
+    { thread:"t0", file:null, fileStart:null,
+      structurePath:"总结 ▸ 一张小抄", flowNode:"小抄+面试答法",
+      codeSnippet:`【Session 登录 · 一张小抄】
+
+登录:  authenticate(email, 密码)      ← 你只写这一行，查库+比对是 Provider 的
+       saveContext(ctx, req, resp)    ← 存柜子(HttpSession) + 发钥匙(JSESSIONID)
+
+之后:  浏览器自动带 JSESSIONID
+       SecurityContextHolderFilter 自动恢复   ← 你一行没写
+       CurrentUser.requireId() 随取随用
+
+登出:  session.invalidate()           ← 服务端即时作废（JWT 做不到）
+
+面试:  换登录字段 → 只换 UserDetailsService 的查法，认证流水线复用
+       Session vs JWT → 状态放服务端可即时撤销 / 放令牌里难撤销`,
+      detail:"<b>最小单元清单</b>：登录两行（authenticate + saveContext），恢复零行（过滤器），登出一行（invalidate）。<b>面试两连</b>：①“邮箱登录怎么改”→ 认证流水线不动，只换 UserDetailsService 查法；②“Session vs JWT”→ Session 状态在服务端、可即时撤销、要占存储；JWT 状态在令牌、好横向扩展、难撤销。同源 SPA 选 Session 更简单。",
+      sentences:[
+        { t:"收个尾。这张小抄就是你要的最小单元：登录两行，恢复零行，登出一行。", lines:[3,4,8,11] },
+        { t:"面试被问 Session 和 JWT，就一句：Session 把状态放服务端，能即时撤销，代价是服务端要存；JWT 把状态放令牌里，好横向扩展，代价是难撤销。同源单页应用，选 Session 更简单。", lines:[14] },
+        { t:"被问邮箱登录怎么改，答：认证流水线不动，只把 UserDetailsService 的查法从用户名换成邮箱，一行都不用多写。这套答案，比背八股扎实多了。", lines:[13] }
+      ] }
+  ]
+};
+
+// ============ 播放器引擎 v5（真音频驱动）============
+// 与方案A的差别：时间源不再是 SpeechSynthesis 的 onend 链，而是 <audio> 的 currentTime。
+//   → 进度条=真时间轴，任意点击精确 seek；暂停从当前【字】续播；playbackRate 实时变速不变调。
+// 字幕/高亮同步：timeline.js 给出每句 [start,end]，timeupdate 里定位当前句。
+const $ = id => document.getElementById(id);
+const au = $('au');
+const TL = window.AUDIO_TIMELINE || null;
+
+const FLAT = [];
+MODEL.steps.forEach((s, si) => s.sentences.forEach((sn, pi) => FLAT.push({ si, pi, sn })));
+const TOTAL = FLAT.length;
+
+let cur = -1, renderedStep = -1;
+
+if (!TL || TL.length !== TOTAL) { $('missing').style.display = 'block'; }
+const DURATION = TL ? TL[TL.length - 1][1] : 0;
+
+$('legend').innerHTML = MODEL.threads.map(t => `<span class="lg" data-t="${t.id}">${t.name}</span>`).join('');
+
+function buildTree() {
+  const root = {};
+  MODEL.fileTree.forEach(f => {
+    const parts = f.path.split('/');
+    let curNode = root;
+    parts.forEach((p, i) => {
+      const isFile = i === parts.length - 1;
+      curNode[p] = curNode[p] || { __file: isFile ? f : null, __children: {} };
+      curNode = curNode[p].__children;
+    });
+  });
+  const out = [];
+  (function walk(node, depth) {
+    Object.keys(node).forEach(name => {
+      const n = node[name];
+      const isFile = n.__file;
+      out.push(`<div class="node ${isFile ? 'file' : 'dir'}" ${isFile ? `data-file="${isFile.path}"` : ''} style="padding-left:${14 + depth * 16}px"><span class="ic">${isFile ? '📄' : '📁'}</span>${name}</div>`);
+      if (!isFile) walk(n.__children, depth + 1);
+    });
+  })(root, 0);
+  $('tree').innerHTML = out.join('');
+  [...document.querySelectorAll('.node.file')].forEach(node => {
+    node.onclick = () => {
+      const i = MODEL.steps.findIndex(s => s.file === node.dataset.file);
+      if (i >= 0) seekToSentence(firstSentenceOfStep(i));
+    };
+  });
+}
+buildTree();
+
+function buildFlow() {
+  const byThread = {};
+  MODEL.steps.forEach((s, i) => { (byThread[s.thread] = byThread[s.thread] || []).push({ ...s, i }); });
+  $('flow').innerHTML = MODEL.threads.map(t => {
+    const chips = (byThread[t.id] || []).map(s => `<span class="chip" data-i="${s.i}">${s.flowNode}</span>`).join('');
+    return `<div class="lane" data-t="${t.id}"><span class="lane-name">${t.name}</span><span class="chips">${chips || '<span class="chip" style="opacity:.4;cursor:default">—</span>'}</span></div>`;
+  }).join('');
+  [...document.querySelectorAll('.chip[data-i]')].forEach(c => { c.onclick = () => seekToSentence(firstSentenceOfStep(+c.dataset.i)); });
+}
+buildFlow();
+
+function firstSentenceOfStep(si) { return FLAT.findIndex(f => f.si === si); }
+
+// —— 真时间轴进度条：句边界细线 / 步边界粗线；点任意处精确 seek ——
+if (TL) {
+  FLAT.forEach((f, k) => {
+    if (k === 0) return;
+    const tick = document.createElement('div');
+    tick.className = 'tick' + (f.pi === 0 ? ' step' : '');
+    tick.style.left = (TL[k][0] / DURATION * 100) + '%';
+    $('progress').appendChild(tick);
+  });
+  $('progress').onclick = e => {
+    const r = $('progress').getBoundingClientRect();
+    au.currentTime = Math.max(0, Math.min(DURATION - .05, (e.clientX - r.left) / r.width * DURATION));
+    if (au.paused) au.play();
+  };
+}
+
+function fmt(sec) { const m = Math.floor(sec / 60), s = Math.floor(sec % 60); return m + ':' + String(s).padStart(2, '0'); }
+
+// —— IDEA Darcula 风语法高亮（单趟正则，防止对已注入的 span 二次着色） ——
+function esc(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+const JAVA_RE = /("[^"]*")|(@[A-Za-z]\w*)|\b(public|private|protected|static|final|class|record|enum|interface|void|new|return|if|else|try|catch|throw|throws|extends|implements|import|package|this|null|true|false|switch|case|default|for|while|boolean|int|long|double|float)\b|\b(\d[\d_]*L?)\b|\.([a-z]\w*)(?=\s*\()/g;
+function hlJava(raw) {
+  const t = raw.trimStart();
+  if (/^(\/\/|\/\*|\*)/.test(t)) return '<span class="tk-cm">' + esc(raw) + '</span>';   // 整行注释/javadoc
+  let rest = raw, tail = '';
+  const ci = rest.indexOf('//');
+  if (ci >= 0 && ((rest.slice(0, ci).match(/"/g) || []).length % 2 === 0)) {            // 行内注释（避开字符串里的 //）
+    tail = '<span class="tk-cm">' + esc(rest.slice(ci)) + '</span>'; rest = rest.slice(0, ci);
+  }
+  let out = '', last = 0, m;
+  JAVA_RE.lastIndex = 0;
+  while ((m = JAVA_RE.exec(rest))) {
+    out += esc(rest.slice(last, m.index));
+    if (m[1]) out += '<span class="tk-str">' + esc(m[1]) + '</span>';
+    else if (m[2]) out += '<span class="tk-ann">' + esc(m[2]) + '</span>';
+    else if (m[3]) out += '<span class="tk-kw">' + m[3] + '</span>';
+    else if (m[4]) out += '<span class="tk-num">' + m[4] + '</span>';
+    else if (m[5]) out += '.<span class="tk-call">' + m[5] + '</span>';
+    last = JAVA_RE.lastIndex;
+  }
+  return out + esc(rest.slice(last)) + tail;
+}
+function hlText(raw) {   // 示意图：只把 // 注释染灰，其余保持原样
+  const ci = raw.indexOf('//');
+  if (ci < 0) return esc(raw);
+  return esc(raw.slice(0, ci)) + '<span class="tk-cm">' + esc(raw.slice(ci)) + '</span>';
+}
+
+function renderCode(step) {
+  $('code').innerHTML = '';
+  const base = step.fileStart;
+  const isJava = step.file && step.file.endsWith('.java');
+  step.codeSnippet.split('\n').forEach((ln, i) => {
+    const div = document.createElement('div');
+    div.className = 'line';
+    div.dataset.abs = base != null ? (base + i) : (i + 1);
+    const num = document.createElement('span'); num.className = 'ln';
+    num.textContent = base != null ? (base + i) : '·';
+    const tx = document.createElement('span'); tx.innerHTML = isJava ? hlJava(ln) : hlText(ln);
+    div.appendChild(num); div.appendChild(tx); $('code').appendChild(div);
+  });
+}
+function renderStep(si) {
+  renderedStep = si;
+  const s = MODEL.steps[si];
+  [...document.querySelectorAll('.node.file')].forEach(n => n.classList.toggle('on', n.dataset.file === s.file));
+  const onNode = document.querySelector('.node.file.on'); if (onNode) onNode.scrollIntoView({ block: 'nearest' });
+  const lineCount = s.codeSnippet.split('\n').length;
+  $('crumb').innerHTML = s.file
+    ? `📄 ${s.file} &nbsp;›&nbsp; <b>${s.structurePath}</b> &nbsp;·&nbsp; L${s.fileStart}–L${s.fileStart + lineCount - 1}（真实行号，可对照 IDE）`
+    : `⚙ ${s.structurePath} &nbsp;·&nbsp; <b>示意图（非项目源码）</b>`;
+  renderCode(s);
+  [...document.querySelectorAll('.chip[data-i]')].forEach(c => { const ci = +c.dataset.i; c.classList.toggle('on', ci === si); c.classList.toggle('done', ci < si); });
+  [...document.querySelectorAll('.lane')].forEach(l => l.classList.toggle('on', l.dataset.t === s.thread));
+  [...document.querySelectorAll('.lg')].forEach(l => l.classList.toggle('on', l.dataset.t === s.thread));
+  const onChip = document.querySelector('.chip.on'); if (onChip) onChip.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  $('detail').innerHTML = s.detail;
+}
+
+function showSentence(k) {
+  cur = k;
+  const { si, pi, sn } = FLAT[k];
+  if (si !== renderedStep) renderStep(si);
+  const step = MODEL.steps[si];
+
+  const hiset = new Set(sn.lines || []);
+  let first = null;
+  [...document.querySelectorAll('#code .line')].forEach(div => {
+    const abs = +div.dataset.abs;
+    div.classList.remove('hot', 'dim');
+    if (hiset.size) {
+      if (hiset.has(abs)) { div.classList.add('hot'); if (!first) first = div; }
+      else div.classList.add('dim');
+    }
+  });
+  if (first) first.scrollIntoView({ block: 'center', behavior: 'smooth' });
+
+  const focus = sn.focus || (hiset.size ? 'code' : 'detail');
+  $('codePanel').classList.toggle('glow', focus === 'code');
+  $('detailPanel').classList.toggle('glow', focus === 'detail');
+  // 字幕换边：字幕文本始终待在"该注视的面板"下方（左代码/右详解）
+  $('subtitleBar').className = 'subtitle ' + (focus === 'code' ? 'focus-code' : 'focus-detail');
+  const badge = $('focusBadge');
+  if (focus === 'code') {
+    badge.className = 'focusbadge code';
+    badge.textContent = step.fileStart != null && hiset.size
+      ? `👈 看左侧代码 L${Math.min(...hiset)}${hiset.size > 1 ? '–L' + Math.max(...hiset) : ''}`
+      : '👈 看左侧';
+  } else {
+    badge.className = 'focusbadge detail';
+    badge.textContent = '👉 看右侧详解';
+  }
+
+  $('subtitle').textContent = sn.t;
+  $('counter').textContent = `步 ${si + 1}/${MODEL.steps.length} · 句 ${k + 1}/${TOTAL}`;
+  $('prevBtn').disabled = k === 0; $('nextBtn').disabled = k === TOTAL - 1;
+}
+
+// —— 音频时间 → 当前句（timeupdate 每 ~250ms 一次，线性找足够快） ——
+function sentenceAt(t) {
+  for (let k = TOTAL - 1; k >= 0; k--) if (t >= TL[k][0] - 0.05) return k;
+  return 0;
+}
+au.addEventListener('timeupdate', () => {
+  if (!TL) return;
+  $('fill').style.width = (au.currentTime / DURATION * 100) + '%';
+  $('timeLabel').textContent = fmt(au.currentTime) + ' / ' + fmt(DURATION);
+  const k = sentenceAt(au.currentTime);
+  if (k !== cur) showSentence(k);
+});
+au.addEventListener('play', () => { $('playBtn').textContent = '⏸ 暂停'; $('playBtn').classList.remove('primary'); });
+au.addEventListener('pause', () => { $('playBtn').textContent = au.ended ? '↺ 重播' : '▶ 继续'; $('playBtn').classList.add('primary'); });
+au.addEventListener('ended', () => { $('playBtn').textContent = '↺ 重播'; $('playBtn').classList.add('primary'); $('quizMask').classList.add('show'); });
+au.addEventListener('error', () => { $('missing').style.display = 'block'; });
+au.addEventListener('loadedmetadata', () => { $('timeLabel').textContent = '0:00 / ' + fmt(DURATION || au.duration); });
+
+function seekToSentence(k) {
+  if (!TL || k < 0) return;
+  au.currentTime = TL[k][0] + 0.01;
+  showSentence(k);
+  if (au.paused) au.play();
+}
+$('playBtn').onclick = () => {
+  if (!TL) return;
+  if (au.paused) { if (au.ended) au.currentTime = 0; au.play(); } else au.pause();
+};
+$('prevBtn').onclick = e => { seekToSentence(e.shiftKey ? firstSentenceOfStep(Math.max(0, FLAT[Math.max(cur, 0)].si - 1)) : Math.max(0, cur - 1)); };
+$('nextBtn').onclick = e => { seekToSentence(e.shiftKey ? firstSentenceOfStep(Math.min(MODEL.steps.length - 1, FLAT[Math.max(cur, 0)].si + 1)) : Math.min(TOTAL - 1, cur + 1)); };
+$('speed').oninput = () => {           // 真·实时变速：音频变速不变调，立即生效
+  au.playbackRate = parseFloat($('speed').value);
+  $('speedVal').textContent = parseFloat($('speed').value).toFixed(1) + '×';
+};
+$('quizBtn').onclick = () => $('quizMask').classList.add('show');
+$('quizClose').onclick = () => $('quizMask').classList.remove('show');
+$('quizMask').onclick = e => { if (e.target === $('quizMask')) $('quizMask').classList.remove('show'); };
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT') return;
+  if (e.code === 'Space') { e.preventDefault(); $('playBtn').click(); }
+  else if (e.code === 'ArrowRight') { e.preventDefault(); seekToSentence(e.shiftKey ? firstSentenceOfStep(Math.min(MODEL.steps.length - 1, FLAT[Math.max(cur, 0)].si + 1)) : Math.min(TOTAL - 1, cur + 1)); }
+  else if (e.code === 'ArrowLeft') { e.preventDefault(); seekToSentence(e.shiftKey ? firstSentenceOfStep(Math.max(0, FLAT[Math.max(cur, 0)].si - 1)) : Math.max(0, cur - 1)); }
+});
+</script>
+</body>
+</html>

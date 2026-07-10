@@ -1,0 +1,220 @@
+{
+  "info": {
+    "name": "AgentLog L11 媒体预签名上传",
+    "description": "L11 媒体上传三端点自测集合。内置脚本自动处理 CSRF + 会话,并在步骤间传递 mediaId / uploadUrl。\n\n【按顺序 Send】\n1. 登录 demo_alice\n2. 申请上传槽 → 自动存下 mediaId 和预签名 uploadUrl\n3. 直传 MinIO(PUT 到 uploadUrl,不带 CSRF/Cookie——因为发给的是 MinIO 不是后端)\n4. finalize(HEAD 核实 → status=ACTIVE)\n5. 公开读(断言 302 重定向;本请求已关闭自动跟随)\n6. 反例:非图片类型 → 400 MEDIA_TYPE_NOT_ALLOWED\n\n【前提】后端在 8080 跑;MinIO 容器在跑(infra-minio-1,9000,bucket agentlog-private);demo_alice 由 V008 seed 自动创建。\n\n【核心验证】文件不经后端:第 3 步的直传是 Postman 直接 PUT 到 localhost:9000 的 MinIO,后端全程不经手文件字节;第 4 步 finalize 靠 HEAD 亲自核实,不信前端自报;第 5 步读用 302 指路而非后端转发。",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080/api/v1" },
+    { "key": "username", "value": "demo_alice" },
+    { "key": "password", "value": "password123" },
+    { "key": "mediaId", "value": "" },
+    { "key": "uploadUrl", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "1. 登录 (login)",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.sendRequest({ url: pm.variables.get('baseUrl') + '/web/csrf', method: 'GET' }, function (err, res) {",
+              "  if (!err && res) { pm.collectionVariables.set('csrfToken', res.json().token); }",
+              "});"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('登录 200', function () { pm.response.to.have.status(200); });",
+              "var j = pm.response.json();",
+              "pm.test('用户名正确', function () { pm.expect(j.username).to.eql(pm.variables.get('username')); });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "X-XSRF-TOKEN", "value": "{{csrfToken}}" }
+        ],
+        "body": { "mode": "raw", "raw": "{\n  \"username\": \"{{username}}\",\n  \"password\": \"{{password}}\"\n}" },
+        "url": { "raw": "{{baseUrl}}/web/auth/login", "host": ["{{baseUrl}}"], "path": ["web", "auth", "login"] }
+      }
+    },
+    {
+      "name": "2. 申请上传槽 (createUploadSlot) → 存 mediaId+uploadUrl",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.sendRequest({ url: pm.variables.get('baseUrl') + '/web/csrf', method: 'GET' }, function (err, res) {",
+              "  if (!err && res) { pm.collectionVariables.set('csrfToken', res.json().token); }",
+              "});"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('建槽 201', function () { pm.response.to.have.status(201); });",
+              "var j = pm.response.json();",
+              "pm.test('返回 mediaId 和 uploadUrl', function () {",
+              "  pm.expect(j.mediaId).to.be.a('string');",
+              "  pm.expect(j.uploadUrl).to.include('X-Amz-Signature');",
+              "  pm.expect(j.method).to.eql('PUT');",
+              "});",
+              "// 关键:把 mediaId 和预签名 uploadUrl 存进集合变量,供后续步骤用",
+              "pm.collectionVariables.set('mediaId', j.mediaId);",
+              "pm.collectionVariables.set('uploadUrl', j.uploadUrl);",
+              "console.log('mediaId =', j.mediaId);",
+              "console.log('uploadUrl =', j.uploadUrl);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "X-XSRF-TOKEN", "value": "{{csrfToken}}" }
+        ],
+        "body": { "mode": "raw", "raw": "{\n  \"originalFilename\": \"test.png\",\n  \"contentType\": \"image/png\",\n  \"declaredSizeBytes\": 1024,\n  \"aiGeneratedDeclared\": false\n}" },
+        "url": { "raw": "{{baseUrl}}/owner/media/upload-slots", "host": ["{{baseUrl}}"], "path": ["owner", "media", "upload-slots"] }
+      }
+    },
+    {
+      "name": "3. 直传 MinIO (PUT uploadUrl,不带 CSRF/Cookie) ★灵魂",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "// ★ 核心:这个 PUT 直接发给 MinIO(localhost:9000),不是后端。",
+              "//   不带 X-XSRF-TOKEN、不依赖登录会话——授权全在 uploadUrl 的签名里。",
+              "//   这正是'文件不经后端'的字面兑现。",
+              "pm.test('直传 MinIO 成功 200', function () { pm.response.to.have.status(200); });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "PUT",
+        "header": [
+          { "key": "Content-Type", "value": "image/png" }
+        ],
+        "body": { "mode": "raw", "raw": "FAKE_PNG_BYTES_FOR_TEST_ONLY" },
+        "url": { "raw": "{{uploadUrl}}" }
+      }
+    },
+    {
+      "name": "4. finalize (HEAD 核实 → ACTIVE)",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.sendRequest({ url: pm.variables.get('baseUrl') + '/web/csrf', method: 'GET' }, function (err, res) {",
+              "  if (!err && res) { pm.collectionVariables.set('csrfToken', res.json().token); }",
+              "});"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('finalize 200', function () { pm.response.to.have.status(200); });",
+              "var j = pm.response.json();",
+              "pm.test('状态转 ACTIVE', function () { pm.expect(j.status).to.eql('ACTIVE'); });",
+              "pm.test('回填真实大小(HEAD 拿的,非声明值)', function () { pm.expect(j.sizeBytes).to.be.above(0); });",
+              "pm.test('给出 readUrl', function () { pm.expect(j.readUrl).to.include('/public/media/'); });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "X-XSRF-TOKEN", "value": "{{csrfToken}}" }
+        ],
+        "url": { "raw": "{{baseUrl}}/owner/media/{{mediaId}}/finalize", "host": ["{{baseUrl}}"], "path": ["owner", "media", "{{mediaId}}", "finalize"] }
+      }
+    },
+    {
+      "name": "5. 公开读 (断言 302 重定向,已关自动跟随)",
+      "protocolProfileBehavior": { "followRedirects": false },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "// 后端不转发文件,而是 302 指向 MinIO 的预签名 GET URL。",
+              "// 已关闭自动跟随,才能断言到 302 本身(否则 Postman 会跟过去拿到 200)。",
+              "pm.test('读端点返回 302', function () { pm.response.to.have.status(302); });",
+              "pm.test('Location 指向 MinIO', function () {",
+              "  var loc = pm.response.headers.get('Location');",
+              "  pm.expect(loc).to.include('9000');",
+              "  pm.expect(loc).to.include('X-Amz-Signature');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": { "raw": "{{baseUrl}}/public/media/{{mediaId}}", "host": ["{{baseUrl}}"], "path": ["public", "media", "{{mediaId}}"] }
+      }
+    },
+    {
+      "name": "6. 反例:非图片类型 → 400 MEDIA_TYPE_NOT_ALLOWED",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.sendRequest({ url: pm.variables.get('baseUrl') + '/web/csrf', method: 'GET' }, function (err, res) {",
+              "  if (!err && res) { pm.collectionVariables.set('csrfToken', res.json().token); }",
+              "});"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('非图片被拒 400', function () { pm.response.to.have.status(400); });",
+              "pm.test('错误码正确', function () { pm.expect(pm.response.json().code).to.eql('MEDIA_TYPE_NOT_ALLOWED'); });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "X-XSRF-TOKEN", "value": "{{csrfToken}}" }
+        ],
+        "body": { "mode": "raw", "raw": "{\n  \"originalFilename\": \"x.pdf\",\n  \"contentType\": \"application/pdf\",\n  \"declaredSizeBytes\": 100\n}" },
+        "url": { "raw": "{{baseUrl}}/owner/media/upload-slots", "host": ["{{baseUrl}}"], "path": ["owner", "media", "upload-slots"] }
+      }
+    }
+  ]
+}

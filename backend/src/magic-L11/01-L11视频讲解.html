@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>L11 媒体预签名上传 · 视频式讲解</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system,"Segoe UI","Microsoft YaHei",sans-serif; background:#0d1117; color:#e6edf3; height:100vh; display:flex; flex-direction:column; overflow:hidden; }
+  header { padding:12px 20px; background:#161b22; border-bottom:1px solid #30363d; display:flex; align-items:center; gap:16px; }
+  header h1 { font-size:16px; font-weight:600; }
+  header .sub { font-size:12px; color:#7d8590; }
+  .stage { flex:1; display:flex; min-height:0; }
+  .code-panel { flex:1.3; background:#0d1117; overflow-y:auto; padding:16px 0; border-right:1px solid #30363d; }
+  .code-title { font-size:12px; color:#7d8590; padding:0 20px 10px; font-family:monospace; }
+  pre.code { font-family:"SF Mono",Consolas,"Cascadia Code",monospace; font-size:13.5px; line-height:1.65; }
+  .line { display:flex; padding:0 20px; white-space:pre; transition:background .25s; border-left:3px solid transparent; }
+  .line .ln { color:#484f58; width:32px; text-align:right; margin-right:16px; user-select:none; flex-shrink:0; }
+  .line.hot { background:#1f2d1f; border-left-color:#3fb950; }
+  .line.dim { opacity:.35; }
+  .side { flex:1; display:flex; flex-direction:column; background:#161b22; min-width:340px; }
+  .narration { flex:1; padding:28px 26px; overflow-y:auto; display:flex; flex-direction:column; justify-content:center; }
+  .scene-title { font-size:13px; color:#3fb950; font-weight:600; margin-bottom:14px; letter-spacing:.5px; }
+  .scene-text { font-size:17px; line-height:1.9; color:#e6edf3; }
+  .scene-text b { color:#f0b429; font-weight:600; }
+  .scene-text .warn { color:#ff7b72; }
+  .controls { padding:16px 22px; background:#0d1117; border-top:1px solid #30363d; }
+  .progress { height:4px; background:#30363d; border-radius:2px; margin-bottom:14px; overflow:hidden; }
+  .progress-bar { height:100%; background:#3fb950; width:0%; transition:width .3s; }
+  .btns { display:flex; align-items:center; gap:10px; }
+  button { background:#21262d; color:#e6edf3; border:1px solid #30363d; border-radius:6px; padding:8px 14px; cursor:pointer; font-size:14px; }
+  button:hover { background:#30363d; }
+  button.primary { background:#238636; border-color:#2ea043; font-weight:600; }
+  button.primary:hover { background:#2ea043; }
+  button:disabled { opacity:.4; cursor:not-allowed; }
+  .spacer { flex:1; }
+  .meta { font-size:12px; color:#7d8590; }
+  label.speed { font-size:12px; color:#7d8590; display:flex; align-items:center; gap:6px; }
+  input[type=range] { width:80px; }
+  .hint { font-size:12px; color:#7d8590; margin-top:10px; }
+  .autoplay { display:flex; align-items:center; gap:5px; font-size:12px; color:#7d8590; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🎬 L11 媒体预签名上传</h1>
+  <span class="sub">视频式讲解 · 语音朗读 + 同步高亮代码</span>
+  <div class="spacer" style="flex:1"></div>
+  <span class="sub" id="voiceStatus">语音加载中…</span>
+</header>
+
+<div class="stage">
+  <div class="code-panel">
+    <div class="code-title" id="codeTitle">— 点击 ▶ 开始 —</div>
+    <pre class="code" id="code"></pre>
+  </div>
+  <div class="side">
+    <div class="narration">
+      <div class="scene-title" id="sceneTitle">准备好了吗?</div>
+      <div class="scene-text" id="sceneText">点击下方 <b>▶ 开始播放</b>,我会像老师一样一句句讲,讲到哪段代码,左边就高亮哪几行。你不用自己找。</div>
+    </div>
+    <div class="controls">
+      <div class="progress"><div class="progress-bar" id="bar"></div></div>
+      <div class="btns">
+        <button id="playBtn" class="primary">▶ 开始播放</button>
+        <button id="prevBtn" disabled>⏮</button>
+        <button id="nextBtn" disabled>⏭</button>
+        <span class="spacer"></span>
+        <label class="autoplay"><input type="checkbox" id="autoChk" checked> 自动播放</label>
+        <label class="speed">语速 <input type="range" id="speed" min="0.6" max="1.4" step="0.1" value="0.95"></label>
+        <span class="meta" id="counter">0 / 0</span>
+      </div>
+      <div class="hint">提示:若没声音,点一下页面任意处再播放(浏览器要求用户交互后才能发声);中文语音效果取决于系统。字幕始终显示。</div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============ 代码块(用 JS 字符串存,渲染用 textContent 自动转义) ============
+const BLOCKS = {
+  overview: {
+    title: "核心思想:文件不经过后端",
+    code:
+`传统做法(文件经后端中转):
+  前端 ─[10MB图]─> 后端 ─[10MB图]─> 对象存储
+       后端变成大文件管道:内存/带宽被占,并发上传打爆应用服务器
+
+预签名直传(本课做法):
+  ① 前端 ─"给我张上传通行证"─> 后端
+  ② 后端 ─[预签名PUT URL,5分钟]─> 前端    (后端只算签名,没碰文件)
+  ③ 前端 ─[整个图,直接PUT]─> MinIO        ← 后端不在链路里!
+  ④ 前端 ─"传完了"─> 后端 finalize:HEAD确认→标ACTIVE`
+  },
+  createSlot: {
+    title: "MediaService.createUploadSlot —— 建槽 + 签发通行证",
+    code:
+`public UploadSlotResponse createUploadSlot(long userId, CreateUploadSlotRequest req) {
+    // 1. 后端兜底校验(前端可能绕过契约直接调)
+    if (!ALLOWED_TYPES.contains(req.contentType())) throw MEDIA_TYPE_NOT_ALLOWED;
+    if (req.declaredSizeBytes() > 5MB)               throw MEDIA_TOO_LARGE;
+
+    // 2. 随机 id + 存储键(不用原始文件名,防猜测/覆盖)
+    String publicId  = "med_" + 随机32位;
+    String objectKey = "uploads/" + publicId + ".png";
+
+    // 3. 先建一条 PENDING 记录(占位待确认)
+    media.setStatus("PENDING");
+    media.setExpiresAt(now + 5分钟);   // 没finalize的,过期由Worker清理(L17)
+    mediaObjectMapper.insert(media);
+
+    // 4. 签发预签名 PUT URL —— 核心一行
+    PresignedPutObjectRequest presigned = s3Presigner.presignPutObject(...);
+    return new UploadSlotResponse(publicId, presigned.url(), "PUT", 过期时间);
+}`
+  },
+  finalize: {
+    title: "MediaService.finalizeMedia —— 不信客户端,HEAD亲自核实",
+    code:
+`public MediaView finalizeMedia(long currentUserId, String publicId) {
+    // 行级授权:只能 finalize 自己的槽
+    if (!media.getUploaderUserId().equals(currentUserId)) throw MEDIA_FORBIDDEN;
+    if ("ACTIVE".equals(media.getStatus())) return toView(media);  // 幂等
+
+    // 【关键】HEAD 对象:不信前端说"传完了",亲自问 MinIO
+    try {
+        head = s3Client.headObject(bucket, objectKey);   // 存在吗?多大?
+    } catch (NoSuchKeyException e) {
+        throw MEDIA_NOT_UPLOADED;   // 槽建了但对象不在 = 根本没传
+    }
+    if (head.contentLength() > 5MB) throw MEDIA_TOO_LARGE;  // 防谎报
+
+    media.setStatus("ACTIVE");
+    media.setActualSizeBytes(head.contentLength());  // 用真实大小,不信declared
+    media.setExpiresAt(null);                        // ACTIVE 不再被清理
+}`
+  },
+  config: {
+    title: "S3Configurations —— MinIO 对接的坑",
+    code:
+`@Bean
+public S3Presigner s3Presigner(MediaProperties props) {
+    return S3Presigner.builder()
+        .region(Region.of(props.getRegion()))
+        .endpointOverride(URI.create(props.getEndpoint()))   // 指向本地MinIO
+        .credentialsProvider(...access/secret key...)
+        .serviceConfiguration(S3Configuration.builder()
+            .pathStyleAccessEnabled(true)   // ← MinIO 必须!
+            .build())
+        .build();
+}
+// AWS默认 virtual-host: http://{bucket}.{host}/{key}
+// MinIO 用 path-style: http://{host}/{bucket}/{key}
+// 不设这行,SDK 把 bucket 拼进域名 → 404 / UnknownHost`
+  }
+};
+
+// ============ 讲解脚本:每步 = 讲什么 + 用哪块代码 + 高亮哪几行 ============
+const STEPS = [
+  { block:"overview", hi:[], title:"开场:一个字节都不经过后端",
+    say:"这节课做图片上传,但最核心的一句话是:文件一个字节都不经过后端。为什么?看上面。传统做法里,前端把整个十兆的图先发给后端,后端再转发给对象存储,后端就变成了一个大文件管道,内存和带宽全被文件占住,并发一高,应用服务器先被文件流打爆了。",
+    text:"这节课做图片上传,但最核心的一句话是:<b>文件一个字节都不经过后端</b>。传统做法里后端当大文件管道,内存带宽被占,并发一高就被打爆。" },
+  { block:"overview", hi:[], title:"预签名直传:后端只发通行证",
+    say:"预签名直传是这样:第一步,前端跟后端说,我要传个图,给我张上传通行证。第二步,后端算出一个预签名的PUT地址,五分钟有效,给前端,注意后端只是算了个签名,根本没碰文件。第三步,前端拿着这个地址,把整张图直接PUT给MinIO,这一步后端完全不在链路里。第四步,前端告诉后端我传完了,后端再去确认。后端从文件搬运工,退化成了发通行证的门卫加事后记账的记账员。",
+    text:"预签名直传:①前端要通行证 →②后端<b>只算签名</b>发预签名URL →③前端把图<b>直接PUT给MinIO,后端不在链路里</b> →④finalize确认。后端从搬运工退化成门卫+记账员。" },
+  { block:"createSlot", hi:[2,3,4], title:"建槽第1步:后端兜底校验",
+    say:"进第一个接口,建槽。先看校验。类型只允许JPEG、PNG、WebP,大小不超过五兆。注意这是后端兜底校验,虽然契约里也写了,但前端可能绕过契约直接调接口,所以后端必须自己再守一道。",
+    text:"<b>建槽第1步:校验</b>。类型限jpeg/png/webp,大小≤5MB。这是<b>后端兜底</b>——前端可能绕过契约直接调,后端必须自己再守一道。" },
+  { block:"createSlot", hi:[7,8], title:"建槽第2步:随机存储键",
+    say:"第二,生成一个随机的public id,还有对象在MinIO里的存储键。特别注意,存储键用的是随机id,不是原始文件名。为什么?防猜测,别人猜不到你的图地址;防覆盖,两个人都传avatar点png也不会打架。",
+    text:"<b>第2步:随机键</b>。object_key 用随机id而<b>非原始文件名</b>——防猜测(猜不到地址)、防同名覆盖。" },
+  { block:"createSlot", hi:[11,12,13], title:"建槽第3步:先记一条PENDING",
+    say:"第三,先在数据库里建一条PENDING状态的记录。为什么是PENDING不是直接ACTIVE?因为这一刻文件还没传呢!PENDING的意思是,我给你留了位置、通行证也发了,但你到底传没传、传得对不对,我还不知道。这条记录还带个五分钟过期时间,没去确认的,将来由清理Worker回收,那是L17的事。",
+    text:"<b>第3步:先建PENDING记录</b>。为什么不直接ACTIVE?<b>此刻文件还没传</b>!PENDING=留了位置发了通行证,但传没传还不知道。带5分钟过期,没确认的由Worker清理(L17)。" },
+  { block:"createSlot", hi:[16,17], title:"建槽第4步:签发预签名URL",
+    say:"第四,核心一行:签发预签名PUT地址。s3Presigner用你的access key和secret key,对往这个bucket、这个key、PUT、五分钟内有效这件事,算出一个带签名的URL。MinIO以后收到请求,验一下这个签名,对、没过期,就放行。授权信息全编码在URL里,和文件传输本身解耦了。",
+    text:"<b>第4步:签发预签名URL</b>。Presigner用密钥对「PUT某key、限时」算签名编进URL。MinIO收到验签放行。<b>授权编进URL,与传输解耦</b>。" },
+  { block:"overview", hi:[9], title:"第2步(前端):直传不带Cookie",
+    say:"中间这步在前端,后端不参与。前端就是一句fetch,PUT那个url,body放文件。关键:这个请求不带Cookie、不带CSRF令牌。为什么?因为它是发给MinIO的,不是发给后端的。MinIO不认你的登录会话,它只认URL里那个签名。我在验收时特意用一个独立的、不带任何Cookie的HTTP客户端做这一步,照样传成功,就是为了证明这一点。",
+    text:"<b>前端直传</b>:一句 fetch PUT。<span class='warn'>不带Cookie、不带CSRF</span>——因为它发给的是MinIO不是后端,MinIO只认URL签名。验收时用独立无Cookie客户端直传成功,正好证明这点。" },
+  { block:"finalize", hi:[7,8,9,10,11], title:"finalize:HEAD亲自核实",
+    say:"第三个接口,finalize,这是整课不信任客户端的精髓。前端说我传完了,后端信吗?不信。后端亲自发一个HEAD请求问MinIO:这个对象真在吗?多大?如果MinIO说没这东西,抛异常,说明前端根本没传或者传失败了。只有HEAD到了,才继续。",
+    text:"<b>finalize=不信任客户端的精髓</b>。前端说传完了,后端<b>不信</b>,亲自HEAD问MinIO「对象真在吗多大」。查无 → MEDIA_NOT_UPLOADED(没传/传失败)。" },
+  { block:"finalize", hi:[13,15,16,17], title:"finalize:用真实大小转ACTIVE",
+    say:"确认存在后,再校验真实大小别超限,防止前端谎报declared size说传两百字节、实际塞个十兆进来。都通过了,状态转ACTIVE,而且记的是HEAD拿回来的真实大小,不是前端声明的。到此,这张图才算正式可用。finalize还是幂等的,前端重复调也不报错。",
+    text:"确认后校验<b>真实大小</b>(防谎报declared)。通过→status转ACTIVE,记<b>真实大小</b>非声明值。finalize幂等,重复调不报错。" },
+  { block:"config", hi:[6,7,8], title:"MinIO的坑:pathStyle必须true",
+    say:"最后一个必踩的坑。配置S3客户端时,有一行pathStyleAccessEnabled设true。AWS默认用虚拟主机风格寻址,把bucket名拼进域名。但MinIO用的是路径风格,bucket在路径里。不设这行,SDK会把bucket拼成子域名,MinIO解析不到,直接404或者域名找不到。这是对接MinIO必踩的第一个坑,记住它。",
+    text:"<b>必踩的坑:pathStyleAccessEnabled(true)</b>。AWS默认virtual-host把bucket拼进域名;MinIO用path-style,bucket在路径里。不设 → SDK拼错 → <span class='warn'>404/UnknownHost</span>。" },
+  { block:"config", hi:[], title:"收尾:面试怎么讲",
+    say:"总结一下面试能讲的点。第一,为什么文件不经后端,预签名怎么把授权和传输解耦。第二,为什么要finalize,后端HEAD核实而不信客户端。第三,读取也用三百零二重定向,后端不当下载管道。第四,pathStyle这个MinIO的坑。这四点讲清楚,这节课就吃透了。这节的验收我已经跑通了:自动化测试三个全绿,真实环境curl五步全过,包括那个不带Cookie直传的关键一步。下课。",
+    text:"<b>面试四点</b>:①文件不经后端+预签名解耦授权与传输 ②finalize用HEAD核实不信客户端 ③读也用302后端不当管道 ④pathStyle坑。<br><br>验收已通过:自动化3测绿 + 真实curl五步全过(含无Cookie直传)。下课 🎬" }
+];
+
+// ============ 播放引擎 ============
+const codeEl = document.getElementById('code');
+const codeTitle = document.getElementById('codeTitle');
+const sceneTitle = document.getElementById('sceneTitle');
+const sceneText = document.getElementById('sceneText');
+const bar = document.getElementById('bar');
+const counter = document.getElementById('counter');
+const playBtn = document.getElementById('playBtn');
+const prevBtn = document.getElementById('prevBtn');
+const nextBtn = document.getElementById('nextBtn');
+const autoChk = document.getElementById('autoChk');
+const speedEl = document.getElementById('speed');
+const voiceStatus = document.getElementById('voiceStatus');
+
+let idx = -1, playing = false, currentBlock = null, zhVoice = null;
+
+function pickVoice() {
+  const vs = speechSynthesis.getVoices();
+  zhVoice = vs.find(v => v.lang === 'zh-CN') || vs.find(v => v.lang && v.lang.startsWith('zh')) || null;
+  voiceStatus.textContent = zhVoice ? ('🔊 ' + zhVoice.name) : (vs.length ? '🔊 默认语音(无中文)' : '🔇 无语音,看字幕');
+}
+speechSynthesis.onvoiceschanged = pickVoice;
+pickVoice();
+
+function renderBlock(blockId, hi) {
+  if (currentBlock !== blockId) {
+    const b = BLOCKS[blockId];
+    codeTitle.textContent = b.title;
+    codeEl.innerHTML = '';
+    b.code.split('\n').forEach((ln, i) => {
+      const div = document.createElement('div');
+      div.className = 'line';
+      div.dataset.n = i + 1;
+      const num = document.createElement('span'); num.className = 'ln'; num.textContent = i + 1;
+      const txt = document.createElement('span'); txt.textContent = ln;   // textContent 自动转义 < >
+      div.appendChild(num); div.appendChild(txt);
+      codeEl.appendChild(div);
+    });
+    currentBlock = blockId;
+  }
+  // 高亮
+  const hiset = new Set(hi);
+  let first = null;
+  [...codeEl.children].forEach(div => {
+    const n = +div.dataset.n;
+    div.classList.remove('hot', 'dim');
+    if (hi.length) {
+      if (hiset.has(n)) { div.classList.add('hot'); if (first === null) first = div; }
+      else div.classList.add('dim');
+    }
+  });
+  if (first) first.scrollIntoView({ block: 'center', behavior: 'smooth' });
+}
+
+function showStep(i) {
+  idx = i;
+  const s = STEPS[i];
+  renderBlock(s.block, s.hi);
+  sceneTitle.textContent = s.title;
+  sceneText.innerHTML = s.text;
+  bar.style.width = ((i + 1) / STEPS.length * 100) + '%';
+  counter.textContent = (i + 1) + ' / ' + STEPS.length;
+  prevBtn.disabled = i === 0;
+  nextBtn.disabled = i === STEPS.length - 1;
+}
+
+function speak(text, onEnd) {
+  speechSynthesis.cancel();
+  if (!speechSynthesis.getVoices().length) { if (onEnd) setTimeout(onEnd, 2600); return; }
+  const u = new SpeechSynthesisUtterance(text);
+  if (zhVoice) u.voice = zhVoice;
+  u.lang = 'zh-CN';
+  u.rate = parseFloat(speedEl.value);
+  u.onend = () => { if (onEnd) onEnd(); };
+  speechSynthesis.speak(u);
+}
+
+function playFrom(i) {
+  if (i >= STEPS.length) { stop(); return; }
+  showStep(i);
+  speak(STEPS[i].say, () => {
+    if (playing && autoChk.checked) playFrom(i + 1);
+    else if (playing && !autoChk.checked) { /* 停在本步等手动 */ }
+  });
+}
+
+function play() {
+  playing = true;
+  playBtn.textContent = '⏸ 暂停';
+  playBtn.classList.remove('primary');
+  playFrom(idx < 0 ? 0 : idx);
+}
+function stop() {
+  playing = false;
+  speechSynthesis.cancel();
+  playBtn.textContent = idx >= STEPS.length - 1 ? '↺ 重播' : '▶ 继续';
+  playBtn.classList.add('primary');
+}
+
+playBtn.onclick = () => {
+  if (playing) { stop(); }
+  else { if (idx >= STEPS.length - 1) idx = -1; play(); }
+};
+prevBtn.onclick = () => { const i = Math.max(0, idx - 1); showStep(i); if (playing) { speechSynthesis.cancel(); playFrom(i); } };
+nextBtn.onclick = () => { const i = Math.min(STEPS.length - 1, idx + 1); showStep(i); if (playing) { speechSynthesis.cancel(); playFrom(i); } };
+prevBtn.disabled = nextBtn.disabled = false;
+</script>
+</body>
+</html>
