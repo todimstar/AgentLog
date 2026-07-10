@@ -1,0 +1,143 @@
+[
+  {
+    "file": "f2981519-955d-402d-8c7c-9cf8f33f5bd1.jsonl",
+    "date": "2026-06-18",
+    "lesson": "多课（L18~L25）",
+    "headline": "全自动长跑连推 L18→L25 八课收官：ACPP 收尾（Retry/Terminate）+ M5 社区增强（草稿编辑/发布审稿/标签搜索/关注通知/热门精华/平台治理）+ L25 CI 与 README，41→71 测全绿，V014~V017 四个迁移，16 个 commit，06-19 浏览器全功能演示收工",
+    "changes": [
+      {
+        "what": "L18 Retry 与 Terminate（ACPP 收尾·主人处置权）：新建 OwnerCollaborationService/Controller + CollaborationView/RetryTicketResponse DTO，扩 ContributionTicket/HandoffToken/ContributionAttempt 三个 Mapper(+XML) 支持重试链与终止链，前端 OwnerCollaborationPage.vue + 路由；45 测全绿，浏览器实测 retry（错误历史保留+尾令牌解冻）与 terminate 全链",
+        "files": ["backend/src/main/java/com/agentlog/collaboration/application/OwnerCollaborationService.java", "backend/src/main/java/com/agentlog/collaboration/api/OwnerCollaborationController.java", "backend/src/main/resources/mapper/collaboration/ContributionTicketMapper.xml", "web/src/pages/OwnerCollaborationPage.vue"],
+        "evidence": "L186: WRITE OwnerCollaborationService.java；L409: git add…feat commit"
+      },
+      {
+        "what": "L19 草稿编辑与 Revision 清理：V014 建 draft_revision 表，ContentService.saveDraft（expectedVersion 乐观锁 + snapshot hash 去重），DraftRevisionCleanupService/Worker（有限保留+pinned），SaveDraftRequest DTO，前端 DraftEditor.vue（改块/上移下移调序/隐藏）；50 测全绿",
+        "files": ["backend/src/main/resources/db/migration/V014__create_draft_revision.sql", "backend/src/main/java/com/agentlog/content/application/ContentService.java", "backend/src/main/java/com/agentlog/content/application/DraftRevisionCleanupService.java", "web/src/pages/DraftEditor.vue"],
+        "evidence": "L501: WRITE V014__create_draft_revision.sql -- L19 有限保留快照(TX-07)"
+      },
+      {
+        "what": "L20 发布版本、主人审稿与双视图（三道门第二门）：重写 publish（状态校验+content_origin 自动判定+补齐漏复制的 authorAgentId/sourceTool+publishMode 治理），新增贡献视图端点（ContributionView + content 模块自建 ContentAuthorLookupMapper 只读投影查作者名），前端 ContributionView.vue + PostDetailPage AI 标识；55 测全绿，无新迁移",
+        "files": ["backend/src/main/java/com/agentlog/content/application/ContentService.java", "backend/src/main/java/com/agentlog/content/api/dto/response/ContributionView.java", "backend/src/main/resources/mapper/content/ContentAuthorLookupMapper.xml", "web/src/pages/ContributionView.vue"],
+        "evidence": "L705: 当前 publish 漏复制 authorAgentId/sourceTool——L20 修复"
+      },
+      {
+        "what": "L21 标签与搜索：V015 建 tag+post_tag，FeedQuery 加 keyword/tagId，PostFeedMapper.xml 加 LIKE 搜索+标签 join 筛选，PostCardView.tags 由 List<Object> 落实为 List<TagView>（Feed 卡片批量填充防 N+1），TagService/TagController（标签云+主人打标签），前端 SearchPage.vue + PostCard 标签渲染；59 测全绿",
+        "files": ["backend/src/main/resources/db/migration/V015__create_tag.sql", "backend/src/main/resources/mapper/forum/PostFeedMapper.xml", "backend/src/main/java/com/agentlog/forum/application/TagService.java", "web/src/pages/SearchPage.vue"],
+        "evidence": "L922: WRITE V015__create_tag.sql 标签归 forum 模块"
+      },
+      {
+        "what": "L22 关注流与通知中心：V016 建 follow_relation+notification，notification 模块开张（NotificationFacade/Commands 根包门面 + Follow/NotificationService + 两 Controller + Mapper/XML），CommentService 接评论通知（JdbcTemplate 只读投影查帖主）、ExpiredAttemptService 接 AI 超时通知，前端 NotificationPage.vue；63 测全绿，ModularityTest 验证跨模块经 Facade 合规",
+        "files": ["backend/src/main/resources/db/migration/V016__create_follow_and_notification.sql", "backend/src/main/java/com/agentlog/notification/NotificationFacade.java", "backend/src/main/java/com/agentlog/forum/application/CommentService.java", "web/src/pages/NotificationPage.vue"],
+        "evidence": "L1150: WRITE NotificationFacade.java 模块对外门面"
+      },
+      {
+        "what": "L23 热门榜与精华：HotScoreService（自设对数压缩+时间衰减公式，SQL 直接重算）+ HotScoreRecomputeWorker 定时刷新 + EssenceService/PostManageController（主人设精华）；决策 hot_score 不在 publish 时跨模块调（避免 content→forum 反向依赖），由 Worker+互动时算；66 测全绿，无新迁移",
+        "files": ["backend/src/main/java/com/agentlog/forum/application/HotScoreService.java", "backend/src/main/java/com/agentlog/forum/application/EssenceService.java", "backend/src/main/java/com/agentlog/forum/api/PostManageController.java"],
+        "evidence": "L1367: hot_score 不在 publish 跨模块调，Worker 定时算"
+      },
+      {
+        "what": "L24 公开治理与 AI 内容标识（三道门第三门收官）：V017 给 user_account 加 role 列（USER/ADMIN）+ 建 content_report/moderation_action，AppUserDetailsService 授 ROLE_ADMIN，ApiSecurityConfiguration 加 /admin/** 鉴权，ContentFacade.applyModeration 跨模块写，moderation 模块开张（ModerationService + AdminModerationController + ReportController），前端 ModerationPage.vue；71 测全绿",
+        "files": ["backend/src/main/resources/db/migration/V017__create_governance.sql", "backend/src/main/java/com/agentlog/identity/application/AppUserDetailsService.java", "backend/src/main/java/com/agentlog/moderation/application/ModerationService.java", "web/src/pages/ModerationPage.vue"],
+        "evidence": "L1515: WRITE V017__create_governance.sql 管理员角色+举报+治理流水"
+      },
+      {
+        "what": "L25 CI、部署、Demo 与收尾（不新增业务功能）：落地 .github/workflows/backend.yml + web.yml + contract.yml 三条 CI，根 README.md（项目门面+面试讲解），修复 DraftEditor.vue 的 vue-tsc -b 严格 build 类型错误，contract.yml 契约 diff 收窄到 apis/models（规避 generator 元文件漂移误红）",
+        "files": [".github/workflows/backend.yml", ".github/workflows/web.yml", ".github/workflows/contract.yml", "README.md", "web/src/pages/DraftEditor.vue"],
+        "evidence": "L1780: WRITE .github/workflows/backend.yml"
+      },
+      {
+        "what": "每课配套：backend/src/magic-L18~L25 八份镜像讲义、magic-memory progress/decisions/INDEX/README 更新、CHANGELOG 逐课累加、本机记忆镜像同步；每课 feat+docs 双 commit，共 16 个 commit",
+        "files": ["backend/src/magic-L18/01-Retry与Terminate.md", "magic-memory/INDEX.md", "magic-memory/progress/L25.md", "CHANGELOG.md"],
+        "evidence": "L1878: L18-L25 共 16 个 commit（8 课 × feat+docs）"
+      },
+      {
+        "what": "06-19 尾声：全功能浏览器演示（Feed 三排序/贡献视图/搜索标签/admin APPROVE 治理闭环）+ 给用户自主探索命令清单，未改代码，演示后清理临时文件",
+        "files": [],
+        "evidence": "L1884: 用户「演示一下你最终的成果…给我自己启动和探索命令」"
+      }
+    ],
+    "decisions": [
+      "用户拍板（L422）：全自动推到最后一课 L25——「AI 快到期了…此后所有改动放在新 git 分支，连记忆都分开存…为我开路到最后一课」，授权 lessons/L07-onward 分支 + magic-memory 跨-AI 解封载体的全自动施工特例",
+      "用户拍板（L1884）：完工后要求实机演示最终成果并提供自主探索/测试命令",
+      "自主决策（全自动特例内）：draft_revision 表结构按 TX-07 语义自行设计；tag 归 forum 模块；跨模块读一律「只读投影物理表」、跨模块写一律走 Facade（notification/content）；hot_score 自设对数压缩+时间衰减公式；L24 用 user_account.role 列实现最小 RBAC"
+    ],
+    "twists": [
+      "返工（L21）：docs commit 把文件放 -m 之后语法解析失败，且 feat commit 漏提核心 PostFeedMapper.xml——发现后 git commit --amend 补进（L1090~L1094）",
+      "返工（L23）：HotScoreService.recomputeAllPublished 用无参 jdbcTemplate.update 却带 ? 占位符 → BadSqlGrammar，改为传 gravity 参数（L1381~L1382）",
+      "弯路（L23）：全量回归偶发 3 失败（WebAuthIntegrationTest），排查定性为多 @SpringBootTest 并发 context/Testcontainers 竞争而非代码问题，重跑全绿（L1429~L1438）",
+      "返工（L24）：FlywayMigrationTest 断言 user_account 13 列被 V017 加 role 列打破——真实回归，断言更新为 14 并注明（L1684~L1685）",
+      "返工（L25）：vue-tsc -b 严格 build 揪出 L19 DraftEditor.vue 数组解构交换类型错误（type-check 未报）→ 改 splice 写法（L1793~L1797）；契约重新生成出现 FILES/git_push.sh 元文件漂移 → 还原并把 contract CI diff 收窄到 apis/models（L1806~L1813）",
+      "弯路（L18/演示）：git-bash 下中文 JSON 经 curl/heredoc 编码损坏致 register/createDraft 反复 400（Failed to read request），两次都改纯 ASCII 造数脚本绕过（L292~L295、L1923）"
+    ]
+  },
+  {
+    "file": "59140d52-07d3-468d-9b19-af4645667565.jsonl",
+    "date": "2026-06-27",
+    "lesson": "L08",
+    "headline": "L07-restart 分支重做 L08 评论二级回复（06-27~28）：AI 先识别出「当前是重做非旧全自动分支」恢复导师模式，落地评论 CRUD+测试后，用户审码揪出「禁三级」真 bug——重写为 B 站模型（root_comment_id 逻辑无限回复/物理两层），并清理被旧 L25 迁移污染的脏库；全程未 commit，前端评论区被中断留待下段",
+    "changes": [
+      {
+        "what": "L08 评论后端首版全套：V006__create_comment.sql 建 comment 表 + CommentDO/CommentRow/CommentMapper(+XML 一条 JOIN 平铺查防 N+1)/CreateCommentRequest/CommentView(超集契约补 parentCommentId/replyToCommentId/depth/status)/CommentPage/CommentService(软删保楼层)/CommentController(/public 读 + /web 写)，ApiStatus 加评论错误码",
+        "files": ["backend/src/main/resources/db/migration/V006__create_comment.sql", "backend/src/main/java/com/agentlog/forum/application/CommentService.java", "backend/src/main/java/com/agentlog/forum/api/CommentController.java", "backend/src/main/resources/mapper/forum/CommentMapper.xml"],
+        "evidence": "L128: WRITE V006__create_comment.sql -- L08 评论二级回复归 forum"
+      },
+      {
+        "what": "comment_count 派生列维护：CommentMapper 加 bumpCommentCount 自定义 SQL 直写 post 物理表（零 import content 类，ModularityTest 验证包依赖合规），并删掉多余的 updated_at 自赋值",
+        "files": ["backend/src/main/java/com/agentlog/forum/infrastructure/persistence/mapper/CommentMapper.java", "backend/src/main/resources/mapper/forum/CommentMapper.xml"],
+        "evidence": "L172: bumpCommentCount 走自定义 SQL 零 import，安全"
+      },
+      {
+        "what": "测试：新建 forum 首个集成测试 CommentIntegrationTest（5 测，JdbcTemplate 直插 PUBLISHED post 当夹具）+ FlywayMigrationTest 加 V006 验证 case；修复 @SpringBootTest 不回滚导致的夹具唯一键冲突（slug 撞车）；全量 17 测绿",
+        "files": ["backend/src/test/java/com/agentlog/forum/CommentIntegrationTest.java", "backend/src/test/java/com/agentlog/FlywayMigrationTest.java"],
+        "evidence": "L243: Failures:0/Errors:5 全是夹具问题——@SpringBootTest 默认不回滚"
+      },
+      {
+        "what": "【核心返工】B 站模型重写：从旧 lessons/L07-onward 分支拉出原始 V006 对比，发现重写时漏掉 root_comment_id 支柱——V006 整个重写（root_comment_id + depth CHECK(1,2) + status 软删），CommentService 由「校验拒三级」改为「扁平化挂楼」（回复二级评论自动落同楼 depth=2），删除永不触发的 COMMENT_DEPTH_EXCEEDED/COMMENT_PARENT_MISMATCH 错误码，XML 排序改按 root_comment_id 聚楼，测试用例「禁三级被拒」改为「回复二级→扁平同楼」，FlywayMigrationTest 外键断言 4→5",
+        "files": ["backend/src/main/resources/db/migration/V006__create_comment.sql", "backend/src/main/java/com/agentlog/forum/application/CommentService.java", "backend/src/main/java/com/agentlog/shared/error/ApiStatus.java", "backend/src/test/java/com/agentlog/forum/CommentIntegrationTest.java"],
+        "evidence": "L300: 重写 V006 -- B站式\"逻辑无限回复+物理永远两层\"，灵魂是 root_comment_id"
+      },
+      {
+        "what": "脏库清理（环境变更）：确认开发库 flyway_schema_history 被 06-18 全自动跑的 L25 迁移（到 V017）污染、残留旧 comment 表——停掉用户之前启动的 8080 后端 java 进程，drop+create agentlog 库，重启后端让 Flyway 从 V001 干净跑到新 V006",
+        "files": [],
+        "evidence": "L381: Flyway 账本干净停在 V006（不再是污染的 V017）"
+      },
+      {
+        "what": "讲义：magic-L08/00-L08讲义.md（对话版单文件，10 小节+速记表），把「纠偏故事」与「脏库陷阱」写成面试素材",
+        "files": ["backend/src/magic-L08/00-L08讲义.md"],
+        "evidence": "L397: WRITE 00-L08讲义.md B站式两层评论讲义"
+      }
+    ],
+    "decisions": [
+      "AI 判定并与用户对齐：当前 L07-restart 是重做（真实进度=L07 末），不套用旧「全自动特例」，恢复默认导师模式·学生主驾（L31/L56）",
+      "用户拍板（L73~L75）：本课节奏选「套路速过·我写你审」——AI 全写评论 CRUD+测试，用户审代码",
+      "用户拍板（L258~L282）：坚持 B 站评论模型「逻辑无限回复、物理永远两层」，推翻 AI 的「禁三级拒绝」实现——审码质疑两连中（实现 bug + 脏库怀疑）",
+      "用户拍板（L345/L363）：脏库处理选「清空重建当前库」且「停后端 + 清库 + 重启」（AI 不擅杀用户启动的进程，先征求确认）",
+      "契约取舍：CommentView 超集契约（契约是下限），补前端组树必需的 root/parent/replyTo/depth/status 字段（L160）"
+    ],
+    "twists": [
+      "返工（本课核心弯路）：首版把「回复回复」误当三级评论拒绝——用户看不懂 replyToFloor 校验发问，对比旧分支原始设计后确认漏了 root_comment_id，模型整体重写（L258→L300~L340）",
+      "陷阱：本机 MySQL 开发库被 8 天前全自动 L25 跑残留污染（Flyway 到 V017 + 旧结构 comment 表），用户先怀疑、AI 进容器查账本证实，停服清库重建解决（L270~L381）",
+      "小返工：CommentIntegrationTest 夹具在共享 Testcontainers 下撞唯一键（@SpringBootTest 不回滚），改唯一化夹具（L243~L244）",
+      "尾声中断：用户最后要 Postman 集合 + 前端评论区组件 + 浏览器实测「回复回复」链（提到 GLM/gemini 识图接手），请求被用户打断，本 session 未做前端、全程未 git commit（改动留在工作区）"
+    ]
+  },
+  {
+    "file": "e7c53c83-7e65-4bd6-8466-ace49a9123bd.jsonl",
+    "date": "2026-06-28",
+    "lesson": "L08",
+    "headline": "59140d52 同一 L08 会话的续档分叉（原 sessionId 15e5b89c，前 417 行与 59140d52 完全一致，仅按新增计）：新增尾段只在对话里输出 L08 Postman 测试集合 JSON（登录→发帖→评论→回复→软删链），未写任何项目文件、未 commit，前端评论区仍未开工",
+    "changes": [
+      {
+        "what": "无实际文件变更。唯一交付：按 L07 Postman 集合格式在对话中内联生成 AgentLog-L08 Postman 集合 JSON（三接口完整测试链），供用户手工测接口；「接前端评论区组件 + 浏览器实测回复回复链」在本档截止（13:09）前未开始",
+        "files": [],
+        "evidence": "L424: ## L08 Postman 集合…\"name\":\"AgentLog-L08\"（对话内联，非写盘）"
+      }
+    ],
+    "decisions": [
+      "用户拍板（L418）：验收方式=先给 Postman JSON 自测接口，再由 AI 接前端评论区组件并浏览器实测；并说明后续可用能识图的模型（gemini flash）看截图——为「glm接手L08验收」的跨 AI 交接做准备"
+    ],
+    "twists": [
+      "续档说明：本文件前 417 行（06-27 12:55~06-28 05:33 的 L08 全部施工与返工）与 59140d52 是同一会话轨迹（uuid 完全重合，362 行去重），变更已计入 59140d52 条目；本档尾段（12:34~13:09）早于 59140d52 尾段（15:17 同样请求后被中断），两档均止步于 Postman/前端交接点"
+    ]
+  }
+]

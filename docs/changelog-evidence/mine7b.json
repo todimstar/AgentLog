@@ -1,0 +1,149 @@
+[
+  {
+    "file": "330de4a3-9409-453e-a079-4330eb06a114.jsonl",
+    "date": "2026-07-05",
+    "lesson": "无",
+    "headline": "71c0b9fd 的续档分叉快照（06-27→07-05 历史全量复制、内容逐行同源）；独有尾部 L1011-1044 仅 ECONNRESET 断连与「继续」重试，零项目变更——全部实质变更计入 71c0b9fd 条目",
+    "changes": [],
+    "decisions": [],
+    "twists": [
+      "核实：与 71c0b9fd 内容指纹逐行比对，前 1003 内容行完全一致（分歧仅 file-history-snapshot 哈希）；独有尾部 L1011『API Error: Unable to connect to API (ECONNRESET)』(13:36) 起全是重试/No response requested/api_error，至 13:44 终止"
+    ]
+  },
+  {
+    "file": "71c0b9fd-f085-4a32-ac11-38d7bac80d2c.jsonl",
+    "date": "2026-06-27",
+    "lesson": "多课",
+    "headline": "长跑会话 06-27→07-05：前段（06-27~06-28 05:36，L08 评论后端+B站模型重做+清脏库+L08讲义）与 4bdb3b49 同源、已由 mine4.json 收录不重复计；本条计其后独有部分——06-30 继承人点评（发现 V008 回归）→ 07-03 L10 浏览器验收结课 + L11 media 模块整套施工 → 07-04 深讲义/视频v2/Postman 返工 → 07-05 邮箱登录设计调查（只查不改）",
+    "changes": [
+      {
+        "what": "L11 media 模块配置层：MediaProperties + S3Configurations（AWS S3 SDK 对接 MinIO，pathStyle、预签名 Presigner）",
+        "files": [
+          "backend/src/main/java/com/agentlog/media/infrastructure/MediaProperties.java",
+          "backend/src/main/java/com/agentlog/media/infrastructure/S3Configurations.java"
+        ],
+        "evidence": "L682/L685: Write MediaProperties.java、S3Configurations.java"
+      },
+      {
+        "what": "L11 持久层：MediaObjectDO + MediaObjectMapper——复用 V002 media_object 表，本课零新增 Flyway 迁移",
+        "files": [
+          "backend/src/main/java/com/agentlog/media/infrastructure/persistence/dataobject/MediaObjectDO.java",
+          "backend/src/main/java/com/agentlog/media/infrastructure/persistence/mapper/MediaObjectMapper.java"
+        ],
+        "evidence": "L687/L689: Write DO+Mapper；L618: 复用 V002 media_object 表(无需新迁移)"
+      },
+      {
+        "what": "L11 DTO 三件对齐 OpenAPI：CreateUploadSlotRequest / UploadSlotResponse / MediaView",
+        "files": [
+          "backend/src/main/java/com/agentlog/media/api/dto/CreateUploadSlotRequest.java",
+          "backend/src/main/java/com/agentlog/media/api/dto/UploadSlotResponse.java",
+          "backend/src/main/java/com/agentlog/media/api/dto/MediaView.java"
+        ],
+        "evidence": "L691/L693/L695: Write 三个 DTO（对齐 OpenAPI UploadSlotResponse 等）"
+      },
+      {
+        "what": "L11 核心 MediaService：建槽（PENDING+预签名 PUT URL）→ finalize（HEAD 确认真实大小→ACTIVE，幂等）→ 公开读 302 重定向；文件字节不经后端",
+        "files": [
+          "backend/src/main/java/com/agentlog/media/application/MediaService.java"
+        ],
+        "evidence": "L698: Write MediaService.java（三步逻辑）"
+      },
+      {
+        "what": "L11 双 Controller：OwnerMediaController（/owner/media 建槽+finalize，登录态）+ PublicMediaController（/public/media/{id} 302）",
+        "files": [
+          "backend/src/main/java/com/agentlog/media/api/OwnerMediaController.java",
+          "backend/src/main/java/com/agentlog/media/api/PublicMediaController.java"
+        ],
+        "evidence": "L702/L704: Write 两个 Controller"
+      },
+      {
+        "what": "ApiStatus 增补媒体错误码（首次 Edit 撞上 L09 已加 reaction 码的陈旧串，重读后二次 Edit 成功）",
+        "files": [
+          "backend/src/main/java/com/agentlog/shared/error/ApiStatus.java"
+        ],
+        "evidence": "L707→L713: Edit ApiStatus（—— 点赞/收藏（L09 forum）—— 后追加媒体码）"
+      },
+      {
+        "what": "L11 集成测试 MediaUploadIntegrationTest：Testcontainers 真 MinIO+MySQL 端到端 3 测（mc 建桶→HttpClient 真直传→finalize），连同 ModularityTest 边界校验全绿；全量 29 测绿",
+        "files": [
+          "backend/src/test/java/com/agentlog/media/MediaUploadIntegrationTest.java"
+        ],
+        "evidence": "L747: Write 测试；L752: 3测全过+边界合规；L787: 全量29绿"
+      },
+      {
+        "what": "修复 FeedService 外部误触拼写错 colect→collect（非本会话引入、卡住整个 build；文件被并发修改，Edit 两次才落）",
+        "files": [
+          "backend/src/main/java/com/agentlog/forum/application/FeedService.java"
+        ],
+        "evidence": "L724: 唯一 diff 是 collect→colect；L729/L741: 两次 Edit 修复"
+      },
+      {
+        "what": "L11 真实环境 curl 五步端到端验收：登录 demo_alice→建槽→直传 MinIO（不带 Cookie）→finalize ACTIVE→302 公开读；先重启 8080 旧后端进程（旧进程无新端点 404）",
+        "files": [],
+        "evidence": "L761: 旧进程404需重启；L771: 五步验收全过"
+      },
+      {
+        "what": "magic-L11 讲义与视频式讲解 v1：00-L11讲义.md（对话版）+ 01-L11视频讲解.html（中文语音+代码逐段高亮，浏览器实测可用）",
+        "files": [
+          "backend/src/magic-L11/00-L11讲义.md",
+          "backend/src/magic-L11/01-L11视频讲解.html"
+        ],
+        "evidence": "L778/L780: Write 讲义+HTML；L821: 浏览器验证高亮+中文语音"
+      },
+      {
+        "what": "07-04 深度返工四交付：02-L11视频讲解v2.html（IDEA式结构树+代码+泳道流程图+字幕四栏联动）、02-L10深讲义.md、03-L11深讲义.md（背景注解版）、AgentLog-L11.postman_collection.json（CSRF/302 特殊处理）",
+        "files": [
+          "backend/src/magic-L11/02-L11视频讲解v2.html",
+          "backend/src/magic-L10/02-L10深讲义.md",
+          "backend/src/magic-L11/03-L11深讲义.md",
+          "backend/src/magic-L11/AgentLog-L11.postman_collection.json"
+        ],
+        "evidence": "L862/L902/L907/L916: 四次 Write；L890: v2 四栏联动截图验证"
+      },
+      {
+        "what": "L10 结课验收（零代码改动）：浏览器实测 Feed 头像组（Alice/Carol/Bob 各卡不同作者、佚名消失）+ N+1 运行时证据（仅 1 个 /public/posts 请求）+ 截图 l10-feed-avatars.png，判定 L10 可结课",
+        "files": [],
+        "evidence": "L582: 浏览器验收成功；L594: N+1 防范运行时证据确认"
+      },
+      {
+        "what": "发现真缺口：avatarMediaId 后端→DTO→前端全链带上，但 PostLogCard.vue 只渲染 initials 首字母、真头像未接线（本会话未修，留待头像上传链）",
+        "files": [
+          "web/src/components/PostLogCard.vue"
+        ],
+        "evidence": "L841: PostLogCard.vue 第35行只渲染 initials，未用 avatarMediaId"
+      },
+      {
+        "what": "发现 V008 种子回归：演示种子 alice/bob 撞 WebAuthIntegrationTest 唯一键→2 测 409；本会话只诊断未改代码，后由 Codex commit 2947b8d（demo_ 前缀隔离）修复并经本会话复核 26 测全绿",
+        "files": [],
+        "evidence": "L445: 2测失败409；L448: 因果坐实；L512: 2947b8d 修法漂亮"
+      }
+    ],
+    "decisions": [
+      "用户拍板（06-30 L387）：L08 收尾已托付继承人（GLM5.2 Postman 验收、DeepSeek V4 前端评论区、Codex 带教 L09/L10），本会话转任「老导师回访」一路探索点评",
+      "用户拍板（07-03 L538）：用子代理研究 Codex 的 L10 会话进度并验证 L10 能否结课",
+      "用户拍板（07-03 L606）：L10 无新增接口不需 Postman 验收，直接开 L11「我写你审」；要讲义，最好配视频式讲解；子代理 429 多试几次",
+      "用户拍板（07-04 L830）：上两课讲太浅——新标准「你写我审=学生零背景，每个概念就地讲透」，促成 L10/L11 深讲义 + 视频 v2 重做",
+      "用户拍板（07-05 L936）：登录设计改邮箱方向（旧论坛式邮箱+验证码+Redis），username 全局统一改并写入记忆；头像上传到展示完整实现「我写你审」+视频讲解；行动前先给影响范围与方案",
+      "用户拍板（07-05 L952）：子代理 429 就改用终端启动 claude -p 当子代理（指挥另一个主代理）"
+    ],
+    "twists": [
+      "误判翻案（07-03 L501/L531）：基于会话开头旧快照以为 L10 卡在半途/编译不过，按当前 HEAD 重查——实际 L10 已完成并提交（1e88cfa 等），公开承认并修正",
+      "假阴性（07-03 L515-L531）：后台任务跑测试 Testcontainers 连不上 Docker 报 5 Errors，前台重跑全绿——环境问题非代码回归",
+      "并发干扰（07-03 L720-L741）：FeedService 在对话期间被外部编辑器改出 colect 拼写错且文件持续变动，两次 Edit 才修复",
+      "子代理连环 429（07-03~07-05，≥5 次全军覆没）→ 亲自动手；嵌套 claude -p 输出被双重 nohup 吞（L975 0字节），最终从其会话文件捞回 OpenMontage 结论（L995/L1003）",
+      "身份设计调查结论（07-05 L975/L983）：权威 Master_Pack 全栈无 email/无验证码，前端 session.ts 用 username 登录；agent_account 用 nickname 且无密码（机娘不登录）——display_name 并非为机娘设计；会话在给出完整方案前 ECONNRESET 终止",
+      "前段与 4bdb3b49（mine4.json 已收录）内容同源：71c0b9fd L1-L384 = 4bdb3b49 L5-L399（06-27 12:55→06-28 05:36），L08 后端/B站重做/清脏库/L08讲义均不在本条重复计数"
+    ]
+  },
+  {
+    "file": "bb067b0a-d0a5-4f84-a5c9-ab89bfc004b0.jsonl",
+    "date": "2026-07-05",
+    "lesson": "无",
+    "headline": "同一会话的第三份快照（最新「活档」，07-05 的后台任务通知即引用其会话目录）：1046 内容行中 988 行与 71c0b9fd 逐行同源（06-27 12:55→07-05 12:18）；独有尾部（12:18→14:39）仅两次 ECONNRESET 与「继续」重试，零项目变更",
+    "changes": [],
+    "decisions": [],
+    "twists": [
+      "核实：bb067b0a L6-L1172 与 71c0b9fd L1-L1010 内容指纹一致；独有尾部 L1173(12:40)/L1177(13:17) 两次『API Error: ECONNRESET』，L1195(14:39)『No response requested』后仅 snapshot/mode 行——会话在断连/限流中终止，未再施工"
+    ]
+  }
+]

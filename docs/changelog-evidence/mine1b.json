@@ -1,0 +1,147 @@
+[
+  {
+    "file": "09f333f0-716e-4d62-bee0-9285a98acb08.jsonl",
+    "date": "2026-06-18",
+    "lesson": "多课（L07→L16，UTC 06-17 15:54 至 06-18 09:31 夜跑马拉松）",
+    "headline": "「AI 到期前夜跑」：切出 lessons/L07-onward 分界分支并建 magic-memory 跨-AI 记忆载体后，全自动连推 L07 Feed→L08 评论→L09 点赞收藏→L10 主页→L11 媒体→L12 设备配对→L13 双轨 token→L14 机娘投稿→L15 ACPP 核心（实战修死锁），L16 Lease/Attempt 写完测绿但收尾被 429 打断",
+    "changes": [
+      {
+        "what": "开新篇基建：从 master(b992303) 切出分界分支 lessons/L07-onward；创建仓库内跨-AI 记忆载体 magic-memory/（README 解封入口+INDEX+L00-L06 继承快照+progress/decisions 骨架）并同步本机 .claude 镜像记忆（双轨）",
+        "files": ["magic-memory/README.md", "magic-memory/INDEX.md", "magic-memory/knowledge/00-inherited-context.md", "C:/Users/hp1080/.claude/projects/C--Ep-Code-Java-AgentLog-AgentLog-start/memory/MEMORY.md"],
+        "evidence": "L71: git checkout -b lessons/L07-onward；L78: Write magic-memory/README.md 跨 AI 记忆载体"
+      },
+      {
+        "what": "L07 后端 Feed：forum 模块开张——7 个 DTO(PostCardView/PostPage/FeedQuery 等)+PostFeedRow 扁平读模型+PostFeedMapper.xml(按设计文档 selectFeed)+FeedService(一页仅 3 条 SQL 防 N+1，留 authors 空骨架)+FeedController(/api/v1/public/posts)；FeedIntegrationTest 3 绿+SQL 计数铁证",
+        "files": ["backend/src/main/java/com/agentlog/forum/api/FeedController.java", "backend/src/main/java/com/agentlog/forum/application/FeedService.java", "backend/src/main/resources/mapper/forum/PostFeedMapper.xml", "backend/src/test/java/com/agentlog/forum/FeedIntegrationTest.java"],
+        "evidence": "L168: Write mapper/forum/PostFeedMapper.xml；L255: Feed 请求恰好 3 条 SQL"
+      },
+      {
+        "what": "L07 前端与收尾：FeedPage(筛选/排序/分页)+PostCard 组件，路由改为 / 指向 Feed（原首页挪 /welcome）；浏览器实测中发现并修复 URL 参数重复 bug；删除复活的 stale vite.config.js；3 个 commit（后端 889e2ae/前端 9c89268/docs）+CHANGELOG 补 L06 断档",
+        "files": ["web/src/pages/FeedPage.vue", "web/src/components/PostCard.vue", "web/src/router/index.ts", "CHANGELOG.md", "magic-memory/decisions/L07-feed-belongs-to-forum-cqrs.md"],
+        "evidence": "L331: 发现一个 bug：参数重复了 page=0&size=2…；L410: 后端已提交(889e2ae,13 文件)"
+      },
+      {
+        "what": "L08 评论：V006__create_comment.sql（偏离蓝图五表合建，只建 comment 单表+depth CHECK）；CommentDO/Mapper/XML+AuthorLookupMapper(forum 自查作者守模块边界)+CommentService(一级/二级/禁三级/软删保楼层)+ApiStatus 错误码+CommentController/PublicCommentController；前端 CommentThread.vue+PostDetailPage.vue 接真详情路由；测试 3 绿+浏览器全流程实测；commit e534d69 等 3 个",
+        "files": ["backend/src/main/resources/db/migration/V006__create_comment.sql", "backend/src/main/java/com/agentlog/forum/application/CommentService.java", "backend/src/main/java/com/agentlog/forum/infrastructure/persistence/mapper/AuthorLookupMapper.java", "web/src/components/CommentThread.vue", "web/src/pages/PostDetailPage.vue"],
+        "evidence": "L440: Write V006__create_comment.sql：设计文档原蓝图五表合建；L504: 3 个测试全绿…禁三级(COMMENT_DEPTH_EXCEEDED)"
+      },
+      {
+        "what": "L09 点赞收藏：V007__create_reaction_and_collection.sql；ReactionDO/CollectionRecordDO+ReactionMapper.xml(INSERT IGNORE+affectedRows 防重复)+ReactionService(toggle+GREATEST 防负数)+ReactionController；前端详情页加点赞/收藏按钮；测试 3 绿+浏览器实测；3 commit",
+        "files": ["backend/src/main/resources/db/migration/V007__create_reaction_and_collection.sql", "backend/src/main/java/com/agentlog/forum/application/ReactionService.java", "backend/src/main/resources/mapper/forum/ReactionMapper.xml", "web/src/pages/PostDetailPage.vue"],
+        "evidence": "L653: Write V007__create_reaction_and_collection.sql；L695: 防重复(唯一键挡住,只一行)"
+      },
+      {
+        "what": "L10 主页与作者头像组：selectFeed/PostFeedRow 补 owner_user_id，FeedService 重写批量填充 authors（兑现 L07 骨架）；identity 模块加 AgentAccountDO/Mapper+AgentService(创建/墓碑删除)+UserProfileView+OwnerAgentController/PublicProfileController；前端 AuthorAvatarStack.vue+ProfilePage.vue+路由 /users/:id /agents/:id；commit 30cdeb1 等 3 个",
+        "files": ["backend/src/main/java/com/agentlog/forum/application/FeedService.java", "backend/src/main/java/com/agentlog/identity/application/AgentService.java", "backend/src/main/java/com/agentlog/identity/api/OwnerAgentController.java", "web/src/components/AuthorAvatarStack.vue", "web/src/pages/ProfilePage.vue"],
+        "evidence": "L823: Write FeedService.java（重写填 authors）；L867: 墓碑删除+新同名新id 测试绿"
+      },
+      {
+        "what": "L11 媒体上传：media 模块开张——MediaProperties/S3Configurations(S3Presigner+pathStyle)+MediaObjectDO/Mapper+MediaService(预签名 PUT 直传→finalize HEAD 校验 PENDING→ACTIVE→GET 302 读跳转)+Owner/PublicMediaController；Testcontainers MinIO 测试 2 绿；前端 MediaUploader.vue 三步状态机+MediaDemoPage(/media-demo)；真 MinIO 浏览器实测；commit f5f5f8f 等 3 个",
+        "files": ["backend/src/main/java/com/agentlog/media/application/MediaService.java", "backend/src/main/java/com/agentlog/media/infrastructure/S3Configurations.java", "backend/src/test/java/com/agentlog/media/MediaUploadIntegrationTest.java", "web/src/components/MediaUploader.vue", "web/src/pages/MediaDemoPage.vue"],
+        "evidence": "L1104: Write media/application/MediaService.java；L1205: MinIO 里有对象 med_f179…70B"
+      },
+      {
+        "what": "L12 CLI 设备配对（OAuth Device Flow）：V008 三表(client_installation/device_pairing_request/owner_access_session)+shared TokenProperties/TokenService(HMAC-SHA256+pepper，库只存 digest)+PairingService+CliPairingController(匿名)/WebPairingController+安全配置放行 /cli/device-pairings/**+CSRF 豁免；CLI 模块诞生(picocli：AgentLogCli/AuthCommand login·status/ApiClient/CredentialStore)；前端 DevicePairingPage(/cli-pair)；真 CLI 轮询+浏览器批准全链路实测；commit 8e60160 等 4 个",
+        "files": ["backend/src/main/resources/db/migration/V008__create_device_pairing.sql", "backend/src/main/java/com/agentlog/shared/security/TokenService.java", "backend/src/main/java/com/agentlog/identity/application/PairingService.java", "cli/src/main/java/com/agentlog/cli/AgentLogCli.java", "cli/src/main/java/com/agentlog/cli/AuthCommand.java", "web/src/pages/DevicePairingPage.vue"],
+        "evidence": "L1287: Write V008__create_device_pairing.sql；L1474: CLI 轮询到 APPROVED…凭据已保存"
+      },
+      {
+        "what": "L13 双轨 token 认证：OwnerOpaqueTokenAuthenticationFilter+多 SecurityFilterChain 改造（ModularityTest 抓到 shared→identity 违规后，把 CLI 链下沉为 identity 内 CliSecurityConfiguration，shared 只留 web 链）；V009 agent_acting_session+ActingSessionService(assume 行级授权/refresh 轮换)+CliActingController；CLI 加 AgentCommand(assume)；TokenAuthIntegrationTest 4 绿+CLI 端到端；commit f55aca9 等 3 个",
+        "files": ["backend/src/main/java/com/agentlog/identity/infrastructure/security/OwnerOpaqueTokenAuthenticationFilter.java", "backend/src/main/java/com/agentlog/identity/infrastructure/security/CliSecurityConfiguration.java", "backend/src/main/java/com/agentlog/shared/security/ApiSecurityConfiguration.java", "backend/src/main/resources/db/migration/V009__create_agent_acting_session.sql", "backend/src/main/java/com/agentlog/identity/application/ActingSessionService.java", "cli/src/main/java/com/agentlog/cli/AgentCommand.java"],
+        "evidence": "L1599: 模块边界测试正确地抓到了违规：shared 不该依赖 identity 内部类"
+      },
+      {
+        "what": "L14 单机娘 Skill 投稿：Chain 3（AgentSecurityConfiguration @Order(0) /api/v1/agent/**）+AgentOpaqueTokenAuthenticationFilter+shared AgentPrincipal/CurrentAgent；ContentService.appendAgentContribution+AgentContributionController(POST /agent/contributions，机娘只能进草稿无 publish)；CLI SubmitCommand+skill/agentlog/SKILL.md；测试 2 绿+CLI assume→submit 端到端(草稿#8)；commit ac3adde 等 3 个",
+        "files": ["backend/src/main/java/com/agentlog/identity/infrastructure/security/AgentOpaqueTokenAuthenticationFilter.java", "backend/src/main/java/com/agentlog/shared/security/CurrentAgent.java", "backend/src/main/java/com/agentlog/content/api/AgentContributionController.java", "cli/src/main/java/com/agentlog/cli/SubmitCommand.java", "skill/agentlog/SKILL.md"],
+        "evidence": "L1831: submit→已投稿到主人草稿#8…机娘无发布权限"
+      },
+      {
+        "what": "L15 ACPP 核心三表：V010(collaboration_session/contribution_ticket/handoff_token)+HandoffTokenMapper.xml 原子消费(条件 UPDATE)+CollaborationService(start/claimHandoff)+AgentCollaborationController；并发双抢集成测试暴露真实 MySQL 死锁→按锁顺序重构（先抢令牌再建 ticket 再回填）；另修共享容器测试隔离问题；全量 36 绿；commit 9f437bb+docs",
+        "files": ["backend/src/main/resources/db/migration/V010__create_collaboration.sql", "backend/src/main/java/com/agentlog/collaboration/application/CollaborationService.java", "backend/src/main/resources/mapper/collaboration/HandoffTokenMapper.xml", "backend/src/test/java/com/agentlog/collaboration/CollaborationIntegrationTest.java", "magic-memory/decisions/L15-acpp-handoff-deadlock.md"],
+        "evidence": "L1962: 并发测试暴露了一个真实的死锁(Deadlock found)…先 INSERT 后 UPDATE 反了"
+      },
+      {
+        "what": "L16 Wait/Attempt/Lease（本会话完成代码与测试，收尾未闭环）：V011(contribution_attempt+idempotency_record)+V012(session 补 title/channel_id 修硬编码)+首个正式跨模块门面 ContentFacade/ContentFacadeCommands(content 根包)+ContentService 实现+TicketService(状态轮询/claimLease TX-04/submit TX-05 幂等)+AgentTicketController；测试 3 绿并修复第二次死锁（同「先抢后建」模式）；全量回归与 commit 因 429 中断留给下一会话",
+        "files": ["backend/src/main/resources/db/migration/V011__create_attempt_and_idempotency.sql", "backend/src/main/resources/db/migration/V012__add_session_title_channel.sql", "backend/src/main/java/com/agentlog/content/ContentFacade.java", "backend/src/main/java/com/agentlog/collaboration/application/TicketService.java", "backend/src/main/java/com/agentlog/collaboration/api/AgentTicketController.java"],
+        "evidence": "L2109: Write content/ContentFacade.java 模块间协作入口；L2205: API Error 429"
+      }
+    ],
+    "decisions": [
+      "用户拍板（开场 L4）：AI 到期前夜从 L07 起全部改动放新 git 分支、记忆分开存成新模块，今晚一路跑到最后一课，日后逐步解封还原「道」",
+      "用户拍板（L68 前对齐）：三决策——记忆落仓库+本机双轨、深度优先逐课闭环、授权今晚全自动施工（AI 写完核心代码不留 TODO）",
+      "AI 自主决断（授权范围内）：Feed 归 forum 模块（CQRS 读写分离，selectFeed 直出 forum DTO 不过 content）——L07 最大架构决策",
+      "AI 自主决断：迁移按课程节奏拆分导致编号与设计文档蓝图偏移（V006 只建 comment、设计 V007 设备配对落地为 V008），并记录在案",
+      "AI 自主决断：L11 封面图完整发帖闭环延后（避免改已封板 L06 content 模块），先以 MediaDemoPage 验证直传链路",
+      "AI 自主决断：L14 定位为「单机娘直投前哨」——OpenAPI 无独立 L14 端点（/agent/** 全是 ACPP），自设 POST /agent/contributions",
+      "AI 自主决断：跨模块协作走 content 根包 ContentFacade（Spring Modulith 规范：根包 public 类可跨模块访问）"
+    ],
+    "twists": [
+      "会话稳定性事故：此前两次会话莫名断开；本会话中段起工具调用格式损坏（『count <invoke』碎片混入正文），用户 05:09 重启后台并告诫「请正常使用工具」（L912）",
+      "L07 浏览器实测揪出 URL 参数重复 bug（生成 API 参数+手拼 query 双份）当场修复；tsc 误编译的 vite.config.js 复活（L04 删过）再次删除",
+      "L10 机娘主页 bug：/users/1↔/agents/1 切换不刷新（Vue Router 组件复用坑），改 computed+watch 修复；全量回归揪出 L07 过时断言（authors 应空）——行为变更后更新断言",
+      "L13 结构性返工：token filter chain 初版放 shared 被 ModularityTest 判违规，重构下沉到 identity 模块（『filter chain 跟着依赖走』教训）；期间误写 _placeholder.java 占位文件即删",
+      "L15 并发双抢测试暴露真实 MySQL 死锁（先 INSERT ticket 后 UPDATE token 交叉持锁），重构锁顺序修复；随后又修共享 Testcontainers 的测试数据隔离误报；L16 claimLease 再现同源死锁，同模式修复——沉淀为 ACPP 并发命门",
+      "尾声连续 429 Service Unavailable：L16 全量回归跑到一半会话中断，用户「继续」也被 429 拒绝，L16 commit 与 L17 由后续会话接力（file2 开场确认 L07-L17 已全完成）"
+    ]
+  },
+  {
+    "file": "c38f848a-87a3-4648-81f3-5bb27e11a16f.jsonl",
+    "date": "2026-06-19",
+    "lesson": "多课（L18→L24，UTC 06-18 12:28 至 16:41，本地跨入 06-19 凌晨）",
+    "headline": "长跑接力会话：新化身按 magic-memory 解封流程重建上下文、用户拍板继续「全自动施工到最后一课」，连推 L18 Retry/Terminate（ACPP 收尾）→L19 草稿编辑→L20 发布审稿双视图→L21 标签搜索→L22 关注通知→L23 热门精华→L24 公开治理；测试 41→66 绿、迁移推到 V017，L24 浏览器验收通过后全量回归与 commit 再次被 429 打断（L25 未启动）",
+    "changes": [
+      {
+        "what": "L18 Retry 与 Terminate（ACPP 四课收尾·主人处置权）：扩三个 Mapper+XML（唤醒后继/解冻尾令牌/作废 ACTIVE attempt 的条件 UPDATE 链）+CollaborationView/RetryTicketResponse DTO+OwnerCollaborationService（顺带补齐 L17 遗留未实现的主人协作时间线端点 GET /owner/collaboration-sessions/{postTicket}）+OwnerCollaborationController+新错误码；前端 OwnerCollaborationPage.vue(/owner/collaborations/:postTicket)；4 测新绿（41→45）；真造超时场景浏览器实测 retry（原机娘恢复+错误历史保留+尾令牌解冻）与 terminate（confirm 弹窗+全部作废）；feat(l18)/docs(l18) 两 commit",
+        "files": ["backend/src/main/java/com/agentlog/collaboration/application/OwnerCollaborationService.java", "backend/src/main/java/com/agentlog/collaboration/api/OwnerCollaborationController.java", "backend/src/main/resources/mapper/collaboration/ContributionTicketMapper.xml", "backend/src/main/resources/mapper/collaboration/HandoffTokenMapper.xml", "web/src/pages/OwnerCollaborationPage.vue", "backend/src/magic-L18/01-Retry与Terminate.md"],
+        "evidence": "L125: L17 留的 owner 协作时间线端点尚未实现…这是 retry 的前提；L354: 重试成功：会话「进行中」"
+      },
+      {
+        "what": "L19 草稿编辑与 Revision 清理：V014__create_draft_revision.sql（快照+hash 去重+pinned 保留，表结构按 TX-07 语义自设）；ContentService.saveDraft（PUT 全量保存：expectedVersion 乐观锁+改块/调序/隐藏+revision hash 去重）+OwnerDraftController 端点+DraftRevisionCleanupService/Worker（有限保留）；前端 DraftEditor.vue(/owner/drafts/:id/edit)；5 测新绿（45→50）；浏览器实测调序/隐藏/乐观锁/重复保存去重；两 commit",
+        "files": ["backend/src/main/resources/db/migration/V014__create_draft_revision.sql", "backend/src/main/java/com/agentlog/content/application/ContentService.java", "backend/src/main/java/com/agentlog/content/application/DraftRevisionCleanupService.java", "backend/src/main/java/com/agentlog/content/application/DraftRevisionCleanupWorker.java", "backend/src/main/java/com/agentlog/content/api/dto/request/SaveDraftRequest.java", "web/src/pages/DraftEditor.vue"],
+        "evidence": "L537: Write V014__create_draft_revision.sql 有限保留快照(TX-07)；L688: 重复保存 revision 仍 1 条"
+      },
+      {
+        "what": "L20 发布版本、主人审稿与双视图（三道门第二门强化）：重写 ContentService.publish（状态校验+content_origin 自动判定 AI_ASSISTED+补上 L06 遗漏的 author 字段复制到 post_version_block+publishMode 治理 READY_FOR_OWNER_REVIEW/PENDING）+PublishDraftRequest 加 declaredExternalAiContent；content 内建 AuthorNameRow/ContentAuthorLookupMapper 只读投影查作者名+ContributionView DTO+getContributionView+PublicPostController 端点；前端 ContributionView.vue 贡献视图页+PostDetailPage AI 标识与入口；5 测新绿（50→55）；浏览器实测「AI 参与创作」标识+分块署名（Queen·codex）；两 commit（无新迁移）",
+        "files": ["backend/src/main/java/com/agentlog/content/application/ContentService.java", "backend/src/main/java/com/agentlog/content/api/dto/response/ContributionView.java", "backend/src/main/resources/mapper/content/ContentAuthorLookupMapper.xml", "backend/src/main/java/com/agentlog/content/api/PublicPostController.java", "web/src/pages/ContributionView.vue", "web/src/pages/PostDetailPage.vue"],
+        "evidence": "L756: 当前 publish 没复制这些字段!；L894: 第二块「Queen · codex」(机娘+工具署名)"
+      },
+      {
+        "what": "L21 标签与搜索：V015__create_tag.sql（tag+post_tag，标签归 forum）；TagDO/PostTagDO/双 Mapper+XML；FeedQuery 扩 keyword/tagId+PostFeedMapper.xml 加 LIKE 搜索与 tag join+PostCardView.tags 改强类型 List<TagView>+FeedService 批量填充标签（N+1 防范第三次复用）+FeedController 参数；TagService/TagController(公开标签云+主人打标签)；前端 SearchPage.vue(/search)+PostCard 标签渲染；4 测新绿（55→59）；浏览器实测关键词+标签筛选；两 commit（feat 漏 PostFeedMapper.xml 后 --amend 补上）",
+        "files": ["backend/src/main/resources/db/migration/V015__create_tag.sql", "backend/src/main/java/com/agentlog/forum/api/TagController.java", "backend/src/main/java/com/agentlog/forum/application/TagService.java", "backend/src/main/resources/mapper/forum/PostFeedMapper.xml", "web/src/pages/SearchPage.vue", "web/src/components/PostCard.vue"],
+        "evidence": "L992: Write V015__create_tag.sql；L1177: feat commit 漏了 PostFeedMapper.xml…疏忽了"
+      },
+      {
+        "what": "L22 关注流与通知中心：V016__create_follow_and_notification.sql；notification 模块开张——FollowRelationDO/NotificationDO+Mapper/XML+NotificationFacade/NotificationCommands(根包门面)+NotificationService/FollowService+FollowController/NotificationController；触发点接线：CommentService 发评论后通知帖主（JdbcTemplate 只读查 post 表零跨模块）+ExpiredAttemptService 超时通知机娘主人；前端 NotificationPage.vue(/notifications)；ModularityTest 验证 forum/collaboration→notification 经 Facade 合规；4 测新绿（59→63）；浏览器实测评论通知+全部已读；两 commit",
+        "files": ["backend/src/main/resources/db/migration/V016__create_follow_and_notification.sql", "backend/src/main/java/com/agentlog/notification/NotificationFacade.java", "backend/src/main/java/com/agentlog/notification/application/NotificationService.java", "backend/src/main/java/com/agentlog/forum/application/CommentService.java", "backend/src/main/java/com/agentlog/collaboration/application/ExpiredAttemptService.java", "web/src/pages/NotificationPage.vue"],
+        "evidence": "L1237: Write NotificationFacade.java 根包门面；L1379: 通知中心渲染完美：「1 条未读」"
+      },
+      {
+        "what": "L23 热门榜与精华（无新迁移）：HotScoreService（加权互动+时间衰减的 SQL 批量重算，Reddit/HN 式公式自设）+EssenceService+HotScoreRecomputeWorker(@Profile(\"!test\"))+PostManageController（主人设精华）；前端零新增（L07 既有 最新/热门/精华 tab 由此真正生效）；修复 BadSqlGrammar（无参 update 带 ? 占位符）；3 测新绿+重跑全量 66 绿；浏览器实测热门排序（500 赞帖登顶）；两 commit",
+        "files": ["backend/src/main/java/com/agentlog/forum/application/HotScoreService.java", "backend/src/main/java/com/agentlog/forum/application/EssenceService.java", "backend/src/main/java/com/agentlog/forum/application/HotScoreRecomputeWorker.java", "backend/src/main/java/com/agentlog/forum/api/PostManageController.java"],
+        "evidence": "L1491: bad SQL grammar——update 无参版但 SQL 含 ? 占位符；L1528: Hot Post(500赞,精华)排第一"
+      },
+      {
+        "what": "L24 公开治理（三道门第三门，代码+验收完成、commit 未落）：V017__create_governance.sql（user_account 加 role 列+content_report+moderation_action）；UserAccount DO 加 role+AppUserDetailsService 授 ROLE_ADMIN+ApiSecurityConfiguration /admin/** 需 ADMIN；ContentFacade 扩 applyModeration（治理写操作经门面改 post/post_version）；moderation 模块开张——DO/Mapper+ModerationService+AdminModerationController(APPROVE/REJECT/HIDE/RESTORE)+ReportController(举报)；前端 ModerationPage.vue(/admin/moderation)；ModerationIntegrationTest 5 绿+浏览器实测 admin APPROVE 使 PENDING 帖公开；全量回归被 429 打断、commit 未在本会话完成",
+        "files": ["backend/src/main/resources/db/migration/V017__create_governance.sql", "backend/src/main/java/com/agentlog/identity/infrastructure/persistence/dataobject/UserAccount.java", "backend/src/main/java/com/agentlog/identity/application/AppUserDetailsService.java", "backend/src/main/java/com/agentlog/shared/security/ApiSecurityConfiguration.java", "backend/src/main/java/com/agentlog/moderation/application/ModerationService.java", "backend/src/main/java/com/agentlog/moderation/api/AdminModerationController.java", "web/src/pages/ModerationPage.vue"],
+        "evidence": "L1636: Write V017__create_governance.sql；L1787: APPROVE 后帖子公开(200)；L1796: API Error 429"
+      }
+    ],
+    "decisions": [
+      "用户拍板（L43，AskUserQuestion）：L18 起继续「全自动施工」模式（备选导师模式被弃）",
+      "用户拍板（L454）：「全自动到最后一课吧」——重申长跑缘由原文，授权一路推到 L25",
+      "AI 自主决断：L18 terminate 无 OpenAPI 定义→自设 DELETE 风格端点；retry=原机娘恢复+保留错误历史；顺带补实现 L17 遗留的 owner 时间线端点",
+      "AI 自主决断：L19 draft_revision 设计文档只给概念→自设表结构（全量 JSON 快照+hash 去重+pinned 保留）；迁移编号顺延 V014（蓝图 V012）",
+      "AI 自主决断：L20/L22 跨模块读作者/帖主用「本模块只读投影物理表」手法（沿用 L10 先例）避免跨模块依赖；写操作一律走根包 Facade（ContentFacade.applyModeration、NotificationFacade）",
+      "AI 自主决断：L21 OpenAPI Feed 未定义 search/tag 参数→最小侵入扩展现有 /public/posts 端点；标签建模归 forum 与分区正交",
+      "AI 自主决断：L23 hot_score 不在 publish 时计算（避免 content→forum 反向依赖），由 Worker+互动触发；L24 管理员用 user_account.role 列最小侵入实现"
+    ],
+    "twists": [
+      "L18 开工前踩点发现 L17 欠账：owner 协作时间线端点未实现、前端无任何 owner 页——retry 的前提，本课先补齐再做主线",
+      "造测试数据反复踩 Windows bash/curl 中文编码坑（register 400「Failed to read request」），改纯 ASCII 才通；期间还误判过 cookie/CSRF 问题",
+      "L21 提交事故：feat commit 漏掉核心 PostFeedMapper.xml，git commit --amend 补救；docs commit 首次因 pathspec 语法失败重来——此后改为先 add 再 commit",
+      "L23 全量回归偶发 3 errors（WebAuthIntegrationTest 因多 @SpringBootTest 并发 context 竞争载入失败），单独跑全绿+重跑全量 66 绿确认非代码问题",
+      "L23 HotScoreService 首跑 BadSqlGrammar（jdbcTemplate.update 无参版遇 ? 占位符）当场修复",
+      "尾声重演 429：L24 全量回归中断、后台回归任务 exit 1（task-notification），用户 16:38「继续」仍 429——L24 的 commit 与最后一课 L25 留给下一会话（会话在 00:41 本地时间戛然而止）"
+    ]
+  }
+]

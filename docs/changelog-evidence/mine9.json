@@ -1,0 +1,142 @@
+[
+  {
+    "file": "a101c66a-f5b1-4c35-9e85-d6dbfd98c5f5.jsonl",
+    "date": "2026-06-27~2026-07-06",
+    "lesson": "多课",
+    "headline": "马拉松主会话：L08评论施工含B站模型返工→点评GLM/V4/Codex三继承人并揪出V008回归→L10浏览器验收结课→L11媒体预签名上传整课施工(代码+讲义+视频v1/v2+深讲义+Postman，全程未git commit留工作区)→末尾揪出username/display_name设计病灶，拍板L11.5邮箱登录插入课",
+    "changes": [
+      {
+        "what": "L08 评论后端 v1（我写你审）：V006建表+DO/Row/Mapper/XML+3个DTO+CommentService(禁三级三重防线/软删/comment_count)+CommentController+错误码+集成测试，17测全绿",
+        "files": [
+          "backend/src/main/resources/db/migration/V006__create_comment.sql",
+          "backend/src/main/java/com/agentlog/forum/infrastructure/persistence/dataobject/CommentDO.java",
+          "backend/src/main/java/com/agentlog/forum/infrastructure/persistence/dataobject/CommentRow.java",
+          "backend/src/main/java/com/agentlog/forum/infrastructure/persistence/mapper/CommentMapper.java",
+          "backend/src/main/resources/mapper/forum/CommentMapper.xml",
+          "backend/src/main/java/com/agentlog/forum/api/dto/request/CreateCommentRequest.java",
+          "backend/src/main/java/com/agentlog/forum/api/dto/response/CommentView.java",
+          "backend/src/main/java/com/agentlog/forum/api/dto/response/CommentPage.java",
+          "backend/src/main/java/com/agentlog/forum/application/CommentService.java",
+          "backend/src/main/java/com/agentlog/forum/api/CommentController.java",
+          "backend/src/main/java/com/agentlog/shared/error/ApiStatus.java",
+          "backend/src/test/java/com/agentlog/forum/CommentIntegrationTest.java",
+          "backend/src/test/java/com/agentlog/FlywayMigrationTest.java"
+        ],
+        "evidence": "L117: Write V006__create_comment.sql -- L08 评论二级回复。归 forum 模块"
+      },
+      {
+        "what": "B站模型返工（06-28）：重写V006补root_comment_id列，『禁三级拒绝』改为『回复任何评论都扁平化到同楼depth=2』，删2个永不触发错误码，测试改为replyingToReplyFlattensToSameFloor，外键4→5",
+        "files": [
+          "backend/src/main/resources/db/migration/V006__create_comment.sql",
+          "backend/src/main/java/com/agentlog/forum/infrastructure/persistence/dataobject/CommentDO.java",
+          "backend/src/main/java/com/agentlog/forum/infrastructure/persistence/dataobject/CommentRow.java",
+          "backend/src/main/java/com/agentlog/forum/application/CommentService.java",
+          "backend/src/main/resources/mapper/forum/CommentMapper.xml",
+          "backend/src/main/java/com/agentlog/forum/api/dto/response/CommentView.java",
+          "backend/src/main/java/com/agentlog/shared/error/ApiStatus.java",
+          "backend/src/main/java/com/agentlog/forum/api/dto/request/CreateCommentRequest.java",
+          "backend/src/test/java/com/agentlog/FlywayMigrationTest.java",
+          "backend/src/test/java/com/agentlog/forum/CommentIntegrationTest.java"
+        ],
+        "evidence": "L285: Write V006 -- L08 评论：B站式\"逻辑无限回复 + 物理永远两层\""
+      },
+      {
+        "what": "清空重建被旧L25分支污染(V017账本)的开发库：停8080后端→drop+create→Flyway干净跑到新V006",
+        "files": [],
+        "evidence": "L381: Flyway账本干净停在V006，comment表是新B站结构"
+      },
+      {
+        "what": "magic-L08 讲义（对话版，含B站纠偏故事+脏库陷阱两个面试素材）",
+        "files": ["backend/src/magic-L08/00-L08讲义.md"],
+        "evidence": "L382: Write 00-L08讲义.md # L08 评论·二级回复 · 讲义（对话版）"
+      },
+      {
+        "what": "L10 结课验收（无代码改动）：接续Codex会话核实L10前后端已提交完整，浏览器实测4卡片头像组渲染真实作者、Feed单请求验证N+1防范，全量26测绿，判定可结课",
+        "files": [],
+        "evidence": "L582: 浏览器验收成功！Feed页4张卡片每张渲染出真实作者头像组"
+      },
+      {
+        "what": "L11 媒体预签名上传整课施工（我写你审，参考赶工版重新落地）：media模块13文件(配置/S3对接/DO/Mapper/3 DTO/Service三步逻辑/双Controller)+媒体错误码+MinIO Testcontainers端到端测试；curl真实链路(登录→建槽→直传→finalize→302)验收全过，全量29测绿",
+        "files": [
+          "backend/src/main/java/com/agentlog/media/infrastructure/MediaProperties.java",
+          "backend/src/main/java/com/agentlog/media/infrastructure/S3Configurations.java",
+          "backend/src/main/java/com/agentlog/media/infrastructure/persistence/dataobject/MediaObjectDO.java",
+          "backend/src/main/java/com/agentlog/media/infrastructure/persistence/mapper/MediaObjectMapper.java",
+          "backend/src/main/java/com/agentlog/media/api/dto/CreateUploadSlotRequest.java",
+          "backend/src/main/java/com/agentlog/media/api/dto/UploadSlotResponse.java",
+          "backend/src/main/java/com/agentlog/media/api/dto/MediaView.java",
+          "backend/src/main/java/com/agentlog/media/application/MediaService.java",
+          "backend/src/main/java/com/agentlog/media/api/OwnerMediaController.java",
+          "backend/src/main/java/com/agentlog/media/api/PublicMediaController.java",
+          "backend/src/main/java/com/agentlog/shared/error/ApiStatus.java",
+          "backend/src/test/java/com/agentlog/media/MediaUploadIntegrationTest.java"
+        ],
+        "evidence": "L698: Write MediaService.java package com.agentlog.media.application"
+      },
+      {
+        "what": "修复 FeedService 被外部误触改坏的 colect 拼写错误（卡住整个编译，先后修复两次）",
+        "files": ["backend/src/main/java/com/agentlog/forum/application/FeedService.java"],
+        "evidence": "L729: Edit FeedService .filter(Objects::nonNull).collect(Collectors.toSet())"
+      },
+      {
+        "what": "L11 讲义 + 视频式HTML讲解 v1/v2（中文语音朗读+代码行高亮联动；v2四栏：IDEA式结构树/代码/流程图/详解，浏览器实测可用）",
+        "files": [
+          "backend/src/magic-L11/00-L11讲义.md",
+          "backend/src/magic-L11/01-L11视频讲解.html",
+          "backend/src/magic-L11/02-L11视频讲解v2.html"
+        ],
+        "evidence": "L780: Write 01-L11视频讲解.html <!DOCTYPE html>"
+      },
+      {
+        "what": "L10/L11 深讲义（背景注解版，回应用户『讲浅了、经不起面试拷打』反馈）+ L11 Postman 集合（含免CSRF直传MinIO与302不跟随处理）",
+        "files": [
+          "backend/src/magic-L10/02-L10深讲义.md",
+          "backend/src/magic-L11/03-L11深讲义.md",
+          "backend/src/magic-L11/AgentLog-L11.postman_collection.json"
+        ],
+        "evidence": "L902: Write 02-L10深讲义.md # L10 作者头像组 · 深讲义(背景注解版)"
+      }
+    ],
+    "decisions": [
+      "用户拍板：L08 走『套路速过·我写你审』节奏（L67-L69）",
+      "用户纠偏拍板：评论必须是B站式『逻辑无限回复、物理永远两层』，推翻初版禁三级拒绝实现（L244）",
+      "用户拍板：停后端+清空重建被污染的开发库（L275 前后）",
+      "用户指示：子代理连环429就改用 claude 终端实例当子代理（L952）",
+      "用户拍板L11.5起源（L1034，07-06复述L1066）：①A方案邮箱登录+唯一username(废display_name)；②验证码+Redis做插入课；③与L10-L11头像上传→展示修复一起施工；④视频修v3并评估Motion Canvas"
+    ],
+    "twists": [
+      "返工：初版评论把『回复回复』误判为三级拒绝、漏掉root_comment_id支柱，用户以B站体验点破后整链重写",
+      "陷阱：开发库被旧全自动分支迁移污染到V017，新V006跑不进去，清库重建解决",
+      "返工：FeedService遭外部误触出现colect拼写错误两次卡编译两次修复",
+      "发现V008演示种子撞WebAuth集成测试(201→409回归)，后由Codex commit 2947b8d隔离demo_前缀修复（非本会话改动）",
+      "两次自我误判并公开收回：以为L10未施工完/讲义未展开，核实git后确认已提交完整",
+      "子代理与深写工作流连环429（6 agent全军覆没）改亲自完成；claude -p嵌套实验输出被双重nohup吞掉后从会话文件捞回成果"
+    ]
+  },
+  {
+    "file": "1178a98a-4722-414c-89ef-7be6df4d3635.jsonl",
+    "date": "2026-07-05~2026-07-07",
+    "lesson": "无",
+    "headline": "a101c66a 历史的续档分叉副本（07-05 17:38本地创建，uuid整体重生成；L5-L981与17b2fa7d完全一致，全部实际变更已计入a101c66a）——新增尾部46行仅为恢复尝试：重发『子代理429改claude终端』指示后停滞，07-07凌晨/model切换+『go』撞503(claude-fable-5无可用账号)终结，零项目变更",
+    "changes": [],
+    "decisions": [
+      "用户重申（分叉后重发）：子代理429就改用启动claude code终端执行、由主代理指挥（L982）"
+    ],
+    "twists": [
+      "续档后未能推进任何施工：07-07 03:51本地『尝试工具调用读取文件』→/model切换→『go』→API 503 claude-fable-5不可用，会话终结（L1020）"
+    ]
+  },
+  {
+    "file": "17b2fa7d-97a9-4e29-a552-3c8b6d8b72f9.jsonl",
+    "date": "2026-07-05~2026-07-07",
+    "lesson": "无",
+    "headline": "同一历史的另一续档分叉（07-05 17:35本地创建，早1178a98a三分钟；前981行与其完全一致，实际变更均已计入a101c66a）——新增尾部36行同样零项目变更：同句『子代理429改claude终端』指示、07-07 04:02『尝试工具调用读取文件』后04:03被用户手动中断",
+    "changes": [],
+    "decisions": [
+      "用户重申（分叉后重发）：子代理429就改用启动claude code终端执行、由主代理指挥（L982）"
+    ],
+    "twists": [
+      "恢复尝试再次搁浅：07-07 04:02本地『尝试工具调用读取文件』后04:03[Request interrupted by user]手动中断，工作未推进（L1014）"
+    ]
+  }
+]

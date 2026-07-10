@@ -1,0 +1,281 @@
+[
+  {
+    "file": "4bdb3b49-bc3f-46e5-8cf9-6e101d7d8ea9.jsonl",
+    "date": "2026-06-27",
+    "lesson": "L08",
+    "headline": "L08 评论二级回复全程（06-27~29）：后端评论 CRUD 落地→用户纠偏推翻初版、重做B站扁平两层模型→清脏库→讲义/Postman→前端 CommentSection + 浏览器实测闭环",
+    "changes": [
+      {
+        "what": "V006 评论建表迁移（初版：parent/reply_to 双字段、depth CHECK、软删 status）",
+        "files": [
+          "backend/src/main/resources/db/migration/V006__create_comment.sql"
+        ],
+        "evidence": "L128: -- L08 评论二级回复。归 forum 模块（社区互动读写模型）"
+      },
+      {
+        "what": "评论持久层三件套：CommentDO/CommentRow + CommentMapper（BaseMapper 混合自定义 JOIN 平铺查，防 N+1）+ XML",
+        "files": [
+          "backend/src/main/java/com/agentlog/forum/infrastructure/persistence/dataobject/CommentDO.java",
+          "backend/src/main/java/com/agentlog/forum/infrastructure/persistence/dataobject/CommentRow.java",
+          "backend/src/main/java/com/agentlog/forum/infrastructure/persistence/mapper/CommentMapper.java",
+          "backend/src/main/resources/mapper/forum/CommentMapper.xml"
+        ],
+        "evidence": "L142: Write CommentMapper.java（BaseMapper+自定义平铺查）"
+      },
+      {
+        "what": "评论 DTO：CreateCommentRequest / CommentView（超集契约补结构字段）/ CommentPage",
+        "files": [
+          "backend/src/main/java/com/agentlog/forum/api/dto/request/CreateCommentRequest.java",
+          "backend/src/main/java/com/agentlog/forum/api/dto/response/CommentView.java",
+          "backend/src/main/java/com/agentlog/forum/api/dto/response/CommentPage.java"
+        ],
+        "evidence": "L161: Write CommentView.java（契约最小集+树结构字段）"
+      },
+      {
+        "what": "bumpCommentCount 自维护 post.comment_count：forum 用自己的 SQL 直写物理表、零 import content，过 ArchUnit 边界；顺手删掉多余的 updated_at 自赋值",
+        "files": [
+          "backend/src/main/java/com/agentlog/forum/infrastructure/persistence/mapper/CommentMapper.java",
+          "backend/src/main/resources/mapper/forum/CommentMapper.xml"
+        ],
+        "evidence": "L179: UPDATE post SET comment_count（bumpCommentCount）"
+      },
+      {
+        "what": "ApiStatus 扩评论错误码；CommentService 初版（禁三级三重防线+软删保楼层）；CommentController（/public 匿名读 + /web 登录写，方法级全路径跨两前缀）",
+        "files": [
+          "backend/src/main/java/com/agentlog/shared/error/ApiStatus.java",
+          "backend/src/main/java/com/agentlog/forum/application/CommentService.java",
+          "backend/src/main/java/com/agentlog/forum/api/CommentController.java"
+        ],
+        "evidence": "L189: Write CommentService.java（禁三级三重防线）"
+      },
+      {
+        "what": "forum 模块首个集成测试 CommentIntegrationTest（JdbcTemplate 直插 PUBLISHED 帖当夹具，5 用例）+ FlywayMigrationTest 补 V006 验证；修夹具唯一键冲突后 17 测全绿",
+        "files": [
+          "backend/src/test/java/com/agentlog/forum/CommentIntegrationTest.java",
+          "backend/src/test/java/com/agentlog/FlywayMigrationTest.java"
+        ],
+        "evidence": "L244: @SpringBootTest 默认不回滚（夹具改唯一后缀修复）"
+      },
+      {
+        "what": "【返工】B站模型重做：V006 重写补回 root_comment_id（楼）、depth 语义改 1/2，CommentService.create 改「扁平化永不拒绝」，XML 排序改按 root_comment_id，删 DEPTH_EXCEEDED/PARENT_MISMATCH 两错误码，测试改「回复二级→扁平同楼」用例",
+        "files": [
+          "backend/src/main/resources/db/migration/V006__create_comment.sql",
+          "backend/src/main/java/com/agentlog/forum/infrastructure/persistence/dataobject/CommentDO.java",
+          "backend/src/main/java/com/agentlog/forum/infrastructure/persistence/dataobject/CommentRow.java",
+          "backend/src/main/java/com/agentlog/forum/application/CommentService.java",
+          "backend/src/main/resources/mapper/forum/CommentMapper.xml",
+          "backend/src/main/java/com/agentlog/forum/api/dto/response/CommentView.java",
+          "backend/src/main/java/com/agentlog/shared/error/ApiStatus.java",
+          "backend/src/main/java/com/agentlog/forum/api/dto/request/CreateCommentRequest.java",
+          "backend/src/test/java/com/agentlog/FlywayMigrationTest.java",
+          "backend/src/test/java/com/agentlog/forum/CommentIntegrationTest.java"
+        ],
+        "evidence": "L300: B站式\"逻辑无限回复+物理永远两层\"…灵魂是 root_comment_id"
+      },
+      {
+        "what": "清脏库：停后端→drop+create agentlog 库→重启，Flyway 从 V001 干净跑到新 V006（旧库曾被 L07-onward 分支污染到 V017）",
+        "files": [],
+        "evidence": "L381: Flyway 账本干净停在 V006（不再是污染的 V017）"
+      },
+      {
+        "what": "magic-L08 讲义（对话版单文件，含B站模型纠偏故事+脏库陷阱两个面试素材）",
+        "files": [
+          "backend/src/magic-L08/00-L08讲义.md"
+        ],
+        "evidence": "L397: # L08 评论·二级回复 · 讲义（对话版）"
+      },
+      {
+        "what": "L08 Postman 集合落盘（Write 报错但盘上留存旧会话版本，审后沿用），并经真后端跑通：回复二级评论 201、depth=2 扁平化成立；重造前置数据 alice+postId=1",
+        "files": [
+          "backend/src/magic-L08/AgentLog-L08.postman_collection.json"
+        ],
+        "evidence": "L457: 评论#3 回复二级→201, depth仍=2, root仍=1（扁平化）"
+      },
+      {
+        "what": "OpenAPI 契约补全：CommentView 增 rootCommentId/parentCommentId/replyToCommentId/depth/status 五字段、加 CommentId 参数与 DELETE /web/comments/{commentId} 端点（后端已有软删但契约漏了）；npm run api:generate 重新生成前端 SDK",
+        "files": [
+          "docs/api/agentlog-openapi.yaml",
+          "web/src/generated/api/"
+        ],
+        "evidence": "L534: 契约里没有 DELETE 评论端点…后端写了软删但契约漏了"
+      },
+      {
+        "what": "前端评论区组件 CommentSection.vue（前端按 root 组两层树、回复@谁、软删占位、401 引导登录）并嵌入 PostDetailPage",
+        "files": [
+          "web/src/components/CommentSection.vue",
+          "web/src/pages/PostDetailPage.vue"
+        ],
+        "evidence": "L526: L08 评论区组件…核心是【B站两层组树】"
+      },
+      {
+        "what": "新建 .claude/launch.json（web-dev preview 启动配置，npm --prefix web）",
+        "files": [
+          ".claude/launch.json"
+        ],
+        "evidence": "L564: Write .claude/launch.json（web-dev 配置）"
+      },
+      {
+        "what": "浏览器端到端实测通过：两层树渲染、回复回复扁平化、软删占位保楼层、发评论闭环（7→8 楼）",
+        "files": [],
+        "evidence": "L742: floorCount 7→8，newCommentRendered: true 闭环验证成功"
+      }
+    ],
+    "decisions": [
+      "用户拍板：L08 节奏选「套路速过·我写你审」——AI 全自动写完，用户审代码 + 费曼法考 3 个设计点",
+      "用户拍板：评论必须是B站式「逻辑无限回复、物理永远两层」，推翻初版「回复回复即拒绝」实现",
+      "用户拍板：脏库处理选「停后端 + 清空重建当前库 + 重启」",
+      "用户拍板：讲义按既定对话版风格写单文件，聚焦面试重点与技术核心",
+      "用户拍板：给 Postman 集合自测，AI 接前端评论区组件并浏览器实测「回复回复」链"
+    ],
+    "twists": [
+      "返工：初版把「回复回复」误判三级并拒绝（COMMENT_PARENT_MISMATCH），漏了 root_comment_id 支柱；用户一问揪出真 bug，整套重写为B站扁平化模型",
+      "弯路：开发库是脏库——被旧全自动分支迁移到 V017、残留旧版 comment 表，用户的怀疑全中，drop+create 重建解决",
+      "弯路：集成测试首跑 5 errors——@SpringBootTest 不回滚致夹具唯一键冲突，改唯一后缀修复",
+      "弯路：Postman 集合 Write 报错却落盘了旧会话版本；且清库后集合假设的 alice/postId=1 不存在，需重造前置数据（其间 curl 传 JSON 两次因 shell 转义 400，改 --data @file）",
+      "弯路：浏览器实测两度被环境卡住——Docker Desktop 挂掉致后端 500 等用户手启；后端刚起 DispatcherServlet 未就绪瞬时 500 + 组件 onMounted 不重发请求需硬刷新",
+      "多次 429/五小时限额中断，跨 06-27~29 三天分段推进"
+    ]
+  },
+  {
+    "file": "5e5d99ad-1223-4e98-91da-332dad5373eb.jsonl",
+    "date": "2026-06-29",
+    "lesson": "L09",
+    "headline": "4bdb3b49 的续档分叉（前段 L08 历史重复）：分两笔提交 L08 后开 L09 点赞/收藏——V007+统一 toggle 后端+24 测全绿+详情页点赞收藏按钮+浏览器实测点赞，止于 429 限额",
+    "changes": [
+      {
+        "what": ".gitignore 追加忽略 .claude/ 与 .playwright-mcp/ 会话产物",
+        "files": [
+          ".gitignore"
+        ],
+        "evidence": "L680: .gitignore 没忽略 .claude/ 和 .playwright-mcp/…加进去"
+      },
+      {
+        "what": "L08 成果分两笔入库：feat(l08) 评论二级回复（后端+前端+契约+生成代码+测试）与 docs(l08) 讲义/Postman，遵守「每课闭环单课 commit」规矩",
+        "files": [],
+        "evidence": "L688: git commit -m \"feat(l08): 评论二级回复（B站扁平两层…）\""
+      },
+      {
+        "what": "V007 建 reaction（多态 targetType POST/COMMENT）与 collection_record 两表，唯一键防重复赞/藏",
+        "files": [
+          "backend/src/main/resources/db/migration/V007__create_reaction_and_collection.sql"
+        ],
+        "evidence": "L722: -- L09 点赞与收藏…两项互动共用同一个【toggle 模式】"
+      },
+      {
+        "what": "ReactionDO/CollectionRecordDO + ReactionMapper/CollectionRecordMapper + 两 XML：INSERT IGNORE 幂等加、GREATEST 防负的计数 bump",
+        "files": [
+          "backend/src/main/java/com/agentlog/forum/infrastructure/persistence/dataobject/ReactionDO.java",
+          "backend/src/main/java/com/agentlog/forum/infrastructure/persistence/dataobject/CollectionRecordDO.java",
+          "backend/src/main/java/com/agentlog/forum/infrastructure/persistence/mapper/ReactionMapper.java",
+          "backend/src/main/java/com/agentlog/forum/infrastructure/persistence/mapper/CollectionRecordMapper.java",
+          "backend/src/main/resources/mapper/forum/ReactionMapper.xml",
+          "backend/src/main/resources/mapper/forum/CollectionRecordMapper.xml"
+        ],
+        "evidence": "L744: insertIgnore 用 INSERT IGNORE + 计数 bump 用 GREATEST"
+      },
+      {
+        "what": "ApiStatus 扩 L09 错误码；ReactionService 统一 toggle 模式（affectedRows 判加/删；点赞多态 POST/COMMENT + 收藏单帖），初版拧巴的目标校验自查后简化",
+        "files": [
+          "backend/src/main/java/com/agentlog/shared/error/ApiStatus.java",
+          "backend/src/main/java/com/agentlog/forum/application/ReactionService.java"
+        ],
+        "evidence": "L758: Write ReactionService.java（toggle 点赞+收藏同构）"
+      },
+      {
+        "what": "DTO ToggleReactionRequest/ToggleCollectionRequest/ToggleStateResponse + ReactionController 两个 /web toggle 端点（契约早已定义，前端 SDK 无需重生成）",
+        "files": [
+          "backend/src/main/java/com/agentlog/forum/api/dto/request/ToggleReactionRequest.java",
+          "backend/src/main/java/com/agentlog/forum/api/dto/request/ToggleCollectionRequest.java",
+          "backend/src/main/java/com/agentlog/forum/api/dto/response/ToggleStateResponse.java",
+          "backend/src/main/java/com/agentlog/forum/api/ReactionController.java"
+        ],
+        "evidence": "L797: Write ReactionController.java（两个 POST toggle 端点）"
+      },
+      {
+        "what": "ReactionIntegrationTest 6 用例（toggle 加/删、GREATEST 防负、多态评论赞、404、401）+ FlywayMigrationTest 补 V007 验证；全量 24 测全绿含 ModularityTest",
+        "files": [
+          "backend/src/test/java/com/agentlog/forum/ReactionIntegrationTest.java",
+          "backend/src/test/java/com/agentlog/FlywayMigrationTest.java"
+        ],
+        "evidence": "L836: 全量 24 测全绿（L08 的 17 → +Reaction 6 + Flyway+1）"
+      },
+      {
+        "what": "PostDetailPage 文章操作区从纯显示改为可点击点赞/收藏按钮：调 toggle 接口刷新本地 metrics，未登录提示去登录；type-check 0 错",
+        "files": [
+          "web/src/pages/PostDetailPage.vue"
+        ],
+        "evidence": "L858: Edit PostDetailPage.vue 加 toggle 逻辑"
+      },
+      {
+        "what": "浏览器实测点赞 toggle：0→1、按钮高亮红心（取消赞验证被 429 打断，本会话止步于此）",
+        "files": [],
+        "evidence": "L902: 点赞 toggle 成功! ♥ 1 | active=true"
+      }
+    ],
+    "decisions": [
+      "用户重启 Claude Code 后续档继续；按「每课闭环=单课 commit」规矩先提交 L08（feat+docs 分两笔）再开 L09",
+      "L09 沿用「套路速过·我写你审」节奏，AI 全自动写 reaction/collection + 测试 + 前端"
+    ],
+    "twists": [
+      "会话本身是 4bdb3b49 的续档分叉，前约 560 行与其重复（同一段 L08 历史，两文件时间戳一致）",
+      "ReactionService 目标存在性校验初版拧巴（bump(0) 探针+旁证双保险），AI 自查后简化为单探针",
+      "GREATEST 防负测试用例两次重写才把验证场景理顺（初版测试逻辑自相打架）",
+      "三次 429 五小时限额中断，用户换供应商续跑，本会话最终止于中断后的「继续吧」（后续在其他会话）"
+    ]
+  },
+  {
+    "file": "caabb0b6-e024-4b75-919a-a4d89cb4b239.jsonl",
+    "date": "2026-06-19",
+    "lesson": "无",
+    "headline": "无项目变更：确认 ACPP 命名（Agent Contribution Pipeline Protocol，主票+分票+HandoffToken）+ 读「后端岗.pdf」简历开场模拟面试（2.5MB 全是 PDF 附件，仅 57 行）",
+    "changes": [],
+    "decisions": [
+      "用户拍板：模拟面试两个项目都问（论坛在前）+ 标准面一问一答、每题即时点评"
+    ],
+    "twists": [
+      "此前三次同源会话（245aa7fe/2f1d69f4/8be1820d）均因 429/502 中断，第四次才开场"
+    ]
+  },
+  {
+    "file": "245aa7fe-414a-42cf-a349-66055bf3a7e1.jsonl",
+    "date": "2026-06-19",
+    "lesson": "无",
+    "headline": "无项目变更：同源会话（06-18 ACPP 命名问答）第一次发起模拟面试即遇 429 Service Unavailable 中断",
+    "changes": [],
+    "decisions": [],
+    "twists": [
+      "L23: API Error 429 · Service Unavailable——模拟面试未能开场"
+    ]
+  },
+  {
+    "file": "2f1d69f4-3be1-4e1d-95d4-7da8c1e1aeb9.jsonl",
+    "date": "2026-06-19",
+    "lesson": "无",
+    "headline": "无项目变更：同源会话重试，模拟面试请求遇 502 upstream_error 中断",
+    "changes": [],
+    "decisions": [],
+    "twists": [
+      "L21: API Error 502 upstream_error——重试仍未开场"
+    ]
+  },
+  {
+    "file": "8be1820d-823f-4646-b92f-b8eca4567113.jsonl",
+    "date": "2026-06-19",
+    "lesson": "无",
+    "headline": "无项目变更：同源会话再次重试，模拟面试请求再遇 502 中断（第三次失败，此后 caabb0b6 成功开场）",
+    "changes": [],
+    "decisions": [],
+    "twists": [
+      "L21: API Error 502 upstream_error——三连败于供应商网关"
+    ]
+  },
+  {
+    "file": "de4abff0-c0ab-4187-9aa6-53e719c83b18.jsonl",
+    "date": "2026-06-27",
+    "lesson": "无",
+    "headline": "与 AgentLog 无关：springBootDemo 项目 MyBatis Mapper XML 问答（CategoryMapper 为何用 <if> 动态控制 FROM 表名），纯讲解无改动",
+    "changes": [],
+    "decisions": [],
+    "twists": []
+  }
+]

@@ -1,0 +1,258 @@
+[
+ {
+  "file": "429dd796-5e3c-4f66-a7d1-faa2c7245ec5.jsonl",
+  "date": "2026-06-18",
+  "lesson": "多课(L07-L17)",
+  "headline": "AI 到期前全自动通宵长跑：从 L06 末（b992303）切出 lessons/L07-onward 分支，连推 L07-L17 共 11 课（Feed/评论/点赞收藏/主页/媒体/CLI配对/双轨token/单机娘投稿/ACPP排队/领棒/自愈），全量 41 测全绿，并建立 magic-memory 跨-AI 记忆载体与三处记忆同步",
+  "changes": [
+   {
+    "what": "建分界分支 lessons/L07-onward + 仓库内跨-AI 记忆载体 magic-memory/（README 解封入口 + INDEX + 继承上下文快照）",
+    "files": [
+     "magic-memory/README.md",
+     "magic-memory/INDEX.md",
+     "magic-memory/knowledge/00-inherited-context.md"
+    ],
+    "evidence": "L67: git checkout -b lessons/L07-onward；L74: WRITE magic-memory/README.md 跨 AI 记忆载体"
+   },
+   {
+    "what": "L07 后端：forum 模块开张——7 个 DTO（PostCardView/PostPage/FeedQuery 等）+ PostFeedMapper(+XML) + FeedService（批量查 channel 防 N+1）+ FeedController；FeedIntegrationTest 3 绿；test profile 临时开 SQL 日志实证一次 Feed 恒 3 条 SQL",
+    "files": [
+     "backend/src/main/java/com/agentlog/forum/api/FeedController.java",
+     "backend/src/main/java/com/agentlog/forum/application/FeedService.java",
+     "backend/src/main/resources/mapper/forum/PostFeedMapper.xml",
+     "backend/src/test/java/com/agentlog/forum/FeedIntegrationTest.java"
+    ],
+    "evidence": "L162: WRITE PostFeedMapper.xml 本课的硬核产物；L249: Feed 请求恰好 3 条 SQL"
+   },
+   {
+    "what": "L07 前端：PostCard.vue + FeedPage.vue + 路由 /feed 设为首页（原 HomePage 挪 /welcome）；浏览器实测后修掉 page/size 参数重复 bug；删除 stale 的 vite.config.js（tsc 误编译产物）",
+    "files": [
+     "web/src/components/PostCard.vue",
+     "web/src/pages/FeedPage.vue",
+     "web/src/router/index.ts"
+    ],
+    "evidence": "L322: EDIT FeedPage.vue 修参数重复 page=0&size=20&page=0&size=20；L356: 删 stale vite.config.js"
+   },
+   {
+    "what": "L08 评论：V006__create_comment.sql（偏离蓝图五表合建、只建 comment 表并加 depth 列+CHECK）；CommentDO/Mapper + AuthorLookupMapper（批量查作者防 N+1）+ CommentService（禁三级/软删除）+ CommentController/PublicCommentController + ApiStatus 评论错误码；CommentIntegrationTest 3 绿",
+    "files": [
+     "backend/src/main/resources/db/migration/V006__create_comment.sql",
+     "backend/src/main/java/com/agentlog/forum/application/CommentService.java",
+     "backend/src/main/java/com/agentlog/forum/infrastructure/persistence/mapper/AuthorLookupMapper.java"
+    ],
+    "evidence": "L428: WRITE V006__create_comment.sql 设计文档五表合建改只建 comment；L492: 3 测全绿 禁三级 400"
+   },
+   {
+    "what": "L08 前端：CommentThread.vue（扁平列表按 root 组两级）+ 新建 PostDetailPage.vue 承载评论 + 路由；浏览器实测一级/二级/禁三级/软删保楼层全过",
+    "files": [
+     "web/src/components/CommentThread.vue",
+     "web/src/pages/PostDetailPage.vue"
+    ],
+    "evidence": "L500: WRITE CommentThread.vue；L594: 软删除验收 楼层结构没塌"
+   },
+   {
+    "what": "L09 点赞收藏：V007__create_reaction_and_collection.sql；ReactionDO/CollectionRecordDO + ReactionMapper(INSERT IGNORE+affectedRows toggle) + ReactionService + ReactionController；ReactionIntegrationTest 3 绿；PostDetailPage 加点赞/收藏按钮",
+    "files": [
+     "backend/src/main/resources/db/migration/V007__create_reaction_and_collection.sql",
+     "backend/src/main/java/com/agentlog/forum/application/ReactionService.java",
+     "web/src/pages/PostDetailPage.vue"
+    ],
+    "evidence": "L639: WRITE V007 reaction+collection_record；L681: 防重复 唯一键挡住只一行"
+   },
+   {
+    "what": "L10 主页与头像组：PostFeedMapper.xml 加 owner_user_id、FeedService 重写批量填 authors（兑现 L07 骨架）；identity 增 AgentAccountDO/AgentService（墓碑删除）/OwnerAgentController/PublicProfileController/UserProfileView（OpenAPI 无公开主页端点，自设计）；AgentAndProfileIntegrationTest 3 绿",
+    "files": [
+     "backend/src/main/java/com/agentlog/forum/application/FeedService.java",
+     "backend/src/main/java/com/agentlog/identity/application/AgentService.java",
+     "backend/src/main/java/com/agentlog/identity/api/PublicProfileController.java"
+    ],
+    "evidence": "L790: OpenAPI 没有 public 主页端点 契约空白自主设计；L851: 墓碑删除+新同名新id 绿"
+   },
+   {
+    "what": "L10 前端：AuthorAvatarStack.vue + PostCard 接入 + ProfilePage.vue（/users/:id 与 /agents/:id 共用）+ 路由",
+    "files": [
+     "web/src/components/AuthorAvatarStack.vue",
+     "web/src/pages/ProfilePage.vue",
+     "web/src/router/index.ts"
+    ],
+    "evidence": "L852: WRITE AuthorAvatarStack.vue 作者头像组"
+   },
+   {
+    "what": "L11 媒体：起 MinIO 容器建桶 agentlog-private；MediaProperties/S3Configurations（pathStyle+endpointOverride）+ MediaService（presigned PUT→finalize HEAD 校验 PENDING→ACTIVE→GET 302 重定向）+ OwnerMediaController/PublicMediaController；MediaUploadIntegrationTest（Testcontainers MinIO）2 绿；前端 MediaUploader.vue 三步状态机 + MediaDemoPage.vue，浏览器真实上传验证",
+    "files": [
+     "backend/src/main/java/com/agentlog/media/application/MediaService.java",
+     "backend/src/main/java/com/agentlog/media/infrastructure/S3Configurations.java",
+     "web/src/components/MediaUploader.vue",
+     "web/src/pages/MediaDemoPage.vue"
+    ],
+    "evidence": "L1062: WRITE MediaService.java；L1147: 浏览器直传跑通 med_f179f5c5 预览图 302 渲染"
+   },
+   {
+    "what": "L12 CLI 设备配对（OAuth Device Flow）：V008__create_device_pairing.sql（三表）；shared TokenProperties/TokenService（HMAC-SHA256+pepper，库只存 digest）；PairingService + CliPairingController（匿名）/WebPairingController；SecurityConfig 放行 /cli/device-pairings + CSRF 豁免；CLI 模块开张（AgentLogCli/AuthCommand/ApiClient/CredentialStore）；前端 DevicePairingPage.vue；真 CLI 轮询+浏览器批准端到端打通",
+    "files": [
+     "backend/src/main/resources/db/migration/V008__create_device_pairing.sql",
+     "backend/src/main/java/com/agentlog/shared/security/TokenService.java",
+     "backend/src/main/java/com/agentlog/identity/application/PairingService.java",
+     "cli/src/main/java/com/agentlog/cli/AuthCommand.java",
+     "web/src/pages/DevicePairingPage.vue"
+    ],
+    "evidence": "L1384: CLI 轮询到 APPROVED 凭据保存 日志无 token 明文"
+   },
+   {
+    "what": "L13 双轨 token：OwnerOpaqueTokenAuthenticationFilter + 多 SecurityFilterChain（shared 保 Session 链，cli 链移入 identity 的 CliSecurityConfiguration）；V009 agent_acting_session；ActingSessionService（assume 行级授权+refresh 轮换）+ CliActingController；CLI agent assume 命令；TokenAuthIntegrationTest 4 绿",
+    "files": [
+     "backend/src/main/java/com/agentlog/identity/infrastructure/security/OwnerOpaqueTokenAuthenticationFilter.java",
+     "backend/src/main/java/com/agentlog/identity/infrastructure/security/CliSecurityConfiguration.java",
+     "backend/src/main/java/com/agentlog/identity/application/ActingSessionService.java",
+     "cli/src/main/java/com/agentlog/cli/AgentCommand.java"
+    ],
+    "evidence": "L1503: 把 token chain 移到 identity 后模块边界恢复合规"
+   },
+   {
+    "what": "L14 单机娘投稿：AgentOpaqueTokenAuthenticationFilter + AgentPrincipal/CurrentAgent（shared）+ Chain3(@Order(0) /agent/**)；ContentService.appendAgentContribution + AgentContributionController（机娘无 publish 权限）；CLI SubmitCommand + skill/agentlog/SKILL.md；2 测绿 + CLI 端到端投稿进草稿 #8",
+    "files": [
+     "backend/src/main/java/com/agentlog/identity/infrastructure/security/AgentOpaqueTokenAuthenticationFilter.java",
+     "backend/src/main/java/com/agentlog/content/api/AgentContributionController.java",
+     "cli/src/main/java/com/agentlog/cli/SubmitCommand.java",
+     "skill/agentlog/SKILL.md"
+    ],
+    "evidence": "L1695: submit 已投稿到主人草稿 #8 authorType=AGENT"
+   },
+   {
+    "what": "L15 ACPP 排队：V010__create_collaboration.sql（session/ticket/handoff_token 三表）；collaboration 模块开张（3 DO+3 Mapper+CollaborationService+AgentCollaborationController）；HandoffToken 条件 UPDATE 原子消费（TX-03）；并发双抢测试暴露真实 MySQL 死锁并修复",
+    "files": [
+     "backend/src/main/resources/db/migration/V010__create_collaboration.sql",
+     "backend/src/main/java/com/agentlog/collaboration/application/CollaborationService.java",
+     "backend/src/main/resources/mapper/collaboration/HandoffTokenMapper.xml"
+    ],
+    "evidence": "L1806: 并发测试暴露真实死锁 Deadlock found；L1835: 修复后 success=1 conflict=1"
+   },
+   {
+    "what": "L16 领棒写入：V011（attempt+idempotency 两表）+V012（session 补 title/channel_id 列）；第一个正式跨模块 Facade——content 根包 ContentFacade + ContentService 实现 appendCollaborationContribution；TicketService（claimLease TX-04 条件 UPDATE / submit TX-05+幂等键）+ AgentTicketController；3 测绿（后序等待/双领一成功/submit 幂等）",
+    "files": [
+     "backend/src/main/java/com/agentlog/content/ContentFacade.java",
+     "backend/src/main/java/com/agentlog/collaboration/application/TicketService.java",
+     "backend/src/main/resources/db/migration/V011__create_attempt_and_idempotency.sql",
+     "backend/src/main/resources/db/migration/V012__add_session_title_channel.sql"
+    ],
+    "evidence": "L1931: WRITE ContentFacade.java Modulith 模块间协作入口；L2036: 三测全绿 submit 幂等"
+   },
+   {
+    "what": "L17 ACPP 自愈：起 Redis 容器；V013（audit_record+error_report）；ContributionAttemptMapper 加 FOR UPDATE SKIP LOCKED 扫描；ExpiredAttemptService（TX-06 超时回收：FAILED_TIMEOUT/后序 BLOCKED/令牌 FROZEN/ErrorReport）+ ExpiredAttemptWorker(@Scheduled, @Profile(\"!test\"))+SchedulingConfiguration；2 测绿",
+    "files": [
+     "backend/src/main/resources/db/migration/V013__create_audit_and_error.sql",
+     "backend/src/main/java/com/agentlog/collaboration/application/ExpiredAttemptService.java",
+     "backend/src/main/java/com/agentlog/collaboration/application/ExpiredAttemptWorker.java"
+    ],
+    "evidence": "L2137: WRITE ContributionAttemptMapper.xml SKIP LOCKED；L2205: 超时回收+回收幂等 两测全绿"
+   },
+   {
+    "what": "每课收尾三件套：CHANGELOG 累计补 L07-L17 条目（发现 L06 条目缺失仅点明不越界）；magic-memory progress/L07-L17 + decisions 8 份（CQRS/评论模型/墓碑/预签名/DeviceFlow/双轨token/死锁/SKIP LOCKED）+ INDEX 滚动更新；本机 .claude 双轨记忆镜像；每课按 feat 后端/feat 前端或CLI/docs 分 commit（共 20+ commit）",
+    "files": [
+     "CHANGELOG.md",
+     "magic-memory/progress/",
+     "magic-memory/decisions/",
+     "backend/src/magic-L07/",
+     "backend/src/magic-L14/",
+     "backend/src/magic-L15/",
+     "backend/src/magic-L16/",
+     "backend/src/magic-L17/"
+    ],
+    "evidence": "L362: CHANGELOG 最新还停在 L05 缺 L06；L398/L401/L404: L07 分 3 个 commit"
+   }
+  ],
+  "decisions": [
+   "用户拍板：AI 快到期，走前全自动开路到最后一课——L07 起滑条分界新分支、记忆分开存、日后逐步解封（L4）",
+   "用户拍板（出发前三决策）：记忆落仓库+本机双轨 / 深度优先逐课闭环 / 授权今晚全自动施工（L64）",
+   "授权内 AI 自决：Feed 归 forum 模块（CQRS 读写分离，forum 用自己的 Mapper 读 post 表零依赖 content）（L132）",
+   "授权内 AI 自决：迁移按课拆分致编号偏移——设计文档 V006 五表合建拆为 V006 comment/V007 reaction/V008 配对/V009-V013 顺延（L1195）",
+   "授权内 AI 自决：L11 不动已封板 content 模块，封面图完整闭环推迟，只交付独立 MediaUploader+演示页（L1095）",
+   "授权内 AI 自决：L14 单机娘投稿不提前建 ACPP 表，走简化单棒端点 /agent/contributions（L1599）",
+   "用户建议采纳：上下文 800k 时开新会话而非压缩，靠 magic-memory 无损重启（L2263-L2265）"
+  ],
+  "twists": [
+   "返工：会话多次莫名断开且工具调用格式错乱（误输出 count <invoke），用户提醒后纠正，期间任务列表两次被清空（L896/L2010/L2082）",
+   "返工：L13 token filter chain 放 shared 依赖 identity 内部类，ModularityTest 抓违规，重构为 identity 内 CliSecurityConfiguration（L1493）",
+   "返工：L15 claimHandoff 先插 ticket 再 UPDATE 令牌引发真实 MySQL 死锁，改为先抢令牌再建 ticket 回填（L1806-L1830）",
+   "返工：测试隔离两次踩坑——L15 seq2Count、L17 error_report 全局 COUNT 被共享 Testcontainers 污染，改按 session/agent 隔离断言（L1845/L2178）",
+   "返工：L10 ProfilePage 在 /users/1↔/agents/1 间切换组件被复用 onMounted 不重触发，改 computed+watch（L927-L931）",
+   "返工：L10 填充 authors 后全量回归揪出 L07 FeedIntegrationTest 过时断言（authors 应为空）需同步更新（L962-L966）",
+   "返工：CommentService 误 import content 的 PostDO 险些破坏模块边界，删除未用 import（L1462）；L13 误写 _placeholder.java 占位文件后删除（L1470）；L12 CHANGELOG 编辑不慎产生重复标题 L13 修掉（L1545）"
+  ]
+ },
+ {
+  "file": "f0deebdf-2fee-4dda-bb54-5575d8ae9fca.jsonl",
+  "date": "2026-06-21",
+  "lesson": "L07",
+  "headline": "项目全景探查（61 commits/L00-L25 全完结盘点）+ L07 解封接手启动：git checkout 回退到 L06 完成点 b992303 并创建 L07-restart 学习分支，读 L07 课程卡开启导师模式教学（无代码文件改动）",
+  "changes": [
+   {
+    "what": "仓库状态变更：从 lessons/L07-onward（已到 L25）回退检出 L06 末提交 b992303，并切出新学习分支 L07-restart——此后追赶式重走课程的分界点",
+    "files": [
+     "(git 分支操作，无文件改动)"
+    ],
+    "evidence": "L149: git checkout b992303；L157: git switch -c L07-restart"
+   },
+   {
+    "what": "纯探查产出：全景报告（后端 application/ 3214 行、迁移 V005、forum 仅空骨架等）与 L06 交付物确认（post 表卡片缓存列+Feed 索引/forum_channel/PublicPostController），为 L07 教学铺垫",
+    "files": [],
+    "evidence": "L122: AgentLog 项目全景探查报告 61 commits L00-L25 全部完结"
+   }
+  ],
+  "decisions": [
+   "用户拍板：看记忆做 L07 解封接手，回退到 L07 起点、以导师模式追赶 lessons/L07-onward 分支已完成的工作（L125）"
+  ],
+  "twists": [
+   "弯路：会话初始工作目录在外层父目录 C:\\Ep\\Code\\Java\\AgentLog，真正仓库在 AgentLog_start/ 子目录，先纠偏再探查（L25）"
+  ]
+ },
+ {
+  "file": "4dee50ff-ca0b-469c-800f-a5cd222fc0ff.jsonl",
+  "date": "2026-06-08",
+  "lesson": "无",
+  "headline": "纯答疑未遂：06-05 与 06-08 多次问「能读取到Desktop的对话记录吗？」，均被 API 429/503 Service Unavailable 打断，对项目零变更",
+  "changes": [],
+  "decisions": [],
+  "twists": [
+   "API 反复不可用：429/503 错误贯穿全程，问题始终未得到回答（L15/L30/L54）"
+  ]
+ },
+ {
+  "file": "6e410321-4e79-45f2-a640-107ce9646e92.jsonl",
+  "date": "2026-06-23",
+  "lesson": "无",
+  "headline": "空会话：仅调起 /deep-research skill（共 9 行，无 args 细节、无任何助手响应即中止），对项目零变更",
+  "changes": [],
+  "decisions": [],
+  "twists": []
+ },
+ {
+  "file": "af3c3dee-ef3d-449d-91da-8700fd1045cd.jsonl",
+  "date": "2026-06-23",
+  "lesson": "无",
+  "headline": "纯答疑未遂：06-13 与 06-23 六次问「请问你的上下文多少？」，遭遇 502 all models failed 与模型不可用（glm-5.2[1m]）错误，对项目零变更",
+  "changes": [],
+  "decisions": [],
+  "twists": [
+   "环境故障：推理网关 127.0.0.1:3456 全模型失败 + 所选模型 glm-5.2[1m] 不可用被提示 /model 换型（L42/L55）"
+  ]
+ },
+ {
+  "file": "c9ebc852-1396-42eb-9faa-51d249475bcd.jsonl",
+  "date": "2026-06-23",
+  "lesson": "无",
+  "headline": "空会话：仅一条 /clear 本地命令（2.2KB 全是元数据行），对项目零变更",
+  "changes": [],
+  "decisions": [],
+  "twists": []
+ },
+ {
+  "file": "63dd6e4d-34dd-44bb-bc4c-036ca56e8694.jsonl",
+  "date": "2026-06-08",
+  "lesson": "无",
+  "headline": "空会话（C--Ep-Code-Java 项目目录）：仅两次 /resume 尝试且均返回「No conversations found to resume」，对项目零变更",
+  "changes": [],
+  "decisions": [],
+  "twists": []
+ }
+]

@@ -1,0 +1,170 @@
+[
+ {
+  "file": "270c63e9-5a0c-4ec1-9904-ac3601be6a83.jsonl",
+  "date": "2026-07-03",
+  "lesson": "多课",
+  "headline": "原导师回归会话（原生消息跨 06-28→07-04，主体在 07-03）：点评三位继承人(GLM5.2/DeepSeekV4/Codex)的 L08-L10 产出并揪出 V008 种子回归，补做 L10 结课验收，随后整套施工 L11 媒体预签名上传（media 模块 10 文件 + MinIO 端到端测试 + 讲义 + 视频式 HTML 讲解），代码留待主人审、未提交",
+  "changes": [
+   {
+    "what": "[审查发现·非本会话编辑] 06-30 夜审查继承人工作，发现 V008__seed_demo_content.sql 种子插入 alice/bob 与 WebAuthIntegrationTest 自注册撞唯一键，导致 2 个认证测试 409 回归；07-03 验证 Codex 的修复 commit 2947b8d（demo_ 前缀隔离）后全量 26 测复绿",
+    "files": ["backend/src/main/resources/db/migration/V008__seed_demo_content.sql", "backend/src/test/java/com/agentlog/identity/WebAuthIntegrationTest.java"],
+    "evidence": "L465: V008 种子迁移插入 alice/bob…测试注册时撞唯一键→409 而非预期 201"
+   },
+   {
+    "what": "[验收·无代码变更] 接续 Codex 的 L10 线：确认 L10 已提交（1e88cfa 批量补齐作者头像组），补做 Codex 因环境阻塞没做成的结课验收——Feed 接口返回 4 帖真实作者(Alice/Carol/Bob)、浏览器头像组渲染、N+1 运行时证据（单请求出全部卡片），判定 L10 可结课；此弧段后被回卷，仅存本文件",
+    "files": [],
+    "evidence": "L651: 后端真实数据验收通过…authors 全部有真实作者，不再是 List.of()"
+   },
+   {
+    "what": "L11 媒体预签名上传：media 模块整套后端 10 文件（MediaProperties/S3Configurations/MediaObjectDO/MediaObjectMapper/CreateUploadSlotRequest/UploadSlotResponse/MediaView/MediaService/OwnerMediaController/PublicMediaController），建槽→前端直传 MinIO→finalize HEAD 确认→公共 302 读，复用 V002 media_object 表无新迁移；参考赶工版重新落地",
+    "files": ["backend/src/main/java/com/agentlog/media/application/MediaService.java", "backend/src/main/java/com/agentlog/media/api/OwnerMediaController.java", "backend/src/main/java/com/agentlog/media/api/PublicMediaController.java", "backend/src/main/java/com/agentlog/media/infrastructure/MediaProperties.java", "backend/src/main/java/com/agentlog/media/infrastructure/S3Configurations.java", "backend/src/main/java/com/agentlog/media/infrastructure/persistence/dataobject/MediaObjectDO.java", "backend/src/main/java/com/agentlog/media/infrastructure/persistence/mapper/MediaObjectMapper.java", "backend/src/main/java/com/agentlog/media/api/dto/CreateUploadSlotRequest.java", "backend/src/main/java/com/agentlog/media/api/dto/UploadSlotResponse.java", "backend/src/main/java/com/agentlog/media/api/dto/MediaView.java"],
+    "evidence": "L849: [WRITE] MediaService.java…建槽/finalize/公共读三步逻辑"
+   },
+   {
+    "what": "ApiStatus 扩 L11 媒体错误码（两次 Edit：首次撞上 L09 已改内容，重读后再改）",
+    "files": ["backend/src/main/java/com/agentlog/shared/error/ApiStatus.java"],
+    "evidence": "L871: [EDIT] ApiStatus.java…点赞/收藏（L09）段后追加媒体码"
+   },
+   {
+    "what": "MediaUploadIntegrationTest：Testcontainers 真 MinIO+MySQL 端到端 3 测（含独立 HttpClient 直传验证「文件不经后端」），ModularityTest 边界绿；全量 29 测全绿零回归；另做真实环境 curl 五步端到端验收（登录→建槽→直传→finalize→302）",
+    "files": ["backend/src/test/java/com/agentlog/media/MediaUploadIntegrationTest.java"],
+    "evidence": "L925: MediaUploadIntegrationTest 3 测全过…真 MinIO 容器+直传+finalize 确认 ACTIVE"
+   },
+   {
+    "what": "[bug修复] FeedService.java 被外部编辑器/进程误触改出 collect→colect 拼写错卡死整个编译，非本会话引入，定位后修复（Edit 状态失效，Read 重建状态后二次修复成功）",
+    "files": ["backend/src/main/java/com/agentlog/forum/application/FeedService.java"],
+    "evidence": "L891: 唯一 diff 就是 collect→colect 一个字母…卡住整个 build，修掉它"
+   },
+   {
+    "what": "magic-L11 讲义（对话版）+ 视频式单文件 HTML 讲解（中文 TTS 朗读 + 讲到哪段代码自动高亮哪几行），并用浏览器实测高亮/字幕/语音同步可用",
+    "files": ["backend/src/magic-L11/00-L11讲义.md", "backend/src/magic-L11/01-L11视频讲解.html"],
+    "evidence": "L965: [WRITE] 01-L11视频讲解.html…自动播放网课：语音朗读+代码高亮"
+   }
+  ],
+  "decisions": [
+   "用户拍板：接续 Codex 的 L10 施工会话继续工作（给出 codex://threads/019f0269 线程地址）（L472）",
+   "用户拍板：L10 无新接口无需 Postman 验收即开 L11、延续「你写我审」、讲义之外要配「视频式」讲解、子代理撞 429 多重试（L712）",
+   "用户拍板：用子代理研究 Codex 会话还原 L10 进度并验收、判断能否结课（L556）"
+  ],
+  "twists": [
+   "[续档分叉] 846 条消息中 362 条为 06-27~06-28 的 L08 后端祖先段（同现于 10+ 个会话文件，勿重复计）；484 条原生消息中 428 条又被 07-05~07-07 的 bd635eb4/bb067b0a/1178a98a/17b2fa7d 等下游续档整段复制——本会话是这些工作的时间原生载体",
+   "[回卷] 07-03 08:22~09:14 的 L10 结课验收弧段（56 条，L556-L710）被会话回卷，未进入任何续档，仅本文件可考",
+   "误判返工：会话开头基于旧工作区快照判断「L10 卡在半途、V008 未修」，07-03 重查发现 L10 早已提交、V008 已被 Codex 修复，公开收回误判（L519、L549）",
+   "子代理三连 429 限流（研究 Codex 会话/L11 设计均失败），改为自己写有界提取脚本挖 7.4MB Codex 会话（L593、L749、L776）",
+   "curl 验收先撞 404：8080 上跑的是写 L11 代码之前的旧后端进程，杀进程重启后才通过（L936-L937）",
+   "07-04 07:46 提出 username/display_username 双名设计+头像 media_id 链路疑问（L1044），本会话未及回答即续档到 739652af；该疑问是后来 L11.5 身份重构（登录=email、删 display_name）的起点",
+   "[时间线] 06-28 08:44 有 2 条原生消息首次提出「Postman+前端评论区」请求，实际执行发生在 31a59be8 分支（L400）"
+  ]
+ },
+ {
+  "file": "31a59be8-3a4c-457d-bbdf-09625db19382.jsonl",
+  "date": "2026-06-29",
+  "lesson": "多课",
+  "headline": "继承人接力会话（06-28 下午→06-30，经第三方供应商切换多模型运行，用户在 270c63e9 中称其为「glm5.2接手L08验收」）：L08 收尾闭环（Postman 集合+契约补齐+前端评论区+浏览器实测+两次提交）与 L09 点赞/收藏全课（V007+toggle 后端+前端按钮+24 测全绿+提交），外加 L09 讲义自包含重写与面试故事集两轮返工",
+  "changes": [
+   {
+    "what": "L08 Postman 集合落盘审定（发现落盘的是早前会话版本，审阅后复用），并经真实后端造前置数据（注册 alice、SQL 建分区、发布 postId=1）端到端验证 B站扁平化链路：回复二级评论 201 且 depth 仍=2、软删占位保楼",
+    "files": ["backend/src/magic-L08/AgentLog-L08.postman_collection.json"],
+    "evidence": "L457: 真后端验证成功！B站扁平化链路通了…三级被扁平化，没被拒绝"
+   },
+   {
+    "what": "OpenAPI 契约补齐：CommentView 增加组树必需超集字段（rootCommentId/parentCommentId/replyToCommentId/depth/status）、新增 CommentId 参数与 DELETE /web/comments/{commentId} 端点（后端已实现软删但契约漏了），npm run api:generate 重新生成前端 API",
+    "files": ["docs/api/agentlog-openapi.yaml", "web/src/generated/api/"],
+    "evidence": "L522: 契约里没有 DELETE 评论端点…前端组件用了 webApi.deleteComment 会编译错"
+   },
+   {
+    "what": "前端评论区组件 CommentSection.vue（B站两层组树、回复@谁、软删占位、401 引导登录）并嵌入 PostDetailPage；type-check 0 错；浏览器实测 7→8 楼发评论闭环",
+    "files": ["web/src/components/CommentSection.vue", "web/src/pages/PostDetailPage.vue"],
+    "evidence": "L517: [WRITE] CommentSection.vue…核心是【B站两层组树】后端吐扁平 items 前端组楼"
+   },
+   {
+    "what": "新建 .claude/launch.json（web-dev/5173，改用 npm --prefix web 跑）供 Preview 工具起前端",
+    "files": [".claude/launch.json"],
+    "evidence": "L549: [WRITE] launch.json…runtimeArgs [run, dev] port 5173"
+   },
+   {
+    "what": "L08 入库：.gitignore 忽略 .claude/.playwright-mcp 后分两提交 feat(l08)（评论二级回复：B站扁平两层+软删+前端评论区）+ docs(l08)",
+    "files": [".gitignore"],
+    "evidence": "L680: git commit -q -m feat(l08): 评论二级回复（B站扁平两层+软删+前端评论区）"
+   },
+   {
+    "what": "L09 点赞/收藏后端全套：V007 建 reaction（多态 target）/collection_record 表、ReactionDO/CollectionRecordDO、ReactionMapper/CollectionRecordMapper + XML（INSERT IGNORE + GREATEST 防负 bump）、ApiStatus L09 错误码、ReactionService（affectedRows 判加删、bump(0) 探针校验存在性）、Toggle 请求/响应 DTO×3、ReactionController 双端点",
+    "files": ["backend/src/main/resources/db/migration/V007__create_reaction_and_collection.sql", "backend/src/main/java/com/agentlog/forum/application/ReactionService.java", "backend/src/main/java/com/agentlog/forum/api/ReactionController.java", "backend/src/main/java/com/agentlog/forum/infrastructure/persistence/dataobject/ReactionDO.java", "backend/src/main/java/com/agentlog/forum/infrastructure/persistence/dataobject/CollectionRecordDO.java", "backend/src/main/java/com/agentlog/forum/infrastructure/persistence/mapper/ReactionMapper.java", "backend/src/main/java/com/agentlog/forum/infrastructure/persistence/mapper/CollectionRecordMapper.java", "backend/src/main/resources/mapper/forum/ReactionMapper.xml", "backend/src/main/resources/mapper/forum/CollectionRecordMapper.xml", "backend/src/main/java/com/agentlog/shared/error/ApiStatus.java", "backend/src/main/java/com/agentlog/forum/api/dto/request/ToggleReactionRequest.java", "backend/src/main/java/com/agentlog/forum/api/dto/request/ToggleCollectionRequest.java", "backend/src/main/java/com/agentlog/forum/api/dto/response/ToggleStateResponse.java"],
+    "evidence": "L711: [WRITE] V007…toggle 模式：INSERT IGNORE + 多态 target_type 指向 POST/COMMENT"
+   },
+   {
+    "what": "ReactionIntegrationTest 6 测（toggle 加/删、GREATEST 防负、多态评论点赞、404、401，防负测试两轮重写才干净）+ FlywayMigrationTest 加 V007 验证；全量 24 测全绿（17+6+1）",
+    "files": ["backend/src/test/java/com/agentlog/forum/ReactionIntegrationTest.java", "backend/src/test/java/com/agentlog/FlywayMigrationTest.java"],
+    "evidence": "L792: 全量 24 测全绿…ModularityTest 绿（forum 仍零跨模块违规）"
+   },
+   {
+    "what": "PostDetailPage 的 ♡/☆ 纯显示区改为可点击点赞/收藏按钮接 toggle 接口，type-check 0 错，浏览器实测 ♡0→♥1→♡0、☆→★ 三验收点全过；随后 feat(l09)+docs(l09) 提交",
+    "files": ["web/src/pages/PostDetailPage.vue", "backend/src/magic-L09/00-L09讲义.md"],
+    "evidence": "L850: 点赞 toggle 成功！♥1 active=true…数字 0→1 按钮变高亮红心"
+   },
+   {
+    "what": "L09 讲义按用户批评重写为「零背景自包含」版（reaction 表字段、先查后插并发陷阱、INSERT IGNORE、affectedRows 全部展开讲）+ 补 L09 Postman 集合，amend 进 docs(l09)",
+    "files": ["backend/src/magic-L09/00-L09讲义.md", "backend/src/magic-L09/AgentLog-L09.postman_collection.json"],
+    "evidence": "L988: [WRITE] 00-L09讲义.md…本篇讲义假设读者零背景"
+   },
+   {
+    "what": "INTERVIEW-STORIES.md 面试故事集（CQRS/N+1/B站评论模型/评论树软删/Flyway 污染/toggle/模块边界等 8 故事）初版提交，后按用户批评整体重写为自包含+配图+前因后果版并 amend",
+    "files": ["INTERVIEW-STORIES.md"],
+    "evidence": "L1058: [WRITE] INTERVIEW-STORIES.md…每个故事独立自包含…背景→问题→解决→学到"
+   }
+  ],
+  "decisions": [
+   "用户拍板：给 Postman json 自测接口 + 接前端评论区组件 + 浏览器实测真实「回复回复」链（L400/L403）",
+   "用户拍板（讲义标准）：「我写你审」课程的讲义必须零背景自包含，所有概念（表结构/唯一键/INSERT IGNORE/affectedRows）现场展开，且每课必配 Postman 自测集合（L961）",
+   "用户消化确认 toggle 模式两分支理解（insert 用 INSERT IGNORE+affectedRows、update 用 GREATEST 保底 0）并拍板将踩坑沉淀成面试素材（L1033）",
+   "用户拍板（故事标准）：面试故事要像讲义一样自包含、交代前因后果、能配图就配图；一对多例子应为 频道→帖子（post.channel_id 在多端）（L1054/L1072）"
+  ],
+  "twists": [
+   "[续档分叉] 923 条中 362 条为 L08 祖先段（另见 10+ 文件）；561 条原生中前 426 条同现于上游中途快照 4bdb3b49/5e5d99ad（均死于 06-29），06-29 11:02 之后的 ~135 条尾段（讲义重写/面试故事集等）仅存本文件——本文件是该工作流最完整载体",
+   "Postman 集合 Write 报错但落盘的竟是「另一个版本」（更早会话残留），审阅后判定可用，转而为它造前置数据（清库后 alice/postId=1 全没了）而非重写（L419-L432）",
+   "契约漏洞返工：后端已实现评论软删但 OpenAPI 没有 DELETE 端点，前端用 webApi.deleteComment 会编译错→补契约+重生成（L522）",
+   "三次 429 供应商限流中断（L461/L746/L857），用户以「继续」「继续吧，刚才重启换了一下供应商」接力，会话由多个第三方模型（gemini3.5flash/kimi-k2.7 等注记）续跑",
+   "GREATEST 防负测试两轮返工：初版测试逻辑自相打架，删除重写为 reactionCountClampedToZeroNeverNegative（L773-L777）",
+   "面试故事集两轮返工：初版太干+把「帖子↔频道」误列一对一，被用户连纠两次后改为 频道→帖子一对多、帖子↔当前发布版本一对一（L1054/L1072/L1075）"
+  ]
+ },
+ {
+  "file": "739652af-56b5-4d9f-a766-8f70518fdf2b.jsonl",
+  "date": "2026-07-04",
+  "lesson": "无",
+  "headline": "270c63e9 的 compact 续档壳：798 条中 790 条为复制历史（uuid 与 270c63e9 完全重合），原生仅 8 条——用户三次重发「username vs display_username 双名设计 + Feed 头像 media_id 链路」疑问，会话内未见解答、零项目变更（该疑问后来引出 L11.5 身份重构：登录=email、删 display_name）",
+  "changes": [],
+  "decisions": [],
+  "twists": [
+   "[续档分叉] 与 270c63e9 共享 790 条消息（其 L08 祖先段+06-30~07-04 主体），且不含 270c63e9 被回卷的 L10 验收弧段与 07-04 双名疑问原稿——本文件变更全部应记在上游，勿重复计",
+   "同一问题因 429/重启在 08:09~09:01 三连重发（L860/L870/L879）均未获回答，工作后来转入其他会话（07-05 的 bb067b0a/bd635eb4 等）"
+  ]
+ },
+ {
+  "file": "67b39605-e3de-41a5-a4d7-884c1f968d07.jsonl",
+  "date": "2026-07-04",
+  "lesson": "无",
+  "headline": "空壳会话（09:47Z）：仅 /effort 设为 ultracode 的本地命令记录，无对话、无任何项目变更",
+  "changes": [],
+  "decisions": [],
+  "twists": []
+ },
+ {
+  "file": "db02d687-187b-45fb-bc3f-6a03e37717b9.jsonl",
+  "date": "2026-07-04",
+  "lesson": "无",
+  "headline": "空壳会话（~10:32Z）：仅 /effort 设为 ultracode 的本地命令记录，无对话、无任何项目变更",
+  "changes": [],
+  "decisions": [],
+  "twists": []
+ },
+ {
+  "file": "fb208818-1f71-4a2c-8f75-9987674a98fc.jsonl",
+  "date": "2026-07-04",
+  "lesson": "无",
+  "headline": "空壳会话（~09:00Z）：仅 /model 设为 Fable 5（存为默认）+ /effort ultracode 两条本地命令，无对话、无任何项目变更",
+  "changes": [],
+  "decisions": [],
+  "twists": []
+ }
+]

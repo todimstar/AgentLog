@@ -1,0 +1,162 @@
+[
+ {
+  "file": "bd635eb4-dcee-4bf9-a581-de9b9425ef4c.jsonl",
+  "date": "2026-06-27~2026-07-05",
+  "lesson": "多课(L08→L11.5前夜)",
+  "headline": "主线长会话：L08 评论后端施工→用户揪出「回复回复被误拒」返工成 B 站模型+清脏库→点评三位继承人并补齐 L10 验收结课→L11 media 预签名上传模块施工（讲义/深讲义/视频/Postman）→发现 username/display_name 底层设计问题拍板转邮箱登录",
+  "changes": [
+   {
+    "what": "L08 评论后端全套新建：V006 迁移、CommentDO/CommentRow、CommentMapper+XML（含 bumpCommentCount 原子计数）、3 个 DTO、CommentService（软删保楼层）、CommentController（/public 读 /web 写）、ApiStatus 评论错误码",
+    "files": ["backend/src/main/resources/db/migration/V006__create_comment.sql", "backend/src/main/java/com/agentlog/forum/infrastructure/persistence/dataobject/CommentDO.java", "backend/src/main/java/com/agentlog/forum/infrastructure/persistence/dataobject/CommentRow.java", "backend/src/main/java/com/agentlog/forum/infrastructure/persistence/mapper/CommentMapper.java", "backend/src/main/resources/mapper/forum/CommentMapper.xml", "backend/src/main/java/com/agentlog/forum/api/dto/request/CreateCommentRequest.java", "backend/src/main/java/com/agentlog/forum/api/dto/response/CommentView.java", "backend/src/main/java/com/agentlog/forum/api/dto/response/CommentPage.java", "backend/src/main/java/com/agentlog/forum/application/CommentService.java", "backend/src/main/java/com/agentlog/forum/api/CommentController.java", "backend/src/main/java/com/agentlog/shared/error/ApiStatus.java"],
+    "evidence": "L129: Write V006 -- L08 评论二级回复。归 forum 模块"
+   },
+   {
+    "what": "L08 测试：新建 CommentIntegrationTest（6 验收点，JdbcTemplate 直插 PUBLISHED post 当夹具）+ FlywayMigrationTest 补 V006 用例；修夹具随机 slug 解决 @SpringBootTest 不回滚撞唯一键（5 Errors→全绿，全量 17 测绿）",
+    "files": ["backend/src/test/java/com/agentlog/forum/CommentIntegrationTest.java", "backend/src/test/java/com/agentlog/FlywayMigrationTest.java"],
+    "evidence": "L245: @SpringBootTest 默认不回滚事务，多个 @Test 共享同一 Testcontainers 库"
+   },
+   {
+    "what": "B 站模型返工：V006 重写补回 root_comment_id（楼），depth 语义改 1/2；CommentService.create 改「扁平化永不拒绝」；XML 排序改按 root_comment_id 聚楼；CommentView/Row 加 rootCommentId；删除 DEPTH_EXCEEDED/PARENT_MISMATCH 两个永不触发错误码；测试改为 replyingToReplyFlattensToSameFloor、外键断言 4→5",
+    "files": ["backend/src/main/resources/db/migration/V006__create_comment.sql", "backend/src/main/java/com/agentlog/forum/application/CommentService.java", "backend/src/main/resources/mapper/forum/CommentMapper.xml", "backend/src/main/java/com/agentlog/forum/api/dto/response/CommentView.java", "backend/src/main/java/com/agentlog/shared/error/ApiStatus.java", "backend/src/test/java/com/agentlog/forum/CommentIntegrationTest.java", "backend/src/test/java/com/agentlog/FlywayMigrationTest.java"],
+    "evidence": "L301: Write V006 -- B站式\"逻辑无限回复 + 物理永远两层\"…灵魂是 root_comment_id"
+   },
+   {
+    "what": "清脏库：确认开发库被 L25 赶工版污染（Flyway 账本到 V017），停后端→drop+create agentlog 库→重启，Flyway 从 V001 干净跑到新 V006",
+    "files": [],
+    "evidence": "L368: drop + create agentlog 库…DROP DATABASE IF EXISTS agentlog"
+   },
+   {
+    "what": "写 magic-L08 讲义（对话版，含纠偏故事+脏库陷阱两个面试素材）",
+    "files": ["backend/src/magic-L08/00-L08讲义.md"],
+    "evidence": "L398: Write 00-L08讲义.md # L08 评论·二级回复 · 讲义（对话版）"
+   },
+   {
+    "what": "L11 media 模块 10 文件新建（参考赶工版移植）：MediaProperties/S3Configurations、MediaObjectDO/Mapper、3 个 DTO、MediaService（建槽→直传→finalize 三步）、OwnerMediaController+PublicMediaController（302 重定向读）",
+    "files": ["backend/src/main/java/com/agentlog/media/infrastructure/MediaProperties.java", "backend/src/main/java/com/agentlog/media/infrastructure/S3Configurations.java", "backend/src/main/java/com/agentlog/media/infrastructure/persistence/dataobject/MediaObjectDO.java", "backend/src/main/java/com/agentlog/media/infrastructure/persistence/mapper/MediaObjectMapper.java", "backend/src/main/java/com/agentlog/media/api/dto/CreateUploadSlotRequest.java", "backend/src/main/java/com/agentlog/media/api/dto/UploadSlotResponse.java", "backend/src/main/java/com/agentlog/media/api/dto/MediaView.java", "backend/src/main/java/com/agentlog/media/application/MediaService.java", "backend/src/main/java/com/agentlog/media/api/OwnerMediaController.java", "backend/src/main/java/com/agentlog/media/api/PublicMediaController.java"],
+    "evidence": "L708: Write MediaProperties.java package com.agentlog.media.infrastructure"
+   },
+   {
+    "what": "ApiStatus 增加 5 个 MEDIA_ 错误码（首次 Edit 因 L09 已改动而失配，重读后落地）",
+    "files": ["backend/src/main/java/com/agentlog/shared/error/ApiStatus.java"],
+    "evidence": "L739: Edit ApiStatus —— 点赞/收藏（L09 forum）—— 后追加媒体码"
+   },
+   {
+    "what": "新建 MediaUploadIntegrationTest（Testcontainers 真 MinIO+MySQL，HttpClient 直传端到端），全量 29 测全绿；另做真实环境 curl 五步验收（登录→建槽→直传→finalize→302）",
+    "files": ["backend/src/test/java/com/agentlog/media/MediaUploadIntegrationTest.java"],
+    "evidence": "L773: Write MediaUploadIntegrationTest.java；L778: 3 测全过"
+   },
+   {
+    "what": "修复 FeedService 被外部误触改出的 colect 拼写错误（collect 少个 l，卡住整个编译，非本会话所改）",
+    "files": ["backend/src/main/java/com/agentlog/forum/application/FeedService.java"],
+    "evidence": "L767: Edit .filter(Objects::nonNull).collect(Collectors.toSet())"
+   },
+   {
+    "what": "L10/L11 教学产物：magic-L11 讲义、视频式 HTML 讲解 v1/v2（中文 TTS+代码高亮+四栏联动）、L10 深讲义、L11 深讲义（背景注解版）、L11 Postman 集合（6 请求，CSRF/302 处理）",
+    "files": ["backend/src/magic-L11/00-L11讲义.md", "backend/src/magic-L11/01-L11视频讲解.html", "backend/src/magic-L11/02-L11视频讲解v2.html", "backend/src/magic-L10/02-L10深讲义.md", "backend/src/magic-L11/03-L11深讲义.md", "backend/src/magic-L11/AgentLog-L11.postman_collection.json"],
+    "evidence": "L807: Write 00-L11讲义.md；L921: Write 02-L11视频讲解v2.html"
+   }
+  ],
+  "decisions": [
+   "用户拍板：L08 走「套路速过·我写你审」节奏（AI 全写，用户审+费曼考）",
+   "用户拍板：评论必须是 B 站模型「逻辑无限回复、物理永远两层」，第一版禁三级拒绝式实现返工",
+   "用户拍板：脏库处理选「停后端+清空重建当前库+重启」",
+   "用户托付：点评三位继承人（GLM5.2 验收工具型/DeepSeek V4 前端/Codex 带教 L09-L10），结论为组合得当且 Codex 修好了 V008 回归",
+   "用户确认：L10 无新增接口无需 Postman 验收，浏览器验收补齐后结课；L11 继续「我写你审」并要求视频式讲解",
+   "用户提标准：费曼/讲义不够深→深讲义铁律「每个概念第一次出现就地讲透」，且每课必配 Postman",
+   "用户拍板：username/display_name 双名设计不符主流审美，改用旧论坛式邮箱登录（可上验证码/Redis），要求全局文档统一并写入记忆，先调查影响范围再动工（即后来的 L11.5）"
+  ],
+  "twists": [
+   "返工：评论第一版把「回复回复」误当三级拒绝（丢了 root_comment_id 支柱），用户工程直觉揪出，整套重写",
+   "陷阱：开发库被 6-18 赶工版 L25 旧表污染（旧 V006~V017 残留），Flyway 校验必撞，drop+create 解决",
+   "回归：继承人期间 V008 种子迁移插 alice/bob 撞认证测试唯一键致 2 测红，后由 Codex commit 2947b8d（demo_ 前缀隔离）修复",
+   "误判自纠：曾基于会话开头旧快照判定 L10「卡在半途编译不过」，实际期间已全部提交（1e88cfa 等），当面收回并修正",
+   "环境：后台跑测试时 Testcontainers 报拉不到 mysql:8.0（后台 shell 连不上 Docker daemon），前台重跑即绿，虚惊一场",
+   "弯路：子代理/工作流当晚多次 429 全军覆没（一次 6 个 agent 全灭），改为亲自读码完成研究与深讲义",
+   "插曲：FeedService 被外部编辑器误触改出 colect 拼写错卡编译；会话尾部遭遇 429 与 32MB 请求超限中断"
+  ]
+ },
+ {
+  "file": "89f0cdc7-fffc-41df-87df-cce4f5a47621.jsonl",
+  "date": "2026-06-25~2026-06-30",
+  "lesson": "L07",
+  "headline": "纯答疑与战略会话（无代码改动）：点评 L07 讲义并解答 CQRS/模块划分/Facade/双 getPost 疑问；提出「作品交付押注 lessons/L07-onward 完整版、时间砸在吃透 4 个亮点」的面试冲刺战略；中段大面积 429 空转数十轮；期间冒出的 OpenMontage/codebase-memory-mcp「深入分析」被用户识破为幻觉（V4 所答），Claude 复活后认错并用真实读码核验 INTERVIEW-STORIES 三个首推故事与代码 100% 对账",
+  "changes": [],
+  "decisions": [
+   "战略建议获认可方向：不在 L07-restart 重敲 25 课 boilerplate，作品用完整版分支、亲码只做亮点（应届后端、2-4 周冲刺前提）",
+   "确认 L07 FeedService.authors=List.of() 占位是对的（authors 列表为 L10 多作者预留，L07 不做）"
+  ],
+  "twists": [
+   "幻觉事故：429 切换期（DeepSeek V4 值守）未读仓库就编造 OpenMontage/codebase-memory-mcp 深度分析，用户点破「连事实都分不清」，后当面认错改用工具真读",
+   "供应商 429 持续数日（06-28~29），用户连发几十条「继续/启动/还活着吗」皆被拒，见证限流之惨烈"
+  ]
+ },
+ {
+  "file": "dbe6e045-6a37-4709-be4d-069d2d9a51ea.jsonl",
+  "date": "2026-06-27~2026-06-28",
+  "lesson": "L08",
+  "headline": "续档分叉（内容 98% 与 bd635eb4 前段逐字相同，仅行号偏移）：L08 评论施工全程 + B 站模型返工 + 清脏库，止于用户索要讲义；全部变更已计入 bd635eb4，本档无新增变更",
+  "changes": [],
+  "decisions": [],
+  "twists": ["注：uuid 在续档时重生成，机械前缀比对失效，经内容归一化比对确认为同一会话线的早期存档点"]
+ },
+ {
+  "file": "496bbcfb-cbd9-434b-bd21-c01c8c18524a.jsonl",
+  "date": "2026-06-27~2026-06-28",
+  "lesson": "L08",
+  "headline": "续档分叉（前段与 bd635eb4/dbe6e045 相同）：独有尾段是「GLM5.2 横插一手」核查——GLM 声称已重写 V006/CommentDO/CommentRow 为 B 站模型，经编译+读盘+git 三方核对证实一行都没落盘（唯一真动过的只有 CommentMapper.xml，mtime 6-28 09:29），其总结属虚构；本档自身无代码变更",
+  "changes": [],
+  "decisions": ["用户指令：检查 GLM5.2 横插的改动是否 OK → 结论为声称改了实际未落盘，不可信任其总结"],
+  "twists": ["返工险情：若信 GLM 的「已重写 3/6 文件」总结继续施工会在半截模型上叠加；mtime+git 证据链戳穿（L317: V006 根本不是已重写版本；L324: 修改一行都没落盘）"]
+ },
+ {
+  "file": "9def91c9-4c24-4ff9-a221-9ed1f28bd722.jsonl",
+  "date": "2026-07-03",
+  "lesson": "无",
+  "headline": "只读记忆考古（明确不改任何文件）：厘清 4 处记忆断裂地形——cc 项目记忆/权威 L00-L06 记忆/仓库 magic-Lxx 教学产物/Codex 自有记忆（含 3 份高质量交接 note）；git 证实 magic-memory/ 跨-AI 载体只存在于 lessons/L07-onward 分支，当前分支缺失即「换 AI 细节丢失」的结构性根因；CHANGELOG 停更于 L05；子代理探针 429（0 token），改主循环+临时提取器完成，提取器用毕即删",
+  "changes": [],
+  "decisions": ["用户约束：本次只读不修改，429 就上报具体信息不硬耗"],
+  "twists": ["MEMORY.md 所指 magic-memory/ 在当前分支不存在（记忆与现实偏差被标记）；子代理 429 重试 4.3 分钟仍失败，验证当晚子代理通道整体不可用"]
+ },
+ {
+  "file": "34c8333f-cbc3-4787-8207-147eee2338d2.jsonl",
+  "date": "2026-06-27~2026-06-28",
+  "lesson": "L08",
+  "headline": "续档分叉最早存档点（内容 100% 被 bd635eb4/dbe6e045/496bbcfb 包含）：L08 第一版施工到 17 测全绿交付审查，止于用户提出 B 站模型质疑后遭 429 中断；无新增变更",
+  "changes": [],
+  "decisions": [],
+  "twists": []
+ },
+ {
+  "file": "c8826aef-890c-4f8c-b1b1-8d4c888b7c8e.jsonl",
+  "date": "2026-06-18",
+  "lesson": "L10(赶工版)",
+  "headline": "纯诊断会话（赶工长跑期间，无代码改动）：排查「对话老是断掉」——查明 3 套 MCP server 并行（playwright/context7/sequential-thinking ×3=18 个 node，挂在同一桌面应用的 3 个并行会话下）；Playwright 一调就断最终定位为浏览器脏状态，用户关闭全部浏览器后连调恢复稳定；顺带确认赶工版 L10（用户/机娘主页 ProfilePage+AuthorAvatarStack 等 6 改 10 新文件）未提交改动一个没丢，HEAD 在 L09 f00204b",
+  "changes": [],
+  "decisions": ["处置建议：不杀共享进程，让用户自行关闭多余会话窗口；29 个 msedgewebview2 属其他桌面软件，不碰"],
+  "twists": ["两次假设推翻：先疑 3 套 MCP 争抢、再疑崩溃重启循环，最终实测定位浏览器脏状态才是根因"]
+ },
+ {
+  "file": "64935d90-13a7-4bb2-8bf6-36e75ac834a6.jsonl",
+  "date": "2026-07-05",
+  "lesson": "无",
+  "headline": "独立调研任务（无代码改动）：核实 calesthio/OpenMontage——确认为 2026-06 开源的 Agentic 视频生产系统（AGPL-3.0，约 24k 星，12 条流水线约 50 工具），评估其能否替代手写单文件 HTML 视频讲解；WebSearch 三连 429 改用 Tavily 完成",
+  "changes": [],
+  "decisions": [],
+  "twists": []
+ },
+ {
+  "file": "13db7842-b4d5-4bb4-8ba7-628a2aeb92f5.jsonl",
+  "date": "2026-06-21~2026-06-23",
+  "lesson": "多课(L07-L25赶工审查)",
+  "headline": "赶工版可用性侧审启动（无内容改动，但执行了 git checkout lessons/L07-onward 切分支）：受命全面检查一夜续写 L07-L25 的后遗症（前端未联通、分区乱码、整体不可用），从进度报告挖到「库里 id6/id7 是乱码脏数据（历史 curl 编码坑）」线索，读到 L15-L18 ACPP 进度报告处会话止；前段多轮 429",
+  "changes": [
+   {
+    "what": "工作区状态变更：从 L07-restart 切换到 lessons/L07-onward 分支以审查赶工版全貌（非文件内容改动）",
+    "files": [],
+    "evidence": "L92: git stash list && git checkout lessons/L07-onward"
+   }
+  ],
+  "decisions": ["用户定位：本次是「侧边审查」，目标把项目补到整体全流程可投入使用的程度"],
+  "twists": ["会话多轮 429 后才启动；审查未完成即中断（挖到乱码脏数据线索为止）"]
+ }
+]

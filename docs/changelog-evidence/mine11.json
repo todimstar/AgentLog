@@ -1,0 +1,179 @@
+[
+  {
+    "file": "561550d0-a1d3-4e45-8880-8f4a4f67427a.jsonl",
+    "date": "2026-07-06~2026-07-08",
+    "lesson": "L11.5(含L10-L11头像修复)",
+    "headline": "继承中断会话 a101c66a 补交欠下的方案报告后，全栈完成 L11.5 邮箱登录重构（V009 迁移/Redis 验证码+限流/后端 30 测试绿/前端注册登录页）+ 补齐 L10-L11 头像「设为头像」断环并浏览器 E2E 验证 + 产出两个 v3 视频；07-08 凌晨用户观后大答疑并拍板睡前四决策，第一批施工做到 .gitignore 后被 502 风暴打断、会话死于 5 连 api_error",
+    "changes": [
+      {
+        "what": "L11.5 插入课讲义：邮箱登录+验证码+Redis 设计（退避迁移/接口纵切/Redis 三用/机娘不受影响）",
+        "files": ["backend/src/magic-L11.5/00-L11.5讲义.md"],
+        "evidence": "L177: WRITE magic-L11.5/00-L11.5讲义.md (10197B) 把底层设计债重构成邮箱登录"
+      },
+      {
+        "what": "V009 退避式迁移：加可空 email→回填→NOT NULL+UNIQUE→删 display_name（净零列数保 FlywayMigrationTest 13 列断言绿）；UserAccount DO 同步加 email/删 displayName",
+        "files": ["backend/src/main/resources/db/migration/V009__add_email_login.sql", "backend/src/main/java/com/agentlog/identity/infrastructure/persistence/dataobject/UserAccount.java"],
+        "evidence": "L186: WRITE V009__add_email_login.sql 把用户名登录+双名字重构成邮箱登录"
+      },
+      {
+        "what": "接入 spring-boot-starter-mail + data-redis 依赖；application.yml 加 redis/mail 配置（密码走环境变量不入库）；用 infra compose 启动 redis 容器",
+        "files": ["backend/pom.xml", "backend/src/main/resources/application.yml", "infra/docker-compose.local.yml"],
+        "evidence": "L218: docker compose -f infra/docker-compose.local.yml up -d redis"
+      },
+      {
+        "what": "forum 波及改名 display_name→username 全链贯穿：AuthorLookupRow/AuthorView 重写、PostFeedMapper.xml、FeedService、CommentMapper.xml（u.display_name 是删列后的运行时炸点）",
+        "files": ["backend/src/main/java/com/agentlog/forum/infrastructure/persistence/dataobject/AuthorLookupRow.java", "backend/src/main/java/com/agentlog/forum/api/dto/response/AuthorView.java", "backend/src/main/resources/mapper/forum/PostFeedMapper.xml", "backend/src/main/java/com/agentlog/forum/application/FeedService.java", "backend/src/main/resources/mapper/forum/CommentMapper.xml"],
+        "evidence": "L324: EDIT CommentMapper.xml u.display_name→u.username AS author_name"
+      },
+      {
+        "what": "identity 后端邮箱登录全套：新建 SendCodeRequest/EmailVerificationService（6位码 Redis TTL+发送降级）/LoginAttemptService（5次15min 限流）；重写 LoginRequest/RegisterRequest(带verCode)/UserView(email)/IdentityService/WebAuthController(加 send-code 端点+失败限流挂钩)；AppUserDetailsService 改按 email 认证；ApiStatus 加验证码错误码；ApiSecurityConfiguration 放行 send-code+CSRF 忽略",
+        "files": ["backend/src/main/java/com/agentlog/identity/api/dto/SendCodeRequest.java", "backend/src/main/java/com/agentlog/identity/api/dto/LoginRequest.java", "backend/src/main/java/com/agentlog/identity/api/dto/RegisterRequest.java", "backend/src/main/java/com/agentlog/identity/api/dto/UserView.java", "backend/src/main/java/com/agentlog/identity/application/EmailVerificationService.java", "backend/src/main/java/com/agentlog/identity/application/LoginAttemptService.java", "backend/src/main/java/com/agentlog/identity/application/IdentityService.java", "backend/src/main/java/com/agentlog/identity/application/AppUserDetailsService.java", "backend/src/main/java/com/agentlog/identity/api/WebAuthController.java", "backend/src/main/java/com/agentlog/shared/error/ApiStatus.java", "backend/src/main/java/com/agentlog/shared/security/ApiSecurityConfiguration.java"],
+        "evidence": "L277: WRITE EmailVerificationService.java (4024B)；L302: WRITE WebAuthController.java"
+      },
+      {
+        "what": "测试全面改造并跑绿 30 个：新建 AuthTestSupport（直插用户+email 登录绕开验证码流）；Feed/Comment/Reaction/Media 四测试加 Redis 容器、PasswordEncoder、INSERT 加 email 列；WebAuthIntegrationTest 重写为 send-code→从 Redis 读码→register→login 端到端",
+        "files": ["backend/src/test/java/com/agentlog/support/AuthTestSupport.java", "backend/src/test/java/com/agentlog/forum/FeedIntegrationTest.java", "backend/src/test/java/com/agentlog/forum/CommentIntegrationTest.java", "backend/src/test/java/com/agentlog/forum/ReactionIntegrationTest.java", "backend/src/test/java/com/agentlog/media/MediaUploadIntegrationTest.java", "backend/src/test/java/com/agentlog/identity/WebAuthIntegrationTest.java", "backend/src/test/java/com/agentlog/BackendSmokeTest.java"],
+        "evidence": "L514: 「BackendSmokeTest green (2/2). All backend tests pass — 30 green」"
+      },
+      {
+        "what": "OpenAPI 契约 + 前端邮箱登录：契约加 send-code 路径/SendCodeRequest、LoginRequest/RegisterRequest 改 email、UserView 加 email、AuthorView 改 username；npm api:generate 重生成客户端；session.ts 加 sendRegisterCode/register 改 email；App.vue/PostLogCard/CommentSection displayName→username；LoginPage.vue 重写（注册模式+发码倒计时+自动登录）",
+        "files": ["docs/api/agentlog-openapi.yaml", "web/src/generated/api/", "web/src/stores/session.ts", "web/src/App.vue", "web/src/components/PostLogCard.vue", "web/src/components/CommentSection.vue", "web/src/pages/LoginPage.vue"],
+        "evidence": "L604: WRITE LoginPage.vue (4818B) email 登录+注册+验证码倒计时"
+      },
+      {
+        "what": "L10-L11 头像断环补齐：契约加 PUT /api/v1/web/me/avatar + SetAvatarRequest；后端 SetAvatarRequest DTO + IdentityService.setAvatar（校验媒体归属/ACTIVE）+ WebAuthController PUT 端点；前端 session.setAvatar、新建 SettingsPage.vue（上传→finalize→绑定链路）+ 路由、App.vue 顶栏迷你头像链到 /settings、PostLogCard 渲染真头像 img；MediaUploadIntegrationTest 加 set-avatar 用例 5/5 过",
+        "files": ["docs/api/agentlog-openapi.yaml", "backend/src/main/java/com/agentlog/identity/api/dto/SetAvatarRequest.java", "backend/src/main/java/com/agentlog/identity/application/IdentityService.java", "backend/src/main/java/com/agentlog/identity/api/WebAuthController.java", "web/src/stores/session.ts", "web/src/pages/SettingsPage.vue", "web/src/router/index.ts", "web/src/App.vue", "web/src/components/PostLogCard.vue", "backend/src/test/java/com/agentlog/media/MediaUploadIntegrationTest.java"],
+        "evidence": "L642: EDIT openapi.yaml 加 /api/v1/web/me/avatar PUT setMyAvatar"
+      },
+      {
+        "what": "dev 库重建跑通 V009 + 浏览器 E2E 全链路验证：drop/recreate agentlog 库→Flyway V001→V009 干净应用（13 列、email UNIQUE、seed 回填）；Playwright 实测注册（验证码从 Redis 读出 221999）→自动登录→设置页上传 1×1 PNG→finalize→绑定→顶栏/DB 均确认",
+        "files": ["(dev MySQL agentlog 库)", "(浏览器 E2E，无代码改动)"],
+        "evidence": "L898: DROP DATABASE IF EXISTS agentlog; CREATE DATABASE...；L1072: DB 确认 avatar_media_public_id=med_0e93"
+      },
+      {
+        "what": "两个 v3 引擎单文件视频讲解 HTML（各 9 步、泳道流程图+文件树+代码高亮+speechSynthesis），本地 http.server+Playwright 浏览器验证可跳步渲染",
+        "files": ["backend/src/magic-L11.5/03-L11.5视频讲解.html", "backend/src/magic-L11/04-L10-L11头像修复视频讲解.html"],
+        "evidence": "L1098: WRITE 03-L11.5视频讲解.html (22150B)；L1115: WRITE 04-L10-L11头像修复视频讲解.html"
+      },
+      {
+        "what": "设计文档与记忆收口（均在 git 仓库外）：Master_Pack ADR总表加 ADR-020（email 登录修正）、security-blueprint 加 L11.5 修正横幅；机器级记忆新建 identity-email-login.md + avatar-upload-chain.md 并挂 MEMORY.md 索引；commit 依用户「完成后我再检查」留给用户",
+        "files": ["../AgentLog_Implementation_Master_Pack_v1.1/01-product/ADR总表.md", "../AgentLog_Implementation_Master_Pack_v1.1/09-security/security-blueprint.md", "~/.claude/projects/.../memory/identity-email-login.md", "~/.claude/projects/.../memory/avatar-upload-chain.md", "~/.claude/projects/.../memory/MEMORY.md"],
+        "evidence": "L1199: EDIT ADR总表.md 加 ADR-020 人类登录改用 email"
+      },
+      {
+        "what": "睡前四决策第一批施工（被 502 打断前完成）：application.yml 删无效 spring.dotenv 三行并默认激活 local profile；新建 application-local.yml（真实 139 邮箱凭据）+ application-local.yml.example 模板；.gitignore 追加忽略 application-local.yml",
+        "files": ["backend/src/main/resources/application.yml", "backend/src/main/resources/application-local.yml", "backend/src/main/resources/application-local.yml.example", ".gitignore"],
+        "evidence": "L1927: perl 清尾标签 + grep -q application-local.yml .gitignore || printf 追加忽略"
+      }
+    ],
+    "decisions": [
+      "用户拍板（承接中断会话的 4 点任务）：登录改造选 A——email 做唯一登录凭据、username 唯一展示名、删 display_name；确认机娘（agent 侧）不受影响",
+      "用户拍板：施工模式改「你写我审·全套」（含核心文件）+ 插入 L11.5 课；视频暂缓 Motion Canvas，继续单文件 HTML v3",
+      "用户拍板：「继续喵，直到我之前的任务完成了我再检查」→ 全自动推进到完成，最终 commit 留给用户审",
+      "睡前四决策①（07-08 凌晨 AskUserQuestion）：真实邮箱验证码修复选「写进 application-local.yml」——根因是 yml 里 spring.dotenv 属第三方库配置但 pom 从未加该依赖，.env 从未被加载",
+      "睡前四决策②：视频「全套大改 edge-tts 预生成 mp3」和「不加依赖的改进版」两方案各做一个试试",
+      "睡前四决策③：登录限流脏数据——若后续课程有安全课则记进该课待办/记忆/文档，没有则登录前先校验邮箱格式",
+      "睡前四决策④：授权睡觉期间自动推进 record 注解校验、ACTIVE 等状态抽常量、冷却变量名规范化及已拍板各项；遇到新决策暂缓等睡醒"
+    ],
+    "twists": [
+      "返工：Write 工具在每个新建文件尾部漏进 `</content>` 标签→全部新写 Java/SQL 文件编译报 EOF 错，逐一清洗 10 个文件+讲义后编译转绿（此后每次 Write 都要扫尾）",
+      "返工：WebAuthIntegrationTest 注册 409——V009 把 seed 用户 username 改成 Alice/Bob/Carol 与测试用户撞名→测试改用 AuthBob 等不冲突名",
+      "返工：BackendSmokeTest 变红——starter-mail 健康探针去连 smtp.139.com 拉垮 /health→application.yml 加 mail/redis 健康探针开关并在冒烟测试关闭",
+      "返工：dev 库跑 V009 失败——脏库存有旧手工用户与 seed 重名（duplicate Alice）→按既往决策 drop/recreate agentlog 库重跑 V001→V009；期间 redis 容器自停需 docker start 恢复",
+      "中断：07-07 深夜（本地 07-08 凌晨）API 风暴——观后大答疑消息因断连重发 6 次；第一批施工做到 .gitignore 后 19:59Z 遭 502；07-08 04:29Z 用户「继续」只收获 5 连 api_error，会话就此死亡"
+    ]
+  },
+  {
+    "file": "f27ee4fd-93d4-4e5d-b19f-2739d3f7f948.jsonl",
+    "date": "2026-06-29~2026-07-08",
+    "lesson": "无",
+    "headline": "跨十天的连通性挣扎与闲聊会话：反复试探 API 可用性（524/版本过低 400/ECONNRESET/403 欠费/502），答疑子代理可行性、上下文规格（自报 claude-opus-4-8[1m]）、任务拆分与 VSCode 流式渲染——无任何项目变更",
+    "changes": [],
+    "decisions": [],
+    "twists": [
+      "两次子代理试跑（Explore 探查 media 模块、connectivity sanity check）均被用户打断，未产生改动",
+      "错误图鉴齐全：524 超时、400 版本过低（2.1.84<2.1.151）、ECONNRESET、403 Current user is in debt、502 网关"
+    ]
+  },
+  {
+    "file": "f8f2e35a-3b1d-4b3a-99bc-5ecc00c1a92e.jsonl",
+    "date": "2026-07-08",
+    "lesson": "无",
+    "headline": "「不会又得新会话吧」——早间可用性试探两句即被打断，无变更",
+    "changes": [],
+    "decisions": [],
+    "twists": []
+  },
+  {
+    "file": "6e5abc70-668c-49c2-aee3-72cbc95f2584.jsonl",
+    "date": "2026-07-08",
+    "lesson": "无",
+    "headline": "/model 切 fable 后问「新开的对话你该如何处理这场景」——AI 只读了 git log/status 即被打断，无变更",
+    "changes": [],
+    "decisions": [],
+    "twists": []
+  },
+  {
+    "file": "09067c36-1cc0-462b-b10e-c854ed701a3d.jsonl",
+    "date": "2026-07-08",
+    "lesson": "无",
+    "headline": "「怎么说，能开对话吗」「any大人为何要抛弃我等」——可用性试探空壳，无变更",
+    "changes": [],
+    "decisions": [],
+    "twists": []
+  },
+  {
+    "file": "a8e6eda8-fecf-44de-ae10-e4b0eb179789.jsonl",
+    "date": "2026-07-08",
+    "lesson": "无",
+    "headline": "新会话接续试探：AI 说明看不到上一段对话内容、只有 git 快照与 MEMORY.md 记忆指针，无变更",
+    "changes": [],
+    "decisions": [],
+    "twists": []
+  },
+  {
+    "file": "5f29ded8-2f56-4cbe-a85a-2372607dd9a4.jsonl",
+    "date": "2026-07-08",
+    "lesson": "无",
+    "headline": "「倘若我现在发了个新对话接续呢」——试探即被打断，无变更",
+    "changes": [],
+    "decisions": [],
+    "twists": []
+  },
+  {
+    "file": "80a5bf2b-6eb5-4c79-b704-1f40870ff21e.jsonl",
+    "date": "2026-07-08",
+    "lesson": "无",
+    "headline": "/model 空壳会话（本地 07-08 02:16），无变更",
+    "changes": [],
+    "decisions": [],
+    "twists": []
+  },
+  {
+    "file": "c7b7246b-6cfd-4510-8ebc-67c345b9d095.jsonl",
+    "date": "2026-07-08",
+    "lesson": "无",
+    "headline": "/model 空壳会话（本地 07-08 03:00），无变更",
+    "changes": [],
+    "decisions": [],
+    "twists": []
+  },
+  {
+    "file": "a932d83a-70d4-45b6-817a-8fe4a8224573.jsonl",
+    "date": "2026-07-08",
+    "lesson": "无",
+    "headline": "/model 空壳会话（本地 07-08 02:32），无变更",
+    "changes": [],
+    "decisions": [],
+    "twists": []
+  },
+  {
+    "file": "92211cff-043a-4186-8e6d-5a0b4d9fc8ae.jsonl",
+    "date": "2026-07-09",
+    "lesson": "无",
+    "headline": "闲聊学习节奏（一天学几课/每日总结耗时，AI 查 git log 即被打断）+ 请求无破坏性排查 17:10 起的断网事件（QQ 灰/百度打不开/tun 模式关闭后全断，重启恢复）——均未展开，无项目变更",
+    "changes": [],
+    "decisions": [],
+    "twists": []
+  }
+]

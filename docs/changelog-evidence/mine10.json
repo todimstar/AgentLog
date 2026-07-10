@@ -1,0 +1,246 @@
+[
+  {
+    "file": "b9199520-973d-4a52-91b0-84cce192bf64.jsonl",
+    "date": "2026-06-27",
+    "lesson": "多课",
+    "headline": "跨 06-27→07-06 长会话：L08 评论后端施工并返工为B站两层模型、L10 浏览器补验收结课、L11 MinIO 预签名直传模块全套施工+讲义/视频v1v2/深讲义/Postman；07-06 分叉尾部仅为工具调用实验（与 f0ac5d32 前 1010 行为同一对话的分叉快照，共享变更计入本条）",
+    "changes": [
+      {
+        "what": "L08 评论系统后端首版：V006 迁移 + DO/Row/Mapper(java+xml) + Service + Controller + DTO + 集成测试，全量 17 测全绿",
+        "files": [
+          "backend/src/main/resources/db/migration/V006__create_comment.sql",
+          "backend/src/main/java/com/agentlog/forum/infrastructure/persistence/dataobject/CommentDO.java",
+          "backend/src/main/java/com/agentlog/forum/infrastructure/persistence/dataobject/CommentRow.java",
+          "backend/src/main/java/com/agentlog/forum/infrastructure/persistence/mapper/CommentMapper.java",
+          "backend/src/main/resources/mapper/forum/CommentMapper.xml",
+          "backend/src/main/java/com/agentlog/forum/api/dto/request/CreateCommentRequest.java",
+          "backend/src/main/java/com/agentlog/forum/api/dto/response/CommentView.java",
+          "backend/src/main/java/com/agentlog/forum/api/dto/response/CommentPage.java",
+          "backend/src/main/java/com/agentlog/forum/application/CommentService.java",
+          "backend/src/main/java/com/agentlog/forum/api/CommentController.java",
+          "backend/src/test/java/com/agentlog/forum/CommentIntegrationTest.java",
+          "backend/src/main/java/com/agentlog/shared/error/ApiStatus.java"
+        ],
+        "evidence": "L239: 全量 17 测全绿…forum 评论代码零跨模块边界违规"
+      },
+      {
+        "what": "返工：评论模型重设计为B站两层（补 root_comment_id、depth CHECK(1,2)、status），V006 重写并波及 DO/XML/Service/DTO/两个测试",
+        "files": [
+          "backend/src/main/resources/db/migration/V006__create_comment.sql",
+          "backend/src/main/java/com/agentlog/forum/infrastructure/persistence/dataobject/CommentDO.java",
+          "backend/src/main/java/com/agentlog/forum/infrastructure/persistence/dataobject/CommentRow.java",
+          "backend/src/main/resources/mapper/forum/CommentMapper.xml",
+          "backend/src/main/java/com/agentlog/forum/api/dto/request/CreateCommentRequest.java",
+          "backend/src/main/java/com/agentlog/forum/api/dto/response/CommentView.java",
+          "backend/src/main/java/com/agentlog/forum/application/CommentService.java",
+          "backend/src/test/java/com/agentlog/forum/CommentIntegrationTest.java",
+          "backend/src/test/java/com/agentlog/FlywayMigrationTest.java"
+        ],
+        "evidence": "L247: 我的实现确实把\"回复回复\"误当三级拒了，这不是B站体验"
+      },
+      {
+        "what": "magic-L08 讲义（对话版单文件，含纠偏故事+脏库陷阱两个面试素材）",
+        "files": ["backend/src/magic-L08/00-L08讲义.md"],
+        "evidence": "L384: 讲义写好了…magic-L08 讲义已交付——按你的对话版风格"
+      },
+      {
+        "what": "L10 结课验收（无代码变更）：浏览器实测 Feed 头像组按作者渲染 + N+1 防范运行时证据（单请求返回全部卡片）",
+        "files": [],
+        "evidence": "L594: Feed 只发一个 /public/posts 请求就返回全部 4 张卡片"
+      },
+      {
+        "what": "L11 媒体预签名直传模块全套（MinIO）：配置/DO/Mapper/DTO/Service/Owner+Public 双 Controller + 集成测试 + ApiStatus 增码，29 测全绿并 curl 端到端验收（登录→建槽→直传→finalize→302）",
+        "files": [
+          "backend/src/main/java/com/agentlog/media/infrastructure/MediaProperties.java",
+          "backend/src/main/java/com/agentlog/media/infrastructure/S3Configurations.java",
+          "backend/src/main/java/com/agentlog/media/infrastructure/persistence/dataobject/MediaObjectDO.java",
+          "backend/src/main/java/com/agentlog/media/infrastructure/persistence/mapper/MediaObjectMapper.java",
+          "backend/src/main/java/com/agentlog/media/api/dto/CreateUploadSlotRequest.java",
+          "backend/src/main/java/com/agentlog/media/api/dto/UploadSlotResponse.java",
+          "backend/src/main/java/com/agentlog/media/api/dto/MediaView.java",
+          "backend/src/main/java/com/agentlog/media/application/MediaService.java",
+          "backend/src/main/java/com/agentlog/media/api/OwnerMediaController.java",
+          "backend/src/main/java/com/agentlog/media/api/PublicMediaController.java",
+          "backend/src/test/java/com/agentlog/media/MediaUploadIntegrationTest.java",
+          "backend/src/main/java/com/agentlog/shared/error/ApiStatus.java"
+        ],
+        "evidence": "L771: L11 真实环境端到端验收全过！完整链路在你本机 MinIO 上跑通"
+      },
+      {
+        "what": "顺手修复工作区误触：FeedService collect→colect 拼写错卡住全量编译（非本会话改动）",
+        "files": ["backend/src/main/java/com/agentlog/forum/application/FeedService.java"],
+        "evidence": "L728: 唯一的 diff 就是 collect→colect 一个字母的拼写错"
+      },
+      {
+        "what": "L11 讲义 + 视频式 HTML 讲解 v1（单文件、语音朗读+代码逐段高亮）",
+        "files": ["backend/src/magic-L11/00-L11讲义.md", "backend/src/magic-L11/01-L11视频讲解.html"],
+        "evidence": "L780: 现在做你最想要的视频式讲解——单文件 HTML…语音+高亮"
+      },
+      {
+        "what": "视频讲解 v2：四栏 IDEA 式联动播放器（子代理 6×429 后亲手重写）",
+        "files": ["backend/src/magic-L11/02-L11视频讲解v2.html"],
+        "evidence": "L890: 视频 v2 完美，四栏全部联动"
+      },
+      {
+        "what": "L10/L11 深讲义（回应用户'上两课讲浅了'，按每概念就地注解的新标准重写）",
+        "files": ["backend/src/magic-L10/02-L10深讲义.md", "backend/src/magic-L11/03-L11深讲义.md"],
+        "evidence": "L933: 先认账：我上两课确实讲浅了…这次按你的标准重做"
+      },
+      {
+        "what": "L11 Postman 集合（照 L09 范式，含直传 MinIO 不带 CSRF、302 不跟随两个特殊处理）",
+        "files": ["backend/src/magic-L11/AgentLog-L11.postman_collection.json"],
+        "evidence": "L915: 照它写 L11 的，含…302 不跟随两个特殊处理"
+      }
+    ],
+    "decisions": [
+      "用户拍板：评论采用B站模型——逻辑无限回复、物理永远两层（L244 质疑触发重设计）",
+      "用户拍板：L10 可结课——费曼已做、缺的验收由本会话浏览器补齐；L10 无新接口故无 Postman（L538/L606/L612）",
+      "用户拍板：L11 继续'你写我审'，讲义之外首创视频式讲解（L606）",
+      "用户拍板：子代理 429 时改用 claude 终端实例当'伪子代理'（L952）",
+      "用户提出 username/display_name 双名设计质疑，要求先调查后拍板、这一轮不动代码（L830/L936；拍板落在分叉 f0ac5d32 尾部）"
+    ],
+    "twists": [
+      "返工：评论首版把'回复回复'误当三级拒绝，按 root_comment_id 楼层模型重写（L247/L372）",
+      "陷阱：开发库被旧 V017 迁移污染，清库后 Flyway 账本干净停在 V006（L366）",
+      "环境：子代理 5+ 次撞 429，视频v2/深讲义等转为亲手完成；嵌套 claude 伪子代理实验部分走通（L867/L1003）",
+      "验收 404：8080 跑的是加载 L11 新代码前的旧进程，杀掉重启后端到端全过（L761）",
+      "分叉说明：本文件 07-06 独有尾部（L1011-1039）仅'读取一个文件测试工具调用'实验，无项目变更（L1032）"
+    ]
+  },
+  {
+    "file": "f0ac5d32-aa23-4b58-817a-35bbb6873e5a.jsonl",
+    "date": "2026-07-05",
+    "lesson": "L11.5",
+    "headline": "b9199520 的续档分叉：前 1010 行与其完全一致（共享变更计入该条），新增段（L1011-1063，07-05）交付身份设计调查报告并获用户拍板 A 方案——email 登录+唯一 username+L11.5 插入课，无任何文件变更",
+    "changes": [],
+    "decisions": [
+      "用户拍板：选 A——改造为 email 登录且唯一 username（废除 display_name 双名），发件邮箱复用旧论坛项目配置（L1042）",
+      "用户拍板：登录改造与验证码+Redis 合并为一节新加插入课（即 L11.5）（L1042）",
+      "用户确认关切：机娘被@及后期登录发帖不受影响（调查已证 agent_account 用 nickname 独立体系）（L1042/L956）"
+    ],
+    "twists": [
+      "续档分叉：与 b9199520 内容级公共前缀 1010 行，fork 时 uuid 被重写、按内容比对才能确认同源",
+      "报告在本分叉成功送达（L1023 '调查全部完成…这一轮我不动任何代码'）；而同源另一分叉 a101c66a（不在本批）随后施工时死于 429/ECONNRESET，施工最终由 f525001f 完成"
+    ]
+  },
+  {
+    "file": "f525001f-1f1d-41ae-b08c-70f10b42b56f.jsonl",
+    "date": "2026-07-06",
+    "lesson": "L11.5",
+    "headline": "L11.5 邮箱登录插入课主施工会话：继承损坏会话 a101c66a 后全自动施工——V009 迁移、email+验证码登录、Redis 登录限流、双名合一全栈波及、头像设置链补环；后端 30 测全绿、前端 build 通过，尾部三连 ECONNRESET 中断（视频v3/浏览器E2E 未及）",
+    "changes": [
+      {
+        "what": "L11.5 讲义先行（'你写我审·全套'约定下仍先出讲义再施工）",
+        "files": ["backend/src/magic-L11.5/00-L11.5讲义.md"],
+        "evidence": "L272: Write backend/src/magic-L11.5/00-L11.5讲义.md"
+      },
+      {
+        "what": "V009 邮箱登录迁移 + UserAccount DO 改造（删 displayName、加 email 于 username 之后对齐列序）",
+        "files": [
+          "backend/src/main/resources/db/migration/V009__add_email_login.sql",
+          "backend/src/main/java/com/agentlog/identity/infrastructure/persistence/dataobject/UserAccount.java"
+        ],
+        "evidence": "L291: V009 迁移写好。现在改 UserAccount DO：去 displayName、加 email"
+      },
+      {
+        "what": "依赖与配置：pom 加 data-redis+mail 起步器；application.yml 配 Redis 与 smtp.139.com 发件（复用旧论坛配置，密钥走环境变量）",
+        "files": ["backend/pom.xml", "backend/src/main/resources/application.yml"],
+        "evidence": "L211: spring.mail (smtp.139.com:465…) + spring.data.redis"
+      },
+      {
+        "what": "双名合一波及 forum 链路：display_name→username 贯穿改名",
+        "files": [
+          "backend/src/main/java/com/agentlog/forum/infrastructure/persistence/dataobject/AuthorLookupRow.java",
+          "backend/src/main/java/com/agentlog/forum/api/dto/response/AuthorView.java",
+          "backend/src/main/resources/mapper/forum/PostFeedMapper.xml",
+          "backend/src/main/java/com/agentlog/forum/application/FeedService.java",
+          "backend/src/main/resources/mapper/forum/CommentMapper.xml"
+        ],
+        "evidence": "L370: display_name column is dropped, I'll carry the rename to username"
+      },
+      {
+        "what": "身份 DTO 层重做：SendCodeRequest 新建、LoginRequest 改 email、RegisterRequest 加验证码、UserView 带 email",
+        "files": [
+          "backend/src/main/java/com/agentlog/identity/api/dto/SendCodeRequest.java",
+          "backend/src/main/java/com/agentlog/identity/api/dto/LoginRequest.java",
+          "backend/src/main/java/com/agentlog/identity/api/dto/RegisterRequest.java",
+          "backend/src/main/java/com/agentlog/identity/api/dto/UserView.java"
+        ],
+        "evidence": "L405: Write identity/api/dto/SendCodeRequest.java"
+      },
+      {
+        "what": "核心服务与安全：EmailVerificationService（验证码生成+Redis 存取+发送降级）、LoginAttemptService（登录失败限流）、IdentityService 重写（注册校验码+sendRegisterCode）、AppUserDetailsService 邮箱查询、WebAuthController 加 send-code 端点并挂限流、安全配置与错误码同步",
+        "files": [
+          "backend/src/main/java/com/agentlog/identity/application/EmailVerificationService.java",
+          "backend/src/main/java/com/agentlog/identity/application/LoginAttemptService.java",
+          "backend/src/main/java/com/agentlog/identity/application/IdentityService.java",
+          "backend/src/main/java/com/agentlog/identity/application/AppUserDetailsService.java",
+          "backend/src/main/java/com/agentlog/identity/api/WebAuthController.java",
+          "backend/src/main/java/com/agentlog/shared/security/ApiSecurityConfiguration.java",
+          "backend/src/main/java/com/agentlog/shared/error/ApiStatus.java"
+        ],
+        "evidence": "L427: Writing EmailVerificationService (generate + send-with-degradation + Redis)"
+      },
+      {
+        "what": "测试体系改造：新建 AuthTestSupport（Redis Testcontainer + 注册登录助手），Feed/Comment/Reaction/MediaUpload 四测适配，WebAuthIntegrationTest 重写为 send-code→register→login→/me 全链（4/4 过）",
+        "files": [
+          "backend/src/test/java/com/agentlog/support/AuthTestSupport.java",
+          "backend/src/test/java/com/agentlog/forum/FeedIntegrationTest.java",
+          "backend/src/test/java/com/agentlog/forum/CommentIntegrationTest.java",
+          "backend/src/test/java/com/agentlog/forum/ReactionIntegrationTest.java",
+          "backend/src/test/java/com/agentlog/media/MediaUploadIntegrationTest.java",
+          "backend/src/test/java/com/agentlog/identity/WebAuthIntegrationTest.java"
+        ],
+        "evidence": "L740: WebAuthIntegrationTest: 4/4 pass — email login works end-to-end"
+      },
+      {
+        "what": "SmokeTest 修复：actuator 健康检查因 mail 指标转红，调整 application.yml 与断言后全后端 30 测全绿",
+        "files": [
+          "backend/src/test/java/com/agentlog/BackendSmokeTest.java",
+          "backend/src/main/resources/application.yml"
+        ],
+        "evidence": "L781: BackendSmokeTest green (2/2)…All backend tests pass — 30 green"
+      },
+      {
+        "what": "OpenAPI 契约更新（send-code 路径、email 版 Login/Register、UserView.email、AuthorView.username）并 npm run api:generate 重生成前端客户端",
+        "files": ["docs/api/agentlog-openapi.yaml", "web/src/generated/api"],
+        "evidence": "L822: OpenAPI contract updated (send-code path + SendCodeRequest…)"
+      },
+      {
+        "what": "前端登录与展示改造：LoginPage 重写为邮箱+验证码注册登录，session/顶栏/卡片/评论区 displayName→username，build 通过",
+        "files": [
+          "web/src/pages/LoginPage.vue",
+          "web/src/stores/session.ts",
+          "web/src/App.vue",
+          "web/src/components/PostLogCard.vue",
+          "web/src/components/CommentSection.vue"
+        ],
+        "evidence": "L926: Frontend build succeeds (only a benign chunk-size warning)"
+      },
+      {
+        "what": "头像设置链补环：SetAvatarRequest + set-avatar 端点（Controller/Service），客户端重生成 setMyAvatar，新建 SettingsPage（上传→finalize→设为头像），顶栏小头像入口 + 路由",
+        "files": [
+          "backend/src/main/java/com/agentlog/identity/api/dto/SetAvatarRequest.java",
+          "backend/src/main/java/com/agentlog/identity/api/WebAuthController.java",
+          "backend/src/main/java/com/agentlog/identity/application/IdentityService.java",
+          "web/src/pages/SettingsPage.vue",
+          "web/src/App.vue",
+          "web/src/router/index.ts"
+        ],
+        "evidence": "L1027: add setAvatar to session, build a Settings page"
+      }
+    ],
+    "decisions": [
+      "用户授权全自动施工：'继续喵，直到我之前的任务完成了我再检查'（L935）",
+      "对齐上游拍板三点：你写我审·全套 + L11.5 插入课 + 视频暂缓 Motion Canvas 改用 HTML v3（L185）",
+      "延续继承的 A 方案：email 登录 + 唯一 username + 发件邮箱复用旧论坛 smtp.139.com 配置（L211）"
+    ],
+    "twists": [
+      "上游会话 a101c66a（1074 行，06-27→07-06）死于 429/ECONNRESET 风暴；本会话写 3 个临时脚本消化其残骸后继承任务并即时清理（L168）",
+      "本环境 Write 工具给 11 个文件追加了多余的 '</content>' 尾巴，全量清扫修复（L529/L547）",
+      "施工全程反复遭遇 'API Error: socket connection closed'（L273/L350/L393 等），靠重试推进",
+      "前端 build 抓到 type-check 漏掉的 strict-enum 错误（contentType 须用生成枚举），复刻 L25 教训 build>type-check（L1087）",
+      "会话尾部三连 ECONNRESET（L1108/L1122/L1139）：最后动作为 npm run build，视频 v3 与浏览器 E2E 未完成、留待后续会话"
+    ]
+  }
+]

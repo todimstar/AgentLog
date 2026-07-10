@@ -1,0 +1,141 @@
+[
+  {
+    "file": "15e5b89c-6be6-4935-bc02-6c5bc92e6802.jsonl",
+    "date": "2026-06-27~2026-07-03",
+    "lesson": "多课",
+    "headline": "L08 评论区全链施工（我写你审），经用户纠偏重写为 B站扁平两层模型并清脏库重建；06-30 起转入 GLM/V4/Codex 三继承人审计，07-03 核实 L10 已完成、26 测全绿",
+    "changes": [
+      {
+        "what": "V006 评论建表迁移落地（初版：depth 0/1 CHECK 禁三级、parent_comment_id 楼层归属、reply_to_comment_id @谁、status 软删占位、like_count、4 外键）",
+        "files": ["backend/src/main/resources/db/migration/V006__create_comment.sql"],
+        "evidence": "L127: WRITE V006__create_comment.sql -- L08 评论二级回复。归 forum 模块"
+      },
+      {
+        "what": "评论持久层三件套：CommentDO（手写 getter/setter 无 Lombok、@Version 乐观锁）、CommentRow（JOIN 作者名的平铺行）、CommentMapper（BaseMapper 混合自定义 selectCommentTree 一条 JOIN 拉全帖防 N+1）+ XML",
+        "files": [
+          "backend/src/main/java/com/agentlog/forum/infrastructure/persistence/dataobject/CommentDO.java",
+          "backend/src/main/java/com/agentlog/forum/infrastructure/persistence/dataobject/CommentRow.java",
+          "backend/src/main/java/com/agentlog/forum/infrastructure/persistence/mapper/CommentMapper.java",
+          "backend/src/main/resources/mapper/forum/CommentMapper.xml"
+        ],
+        "evidence": "L141: WRITE CommentMapper.java（L132 DO / L138 Row / L143 XML）"
+      },
+      {
+        "what": "CommentMapper 增 bumpCommentCount：forum 用自有 SQL 原子直写 post.comment_count（零 import content 类，ArchUnit/Modulith 边界合规）；随后删掉 XML 里多余的 updated_at 自赋值",
+        "files": [
+          "backend/src/main/java/com/agentlog/forum/infrastructure/persistence/mapper/CommentMapper.java",
+          "backend/src/main/resources/mapper/forum/CommentMapper.xml"
+        ],
+        "evidence": "L172: EDIT 评论计数增减 delta=+1 发评论 / -1 软删（L178 删自赋值）"
+      },
+      {
+        "what": "评论 DTO 三件套：CreateCommentRequest 严格对齐 OpenAPI；CommentView 超集契约补 parentCommentId/replyToCommentId/depth/status（契约是下限，前端两层树必需）；CommentPage 扁平 items——契约把组树留给前端",
+        "files": [
+          "backend/src/main/java/com/agentlog/forum/api/dto/request/CreateCommentRequest.java",
+          "backend/src/main/java/com/agentlog/forum/api/dto/response/CommentView.java",
+          "backend/src/main/java/com/agentlog/forum/api/dto/response/CommentPage.java"
+        ],
+        "evidence": "L160: WRITE CommentView.java 对齐 OpenAPI 并超集补齐前端必需字段"
+      },
+      {
+        "what": "CommentService（create / listTree 平铺按楼层序 / softDelete 保楼层+行级授权+comment_count 维护）与 CommentController（/api/v1/public 匿名读、/api/v1/web 登录写，CSRF 复用 L05 范式）",
+        "files": [
+          "backend/src/main/java/com/agentlog/forum/application/CommentService.java",
+          "backend/src/main/java/com/agentlog/forum/api/CommentController.java"
+        ],
+        "evidence": "L188: WRITE CommentService.java（L199 CommentController 双前缀路径）"
+      },
+      {
+        "what": "ApiStatus 扩评论错误码（COMMENT_NOT_FOUND/COMMENT_FORBIDDEN 等）；B站模型重写后删除 COMMENT_DEPTH_EXCEEDED/COMMENT_PARENT_MISMATCH 两个永不触发码",
+        "files": ["backend/src/main/java/com/agentlog/shared/error/ApiStatus.java"],
+        "evidence": "L181: EDIT ApiStatus 加评论错误码（L327 再删 2 个死码）"
+      },
+      {
+        "what": "CommentIntegrationTest（顶层/二级/禁三级/软删保楼层/授权/匿名 6 验收点，JdbcTemplate 直插 PUBLISHED 帖当夹具）+ FlywayMigrationTest 补 V006 用例；修夹具缺陷后 17 测全绿",
+        "files": [
+          "backend/src/test/java/com/agentlog/forum/CommentIntegrationTest.java",
+          "backend/src/test/java/com/agentlog/FlywayMigrationTest.java"
+        ],
+        "evidence": "L243: EDIT 夹具改唯一后缀，修 @SpringBootTest 不回滚撞唯一键的 5 errors"
+      },
+      {
+        "what": "【06-28 返工核心】评论模型重写为 B站式「逻辑无限回复、物理永远两层」：V006 重写引入 root_comment_id（楼）、depth IN(1,2)；create 改扁平化永不拒绝（三级状态根本无法被表达）；XML 排序按 root 聚楼；DO/Row/View 加 rootCommentId；测试用例「禁三级被拒」改「回复二级→扁平到同楼」、外键断言 4→5",
+        "files": [
+          "backend/src/main/resources/db/migration/V006__create_comment.sql",
+          "backend/src/main/java/com/agentlog/forum/infrastructure/persistence/dataobject/CommentDO.java",
+          "backend/src/main/java/com/agentlog/forum/infrastructure/persistence/dataobject/CommentRow.java",
+          "backend/src/main/java/com/agentlog/forum/application/CommentService.java",
+          "backend/src/main/resources/mapper/forum/CommentMapper.xml",
+          "backend/src/main/java/com/agentlog/forum/api/dto/response/CommentView.java",
+          "backend/src/main/java/com/agentlog/forum/api/dto/request/CreateCommentRequest.java",
+          "backend/src/test/java/com/agentlog/FlywayMigrationTest.java",
+          "backend/src/test/java/com/agentlog/forum/CommentIntegrationTest.java"
+        ],
+        "evidence": "L299: WRITE V006 重写：模型灵魂是 root_comment_id，三级【根本无法被表达】"
+      },
+      {
+        "what": "脏库处置（环境变更）：taskkill 停 8080 旧后端（PID 41276）→ docker exec drop+create agentlog 库 → 重启后端，Flyway 从 V001 干净重跑到新 V006；全量 17 测回归绿",
+        "files": ["infra-mysql-1 容器内 agentlog 库（非代码文件）"],
+        "evidence": "L366: BASH drop + create agentlog 库（L378 账本停在 V006 确认）"
+      },
+      {
+        "what": "magic-L08 讲义交付（对话版 10 小节 + 一页纸速记，写入 B站模型纠偏故事与脏库陷阱两个面试素材）",
+        "files": ["backend/src/magic-L08/00-L08讲义.md"],
+        "evidence": "L398: WRITE 00-L08讲义.md 一句话：给帖子详情页长出评论区"
+      }
+    ],
+    "decisions": [
+      "用户拍板：L08 节奏选「套路速过·我写你审」——AI 全写评论 CRUD+测试，用户审并被费曼考 3 个设计点（L74）",
+      "用户拍板：评论模型必须是 B站式「逻辑无限回复、物理永远两层」，推翻『回复回复被当三级拒绝』的初版实现（L257/L281）",
+      "用户拍板：脏库处理选「清空重建当前库」，旧 L08-L25 全自动数据无保留价值（L344）",
+      "用户拍板：后端进程选「停后端 + 清库 + 重启」，让 Flyway 从 V001 干净重跑（L362）",
+      "用户托付：GLM 5.2（Postman 验收）/ DeepSeek V4（前端评论区）/ Codex（L09-L10 带教）三继承人续写，请老导师逐一点评（L438）",
+      "用户指令：接续 Codex L10 施工会话核实进度；末条要求用子代理验证 L10 能否结课（L548/L651）"
+    ],
+    "twists": [
+      "返工：初版重写时丢了原设计（lessons/L07-onward）的 root_comment_id 支柱，把「回复回复」误拒为三级；用户一问揪出真 bug，全链返工为 B站扁平两层（L260/L278）",
+      "陷阱：开发库被 lessons/L07-onward 全自动分支污染到 V017（旧 V006 comment 表结构不同），启动必撞 Flyway 校验 → 停后端+清库重建（L269/L272）",
+      "返工：集成测试首跑 5 errors——@SpringBootTest 不回滚+夹具写死 slug='dev'/alice/bob 撞唯一键，改唯一后缀后全绿（L242/L243）",
+      "审计发现：继承人新增的 V008 种子迁移占用 alice/bob → WebAuth 认证测试 409 回归（seed 进版本化迁移是反模式）；导师不擅自修留给主人，后由 Codex commit 2947b8d 以 demo_ 前缀修复（L512/L515/L619）",
+      "误判翻案：07-03 基于会话开头旧快照误判「L10 卡半途/编译不过」，按当前 HEAD 重核发现 L10 已完成提交（1e88cfa 批量补齐作者头像组），26 测全绿（L593/L600/L644）",
+      "环境误报：后台任务跑 Testcontainers 拉不到 mysql:8.0（后台 shell 连不上 Docker daemon）误报 5 errors，前台重跑即绿（L634/L641）"
+    ]
+  },
+  {
+    "file": "71aa6cfd-32f5-4912-b96e-193eec9b5d47.jsonl",
+    "date": "2026-07-03",
+    "lesson": "多课",
+    "headline": "15e5b89c 的完整续档副本：507/507 条 user/assistant 消息内容逐条一致（时间戳被统一重写为 07-03 08:02 副本生成时刻），零新增变更",
+    "changes": [],
+    "decisions": [],
+    "twists": [
+      "续档分叉说明：与基档 15e5b89c 逐消息哈希比对 LCP=507/507（含最后一条未获回应的用户消息），全部变更已计入基档，本文件不重复计数"
+    ]
+  },
+  {
+    "file": "dcb85d0c-3495-4f1a-a9aa-9865b498835a.jsonl",
+    "date": "2026-07-03",
+    "lesson": "多课",
+    "headline": "15e5b89c 的另一份完整续档副本：507/507 条消息内容与基档逐条一致（时间戳统一为 07-03 08:02），零新增变更",
+    "changes": [],
+    "decisions": [],
+    "twists": [
+      "续档分叉说明：与基档 15e5b89c 的 LCP=507/507，与 71aa6cfd 互为同源副本；基档最后一条用户消息（子代理验证 L10 可否结课）在三份文件中均无后续回应，说明实际收尾发生在别的会话"
+    ]
+  },
+  {
+    "file": "e2833cc2-c1b2-4fdc-9514-3c9728b95e1c.jsonl",
+    "date": "2026-07-03",
+    "lesson": "无",
+    "headline": "只读记忆考古会话（ultracode 档）：盘点 CC/Codex 会话与项目记忆，确认记忆停在 L07 而 git 已到 L10 完成 + L11 进行中未提交；按用户要求未对项目做任何修改",
+    "changes": [],
+    "decisions": [
+      "用户拍板：本次只读取、不修改任何地方——为跨 AI（CC/Codex 因额度切换）沉淀可复用记忆与工作流做摸底（L8）",
+      "用户拍板：本会话用 /effort 切到 ultracode 档，试用工作流编排能力（L5）"
+    ],
+    "twists": [
+      "记忆漂移现场坐实：旧记忆称 L07-L25 在 lessons/L07-onward 一夜跑完且有 magic-memory/ 载体，实际 L07-restart 分支上 magic-memory 目录不存在、改用每课 magic-Lxx/，权威 restart 计划记忆只更新到 L07，L08-L11 细节散落在 CC+Codex 对话未沉淀（L76/L98/L114）",
+      "环境小插曲：Bash 分类器一度不可用，改用 Glob/Read 只读工具继续侦察（L49）"
+    ]
+  }
+]
