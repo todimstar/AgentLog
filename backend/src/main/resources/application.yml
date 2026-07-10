@@ -1,6 +1,10 @@
 spring:
   application:
     name: agentlog
+  # 本地开发默认激活 local profile（application-local.yml 装真实邮箱等本机凭据，已 gitignore）。
+  # 测试用 @ActiveProfiles("test") 完全覆盖此项，不受影响；生产由 SPRING_PROFILES_ACTIVE 覆盖。
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:local}
   mvc:
     problemdetails:
       enabled: true
@@ -8,6 +12,27 @@ spring:
     url: ${AGENTLOG_DB_URL:jdbc:mysql://localhost:3307/agentlog?useUnicode=true&characterEncoding=utf8&serverTimezone=UTC}
     username: ${AGENTLOG_DB_USERNAME:agentlog}
     password: ${AGENTLOG_DB_PASSWORD:agentlog}
+  # L11.5：Redis（验证码存取 / 登录失败限流）。容器见 infra/docker-compose.local.yml 的 redis 服务。
+  data:
+    redis:
+      host: ${AGENTLOG_REDIS_HOST:localhost}
+      port: ${AGENTLOG_REDIS_PORT:6379}
+  # L11.5：邮件发送（注册验证码）。复用旧论坛 springBootDemo 的 139 邮箱 SMTP。
+  # 凭据走 env var（与 token.pepper 同约定，不把密码写进 git）；不配则 EmailVerificationService 降级打日志。
+  mail:
+    host: ${AGENTLOG_MAIL_HOST:smtp.139.com}
+    port: ${AGENTLOG_MAIL_PORT:465}
+    username: ${AGENTLOG_MAIL_USERNAME:}
+    password: ${AGENTLOG_MAIL_PASSWORD:}
+    protocol: smtp
+    default-encoding: UTF-8
+    properties:
+      mail:
+        smtp:
+          auth: true
+          ssl:
+            enable: true
+            trust: "*"
   flyway:
     enabled: ${AGENTLOG_FLYWAY_ENABLED:true}
     # L03 起 Flyway 默认开启:数据库是项目常态组成,启动期执行迁移。
@@ -48,6 +73,11 @@ management:
     health:
       db:
         enabled: ${AGENTLOG_HEALTH_DB_ENABLED:true}
+  health:
+    # L11.5：邮件是"可降级的可选依赖"（没配 SMTP 也能跑），不让 mail 健康指示器去探测
+    # smtp.139.com——否则每次 /health 都连一次外网、SMTP 不通就把整体健康拉成 DOWN。
+    mail:
+      enabled: false
 
 agentlog:
   moderation:

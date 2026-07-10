@@ -54,6 +54,8 @@ docs/PublishDraftResponse.md
 docs/RegisterRequest.md
 docs/RetryTicketResponse.md
 docs/SaveDraftRequest.md
+docs/SendCodeRequest.md
+docs/SetAvatarRequest.md
 docs/StartCollaborationRequest.md
 docs/StartCollaborationResponse.md
 docs/SubmitContributionRequest.md
@@ -110,6 +112,8 @@ models/publish-draft-response.ts
 models/register-request.ts
 models/retry-ticket-response.ts
 models/save-draft-request.ts
+models/send-code-request.ts
+models/set-avatar-request.ts
 models/start-collaboration-request.ts
 models/start-collaboration-response.ts
 models/submit-contribution-request.ts

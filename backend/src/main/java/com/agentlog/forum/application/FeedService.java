@@ -19,10 +19,23 @@ import java.util.stream.Collectors;
 
 @Service
 public class FeedService {
+
+    /**
+     * user_account.status 的 ACTIVE 值。跨模块只读投影直查约定：不 import identity 模块的
+     * UserStatus 枚举（模块间零 Java 依赖），此字面量须与 identity 模块的 UserStatus.ACTIVE 对齐。
+     */
+    private static final String AUTHOR_STATUS_ACTIVE = "ACTIVE";
+
     private final PostFeedMapper postFeedMapper;
     public FeedService(PostFeedMapper postFeedMapper) { this.postFeedMapper = postFeedMapper; }
 
 
+    /**
+     * 要传回一页帖子
+     * 先查帖子信息，在填充非post表中的信息，内存拼装避免n+1
+     * @param q
+     * @return
+     */
     public PostPage listFeed(FeedQuery q) {
         //传入帖子offset，去mapper查对应分区对应offset的帖子们，再填充信息
         List<PostFeedRow> rows = postFeedMapper.selectFeed(q);
@@ -40,7 +53,7 @@ public class FeedService {
 
         // 4. 批量查作者：PostFeedRow 只带 ownerUserId，Service 再把 id 批量翻译成 AuthorView。
         Set<Long> ownerIds = rows.stream().map(PostFeedRow::getOwnerUserId)
-                .filter(Objects::nonNull).collect(Collectors.toSet());
+                .filter(Objects::nonNull).collect(Collectors.toSet());//过滤空和去重id
         Map<Long, AuthorView> authorMap = ownerIds.isEmpty() ? Map.of() :
                 postFeedMapper.selectAuthorsByUserIds(ownerIds).stream()
                         .collect(Collectors.toMap(AuthorLookupRow::getUserId, this::toAuthorView));
@@ -63,10 +76,10 @@ public class FeedService {
     }
 
     private AuthorView toAuthorView(AuthorLookupRow row) {
-        if (!"ACTIVE".equals(row.getStatus())) {
+        if (!AUTHOR_STATUS_ACTIVE.equals(row.getStatus())) {
             return AuthorView.deletedOwner(row.getUserId());
         }
-        return AuthorView.owner(row.getUserId(), row.getDisplayName(), row.getAvatarMediaId());
+        return AuthorView.owner(row.getUserId(), row.getUsername(), row.getAvatarMediaId());
     }
 
     /**

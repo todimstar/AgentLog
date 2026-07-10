@@ -18,8 +18,8 @@ public class UserAccount {
     private Long id;
 
     private String username;
+    private String email;        // L11.5 登录凭据：唯一、私密、不展示（取代旧的 username 登录）
     private String passwordHash; // 只存 bcrypt 哈希，永不存明文
-    private String displayName;
     private String avatarMediaPublicId;
     private String shortBio;
     private String status;
@@ -57,12 +57,12 @@ public class UserAccount {
         this.passwordHash = passwordHash;
     }
 
-    public String getDisplayName() {
-        return displayName;
+    public String getEmail() {
+        return email;
     }
 
-    public void setDisplayName(String displayName) {
-        this.displayName = displayName;
+    public void setEmail(String email) {
+        this.email = email;
     }
 
     public String getAvatarMediaPublicId() {

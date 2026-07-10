@@ -1,0 +1,7 @@
+# 本地开发配置模板。复制为 application-local.yml 并填入你自己的凭据（application-local.yml 已 gitignore，不进库）。
+# local profile 由 application.yml 的 spring.profiles.active 默认激活。
+spring:
+  mail:
+    # 139 邮箱 SMTP 授权码登录（不是登录密码）。留空则 EmailVerificationService 降级：验证码只打后端日志，不发真邮件。
+    username: your-account@139.com
+    password: your-smtp-auth-code

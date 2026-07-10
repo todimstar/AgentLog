@@ -31,8 +31,10 @@ public class AppUserDetailsService implements UserDetailsService {
 
     @Override
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
+        // L11.5：登录凭据改成 email。方法名/参数名是 Spring 接口定死的（改不了），
+        // 但参数里实际装的是登录接口传来的 email，所以按 email 查库。
         UserAccount account = userAccountMapper.selectOne(
-                Wrappers.<UserAccount>lambdaQuery().eq(UserAccount::getUsername, username));
+                Wrappers.<UserAccount>lambdaQuery().eq(UserAccount::getEmail, username));
         if (account == null) {
             throw new UsernameNotFoundException("user not found");
         }

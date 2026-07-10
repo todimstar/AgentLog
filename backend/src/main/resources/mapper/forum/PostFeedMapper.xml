@@ -38,7 +38,7 @@
 
     <select id="selectAuthorsByUserIds"
             resultType="com.agentlog.forum.infrastructure.persistence.dataobject.AuthorLookupRow">
-        SELECT id AS user_id, display_name, avatar_media_public_id AS avatar_media_id, status
+        SELECT id AS user_id, username, avatar_media_public_id AS avatar_media_id, status
         FROM user_account
         WHERE id IN
         <foreach collection="ids" item="id" open="(" separator="," close=")">

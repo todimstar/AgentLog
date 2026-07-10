@@ -16,6 +16,8 @@ import org.springframework.http.ResponseEntity;
                 "agentlog.token.pepper=test-pepper",
                 "spring.flyway.enabled=false",
                 "management.health.db.enabled=false",
+                // L11.5：L01 冒烟只验后端生命体征，没有 Redis 基础设施——和 db 一样排除 redis 健康探测。
+                "management.health.redis.enabled=false",
                 // L01 只验证后端生命体征，没有数据库。Modulith 的 JDBC 事件发布会在启动期
                 // 连库取元数据，本机无 MySQL 会导致容器起不来，所以这一课先排除它，留到 L03/L17。
                 "spring.autoconfigure.exclude=org.springframework.modulith.events.jdbc.JdbcEventPublicationAutoConfiguration"

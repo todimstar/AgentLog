@@ -7,7 +7,7 @@ package com.agentlog.forum.infrastructure.persistence.dataobject;
  */
 public class AuthorLookupRow {
     private Long userId;
-    private String displayName;
+    private String username;
     private String avatarMediaId;
     private String status;
 
@@ -19,12 +19,12 @@ public class AuthorLookupRow {
         this.userId = userId;
     }
 
-    public String getDisplayName() {
-        return displayName;
+    public String getUsername() {
+        return username;
     }
 
-    public void setDisplayName(String displayName) {
-        this.displayName = displayName;
+    public void setUsername(String username) {
+        this.username = username;
     }
 
     public String getAvatarMediaId() {

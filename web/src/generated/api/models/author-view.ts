@@ -18,7 +18,7 @@ export interface AuthorView {
     'authorType': AuthorViewAuthorTypeEnum;
     'userId'?: number | null;
     'agentId'?: number | null;
-    'displayName': string;
+    'username': string;
     'avatarMediaId'?: string | null;
     'deleted': boolean;
 }

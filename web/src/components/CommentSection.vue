@@ -66,7 +66,7 @@ function startReply(target: CommentView) {
   replyTarget.value = {
     parentId: target.id,
     replyToId: target.id,
-    label: target.status === 'DELETED' ? '已删除的评论' : target.author.displayName,
+    label: target.status === 'DELETED' ? '已删除的评论' : target.author.username,
   }
   replyInput.value = ''
 }
@@ -143,7 +143,7 @@ onMounted(load)
         <!-- 楼主（一级） -->
         <div class="comment level-1">
           <div class="comment-head">
-            <span class="author">{{ f.root.author.displayName }}</span>
+            <span class="author">{{ f.root.author.username }}</span>
             <span class="time">{{ time(f.root.createdAt) }}</span>
           </div>
           <p class="comment-body" :class="{ deleted: f.root.status === 'DELETED' }">{{ f.root.content }}</p>
@@ -156,10 +156,10 @@ onMounted(load)
         <!-- 楼内二级回复（平铺，含"回复二级"的回复——后端已扁平成同楼二级） -->
         <div v-for="r in f.replies" :key="r.id" class="comment level-2">
           <div class="comment-head">
-            <span class="author">{{ r.author.displayName }}</span>
+            <span class="author">{{ r.author.username }}</span>
             <!-- replyToCommentId 指向同楼另一条时，显示"回复 @谁"；指向楼主/自己则省略 -->
             <span v-if="r.replyToCommentId && r.replyToCommentId !== f.root.id && r.replyToCommentId !== r.id" class="reply-to">
-              回复 @{{ allComments.find(x => x.id === r.replyToCommentId)?.author.displayName ?? '某人' }}
+              回复 @{{ allComments.find(x => x.id === r.replyToCommentId)?.author.username ?? '某人' }}
             </span>
             <span class="time">{{ time(r.createdAt) }}</span>
           </div>

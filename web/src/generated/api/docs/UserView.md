@@ -6,8 +6,8 @@
 Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
 **id** | **number** |  | [default to undefined]
-**username** | **string** |  | [optional] [default to undefined]
-**displayName** | **string** |  | [default to undefined]
+**username** | **string** |  | [default to undefined]
+**email** | **string** |  | [default to undefined]
 **avatarMediaId** | **string** |  | [optional] [default to undefined]
 **shortBio** | **string** |  | [optional] [default to undefined]
 
@@ -19,7 +19,7 @@ import { UserView } from './api';
 const instance: UserView = {
     id,
     username,
-    displayName,
+    email,
     avatarMediaId,
     shortBio,
 };

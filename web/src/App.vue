@@ -37,9 +37,16 @@ async function logout() {
         </nav>
         <div class="top-actions">
           <RouterLink class="create-btn" to="/owner/posts/new">＋ 写开发日志</RouterLink>
-          <div class="session-chip" :class="{ guest: !session.isAuthenticated }">
+          <RouterLink v-if="session.isAuthenticated" class="session-chip" to="/settings" title="个人设置">
+            <span v-if="session.user?.avatarMediaId" class="mini-avatar">
+              <img :src="`/api/v1/public/media/${session.user.avatarMediaId}`" alt="" />
+            </span>
+            <span v-else class="session-dot"></span>
+            <span>{{ session.username }}</span>
+          </RouterLink>
+          <div v-else class="session-chip guest">
             <span class="session-dot"></span>
-            <span>{{ session.displayName }}</span>
+            <span>{{ session.username }}</span>
           </div>
           <button v-if="session.isAuthenticated" class="icon-btn" type="button" aria-label="退出登录" title="退出登录" @click="logout">
             退
@@ -67,6 +74,7 @@ async function logout() {
   color: #3f4b5f;
   font-size: 12px;
   font-weight: 800;
+  text-decoration: none;
 }
 .session-chip span:last-child {
   overflow: hidden;
@@ -85,6 +93,19 @@ async function logout() {
 }
 .session-chip.guest .session-dot {
   background: #a8b1c0;
+}
+.mini-avatar {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  overflow: hidden;
+  display: inline-flex;
+  flex-shrink: 0;
+}
+.mini-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 @media (max-width: 820px) {
   .session-chip {

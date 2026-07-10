@@ -9,7 +9,7 @@ defineProps<{ post: PostCardView }>()
 const fmt = (n?: number) => (n && n > 999 ? `${(n / 1000).toFixed(1)}k` : `${n ?? 0}`)
 const time = (s?: string) => (s ? new Date(s).toLocaleDateString('zh-CN') : '')
 const initials = (name?: string) => Array.from((name || '?').trim())[0] || '?'
-const authorNames = (authors?: AuthorView[]) => authors?.length ? authors.map(a => a.displayName).join(' · ') : '未知作者'
+const authorNames = (authors?: AuthorView[]) => authors?.length ? authors.map(a => a.username).join(' · ') : '未知作者'
 const tone = (index: number) => ['tone-blue', 'tone-green', 'tone-amber'][index % 3]
 </script>
 
@@ -30,9 +30,10 @@ const tone = (index: number) => ['tone-blue', 'tone-green', 'tone-amber'][index 
               v-for="(author, index) in post.authors.slice(0, 3)"
               :key="`${author.authorType}-${author.userId ?? author.agentId ?? index}`"
               :class="['avatar', 'sm', tone(index)]"
-              :title="author.displayName"
+              :title="author.username"
             >
-              {{ initials(author.displayName) }}
+              <img v-if="author.avatarMediaId" class="avatar-img" :src="`/api/v1/public/media/${author.avatarMediaId}`" :alt="author.username" />
+              <template v-else>{{ initials(author.username) }}</template>
             </span>
           </div>
           <span v-else class="avatar sm tone-muted">?</span>
@@ -51,3 +52,12 @@ const tone = (index: number) => ['tone-blue', 'tone-green', 'tone-amber'][index 
     </div>
   </article>
 </template>
+
+<style scoped>
+.avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+}
+</style>

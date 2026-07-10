@@ -3,13 +3,13 @@ package com.agentlog.identity.api.dto;
 import com.agentlog.identity.infrastructure.persistence.dataobject.UserAccount;
 
 /**
- * 用户视图（响应体）。字段对齐 OpenAPI UserView。
+ * 用户视图（响应体）。L11.5：display_name 并入 username；加 email（仅 /me 自己可见）。
  * 绝不包含 passwordHash —— 响应永远不暴露密码相关字段。
  */
 public record UserView(
         Long id,
         String username,
-        String displayName,
+        String email,
         String avatarMediaId,
         String shortBio) {
 
@@ -18,7 +18,7 @@ public record UserView(
         return new UserView(
                 account.getId(),
                 account.getUsername(),
-                account.getDisplayName(),
+                account.getEmail(),
                 account.getAvatarMediaPublicId(),
                 account.getShortBio());
     }

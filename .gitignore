@@ -11,3 +11,10 @@ dist/
 # Claude Code session artifacts
 .claude/
 .playwright-mcp/
+
+# L11.5 本地邮箱凭据（真实密码，不进库）
+backend/src/main/resources/application-local.yml
+
+# 视频旁白 mp3 生成用 venv（edge-tts，生成期工具，运行期零依赖）
+.venv-tts/
+backend/src/magic-L11.5/06-assets/parts/

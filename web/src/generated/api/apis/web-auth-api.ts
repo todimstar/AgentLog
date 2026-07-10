@@ -30,6 +30,10 @@ import type { ProblemDetail } from '../models';
 // @ts-ignore
 import type { RegisterRequest } from '../models';
 // @ts-ignore
+import type { SendCodeRequest } from '../models';
+// @ts-ignore
+import type { SetAvatarRequest } from '../models';
+// @ts-ignore
 import type { UserView } from '../models';
 /**
  * WebAuthApi - axios parameter creator
@@ -195,6 +199,75 @@ export const WebAuthApiAxiosParamCreator = function (configuration?: Configurati
                 options: localVarRequestOptions,
             };
         },
+        /**
+         * 
+         * @summary 发送注册验证码
+         * @param {SendCodeRequest} sendCodeRequest 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        sendRegisterCode: async (sendCodeRequest: SendCodeRequest, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'sendCodeRequest' is not null or undefined
+            assertParamExists('sendRegisterCode', 'sendCodeRequest', sendCodeRequest)
+            const localVarPath = `/api/v1/web/auth/send-code`;
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'POST', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            localVarHeaderParameter['Content-Type'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+            localVarRequestOptions.data = serializeDataIfNeeded(sendCodeRequest, localVarRequestOptions, configuration)
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * 
+         * @summary 设置我的头像
+         * @param {SetAvatarRequest} setAvatarRequest 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        setMyAvatar: async (setAvatarRequest: SetAvatarRequest, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'setAvatarRequest' is not null or undefined
+            assertParamExists('setMyAvatar', 'setAvatarRequest', setAvatarRequest)
+            const localVarPath = `/api/v1/web/me/avatar`;
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'PUT', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            localVarHeaderParameter['Content-Type'] = 'application/json';
+            localVarHeaderParameter['Accept'] = 'application/json,application/problem+json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+            localVarRequestOptions.data = serializeDataIfNeeded(setAvatarRequest, localVarRequestOptions, configuration)
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
     }
 };
 
@@ -266,6 +339,32 @@ export const WebAuthApiFp = function(configuration?: Configuration) {
             const localVarOperationServerBasePath = operationServerMap['WebAuthApi.registerUser']?.[localVarOperationServerIndex]?.url;
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
+        /**
+         * 
+         * @summary 发送注册验证码
+         * @param {SendCodeRequest} sendCodeRequest 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async sendRegisterCode(sendCodeRequest: SendCodeRequest, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<void>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.sendRegisterCode(sendCodeRequest, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['WebAuthApi.sendRegisterCode']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * 
+         * @summary 设置我的头像
+         * @param {SetAvatarRequest} setAvatarRequest 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async setMyAvatar(setAvatarRequest: SetAvatarRequest, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<UserView>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.setMyAvatar(setAvatarRequest, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['WebAuthApi.setMyAvatar']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
     }
 };
 
@@ -321,6 +420,26 @@ export const WebAuthApiFactory = function (configuration?: Configuration, basePa
          */
         registerUser(registerRequest: RegisterRequest, options?: RawAxiosRequestConfig): AxiosPromise<UserView> {
             return localVarFp.registerUser(registerRequest, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * 
+         * @summary 发送注册验证码
+         * @param {SendCodeRequest} sendCodeRequest 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        sendRegisterCode(sendCodeRequest: SendCodeRequest, options?: RawAxiosRequestConfig): AxiosPromise<void> {
+            return localVarFp.sendRegisterCode(sendCodeRequest, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * 
+         * @summary 设置我的头像
+         * @param {SetAvatarRequest} setAvatarRequest 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        setMyAvatar(setAvatarRequest: SetAvatarRequest, options?: RawAxiosRequestConfig): AxiosPromise<UserView> {
+            return localVarFp.setMyAvatar(setAvatarRequest, options).then((request) => request(axios, basePath));
         },
     };
 };
@@ -379,6 +498,28 @@ export class WebAuthApi extends BaseAPI {
      */
     public registerUser(registerRequest: RegisterRequest, options?: RawAxiosRequestConfig) {
         return WebAuthApiFp(this.configuration).registerUser(registerRequest, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * 
+     * @summary 发送注册验证码
+     * @param {SendCodeRequest} sendCodeRequest 
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public sendRegisterCode(sendCodeRequest: SendCodeRequest, options?: RawAxiosRequestConfig) {
+        return WebAuthApiFp(this.configuration).sendRegisterCode(sendCodeRequest, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * 
+     * @summary 设置我的头像
+     * @param {SetAvatarRequest} setAvatarRequest 
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public setMyAvatar(setAvatarRequest: SetAvatarRequest, options?: RawAxiosRequestConfig) {
+        return WebAuthApiFp(this.configuration).setMyAvatar(setAvatarRequest, options).then((request) => request(this.axios, this.basePath));
     }
 }
 

@@ -1,21 +1,19 @@
-# LoginRequest
+# SetAvatarRequest
 
 
 ## Properties
 
 Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
-**email** | **string** |  | [default to undefined]
-**password** | **string** |  | [default to undefined]
+**mediaId** | **string** |  | [default to undefined]
 
 ## Example
 
 ```typescript
-import { LoginRequest } from './api';
+import { SetAvatarRequest } from './api';
 
-const instance: LoginRequest = {
-    email,
-    password,
+const instance: SetAvatarRequest = {
+    mediaId,
 };
 ```
 

@@ -8,7 +8,7 @@ Name | Type | Description | Notes
 **authorType** | **string** |  | [default to undefined]
 **userId** | **number** |  | [optional] [default to undefined]
 **agentId** | **number** |  | [optional] [default to undefined]
-**displayName** | **string** |  | [default to undefined]
+**username** | **string** |  | [default to undefined]
 **avatarMediaId** | **string** |  | [optional] [default to undefined]
 **deleted** | **boolean** |  | [default to undefined]
 
@@ -21,7 +21,7 @@ const instance: AuthorView = {
     authorType,
     userId,
     agentId,
-    displayName,
+    username,
     avatarMediaId,
     deleted,
 };

@@ -15,7 +15,7 @@ export const useSessionStore = defineStore('session', {
   }),
   getters: {
     isAuthenticated: (state) => state.user !== null,
-    displayName: (state) => state.user?.displayName ?? '游客',
+    username: (state) => state.user?.username ?? '游客',
   },
   actions: {
     async refresh() {
@@ -39,10 +39,21 @@ export const useSessionStore = defineStore('session', {
       if (this.checked) return
       await this.refresh()
     },
-    async login(username: string, password: string) {
-      this.user = (await authApi.loginWeb({ username, password })).data
+    async sendRegisterCode(email: string) {
+      await authApi.sendRegisterCode({ email })
+    },
+    async register(email: string, username: string, password: string, verCode: string) {
+      // 注册只建账号、不建会话；成功后由调用方再 login 拿会话（Session 由登录建立）。
+      await authApi.registerUser({ email, username, password, verCode })
+    },
+    async login(email: string, password: string) {
+      this.user = (await authApi.loginWeb({ email, password })).data
       this.checked = true
       await refreshCsrfToken()
+    },
+    async setAvatar(mediaId: string) {
+      // 头像上传收尾：把已 finalize 的媒体绑为头像，后端回带新 avatarMediaId 的 UserView。
+      this.user = (await authApi.setMyAvatar({ mediaId })).data
     },
     async logout() {
       try {

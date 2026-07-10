@@ -21,9 +21,15 @@ import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequ
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.utility.DockerImageName;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import com.agentlog.support.AuthTestSupport;
 
 /**
  * L08 评论二级回复验收。forum 模块第一个集成测试。
@@ -48,6 +54,16 @@ class CommentIntegrationTest {
     @ServiceConnection
     static MySQLContainer<?> mysql = new MySQLContainer<>("mysql:8.0");
 
+    @Container
+    static GenericContainer<?> redis =
+            new GenericContainer<>(DockerImageName.parse("redis:7.4-alpine")).withExposedPorts(6379);
+
+    @DynamicPropertySource
+    static void redisProps(DynamicPropertyRegistry reg) {
+        reg.add("spring.data.redis.host", redis::getHost);
+        reg.add("spring.data.redis.port", () -> redis.getMappedPort(6379));
+    }
+
     @Autowired
     private MockMvc mockMvc;
 
@@ -56,6 +72,9 @@ class CommentIntegrationTest {
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    private PasswordEncoder passwordEncoder;
 
     // @SpringBootTest 默认不回滚事务，多个 @Test 共享同一 Testcontainers 库。
     // 用递增后缀保证每个 test 的 slug/username 唯一，避免撞唯一键。
@@ -76,8 +95,8 @@ class CommentIntegrationTest {
         Long channelId = jdbcTemplate.queryForObject("SELECT id FROM forum_channel ORDER BY id DESC LIMIT 1", Long.class);
         // 帖主：每个 test 单独建一个，避免与评论作者混淆（作者名 JOIN 用）
         jdbcTemplate.update(
-                "INSERT INTO user_account(username,password_hash,display_name,status,created_at,updated_at) "
-                        + "VALUES (?,'x','种子用户','ACTIVE',?,?)", "seed-" + suffix, now, now);
+                "INSERT INTO user_account(username,email,password_hash,status,created_at,updated_at) "
+                        + "VALUES (?,?,'x','ACTIVE',?,?)", "seed-" + suffix, "seed-" + suffix + "@test.local", now, now);
         ownerId = jdbcTemplate.queryForObject("SELECT id FROM user_account ORDER BY id DESC LIMIT 1", Long.class);
         // 一篇 PUBLISHED 帖（评论挂它下面）
         jdbcTemplate.update(
@@ -87,23 +106,10 @@ class CommentIntegrationTest {
         postId = jdbcTemplate.queryForObject("SELECT id FROM post ORDER BY id DESC LIMIT 1", Long.class);
     }
 
-    /** 注册 + 登录，返回带认证的 session。用例名做前缀保证 username 唯一。 */
+    /** 注册 + 登录，返回带认证的 session。L11.5：直插用户 + email 登录（绕开注册验证码流程）。 */
     private MockHttpSession loginAs(String username) throws Exception {
-        String uname = username + "-" + suffix;
-        MockHttpSession session = new MockHttpSession();
-        mockMvc.perform(post("/api/v1/web/auth/register")
-                        .session(session)
-                        .with(SecurityMockMvcRequestPostProcessors.csrf())
-                        .contentType("application/json")
-                        .content("{\"username\":\"" + uname + "\",\"password\":\"password123\",\"displayName\":\"" + username + "\"}"))
-                .andExpect(status().isCreated());
-        mockMvc.perform(post("/api/v1/web/auth/login")
-                        .session(session)
-                        .with(SecurityMockMvcRequestPostProcessors.csrf())
-                        .contentType("application/json")
-                        .content("{\"username\":\"" + uname + "\",\"password\":\"password123\"}"))
-                .andExpect(status().isOk());
-        return session;
+        return AuthTestSupport.insertUserAndLogin(mockMvc, jdbcTemplate, passwordEncoder,
+                username + "-" + suffix, username + "-" + suffix + "@test.local");
     }
 
     private long postComment(MockHttpSession session, String body) throws Exception {

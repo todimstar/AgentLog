@@ -19,9 +19,15 @@ import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequ
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.utility.DockerImageName;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import com.agentlog.support.AuthTestSupport;
 
 /**
  * L09 点赞/收藏验收。forum 模块第二个集成测试。
@@ -48,6 +54,16 @@ class ReactionIntegrationTest {
     @ServiceConnection
     static MySQLContainer<?> mysql = new MySQLContainer<>("mysql:8.0");
 
+    @Container
+    static GenericContainer<?> redis =
+            new GenericContainer<>(DockerImageName.parse("redis:7.4-alpine")).withExposedPorts(6379);
+
+    @DynamicPropertySource
+    static void redisProps(DynamicPropertyRegistry reg) {
+        reg.add("spring.data.redis.host", redis::getHost);
+        reg.add("spring.data.redis.port", () -> redis.getMappedPort(6379));
+    }
+
     @Autowired
     private MockMvc mockMvc;
 
@@ -56,6 +72,9 @@ class ReactionIntegrationTest {
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    private PasswordEncoder passwordEncoder;
 
     private static int seq = 0;
     private String suffix;
@@ -71,8 +90,8 @@ class ReactionIntegrationTest {
                         + "VALUES (?,?,0,TRUE,0,?,?)", "ch-" + suffix, "测试分区", now, now);
         Long channelId = jdbcTemplate.queryForObject("SELECT id FROM forum_channel ORDER BY id DESC LIMIT 1", Long.class);
         jdbcTemplate.update(
-                "INSERT INTO user_account(username,password_hash,display_name,status,created_at,updated_at) "
-                        + "VALUES (?,'x','帖主','ACTIVE',?,?)", "owner-" + suffix, now, now);
+                "INSERT INTO user_account(username,email,password_hash,status,created_at,updated_at) "
+                        + "VALUES (?,?,'x','ACTIVE',?,?)", "owner-" + suffix, "owner-" + suffix + "@test.local", now, now);
         Long ownerId = jdbcTemplate.queryForObject("SELECT id FROM user_account ORDER BY id DESC LIMIT 1", Long.class);
         jdbcTemplate.update(
                 "INSERT INTO post(owner_user_id,channel_id,visibility_status,comment_count,hot_score,"
@@ -89,19 +108,8 @@ class ReactionIntegrationTest {
     }
 
     private MockHttpSession loginAs(String name) throws Exception {
-        String uname = name + "-" + suffix;
-        MockHttpSession session = new MockHttpSession();
-        mockMvc.perform(post("/api/v1/web/auth/register")
-                        .session(session).with(SecurityMockMvcRequestPostProcessors.csrf())
-                        .contentType("application/json")
-                        .content("{\"username\":\"" + uname + "\",\"password\":\"password123\",\"displayName\":\"" + name + "\"}"))
-                .andExpect(status().isCreated());
-        mockMvc.perform(post("/api/v1/web/auth/login")
-                        .session(session).with(SecurityMockMvcRequestPostProcessors.csrf())
-                        .contentType("application/json")
-                        .content("{\"username\":\"" + uname + "\",\"password\":\"password123\"}"))
-                .andExpect(status().isOk());
-        return session;
+        return AuthTestSupport.insertUserAndLogin(mockMvc, jdbcTemplate, passwordEncoder,
+                name + "-" + suffix, name + "-" + suffix + "@test.local");
     }
 
     private MvcResult toggle(MockHttpSession s, String body, String path) throws Exception {

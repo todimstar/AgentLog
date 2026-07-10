@@ -9,6 +9,8 @@ All URIs are relative to *http://localhost:8080*
 |[**loginWeb**](#loginweb) | **POST** /api/v1/web/auth/login | 登录|
 |[**logoutWeb**](#logoutweb) | **POST** /api/v1/web/auth/logout | 登出|
 |[**registerUser**](#registeruser) | **POST** /api/v1/web/auth/register | 注册|
+|[**sendRegisterCode**](#sendregistercode) | **POST** /api/v1/web/auth/send-code | 发送注册验证码|
+|[**setMyAvatar**](#setmyavatar) | **PUT** /api/v1/web/me/avatar | 设置我的头像|
 
 # **getCsrf**
 > CsrfTokenResponse getCsrf()
@@ -241,6 +243,109 @@ No authorization required
 |-------------|-------------|------------------|
 |**201** | user |  -  |
 |**409** | 状态冲突 |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+# **sendRegisterCode**
+> sendRegisterCode(sendCodeRequest)
+
+
+### Example
+
+```typescript
+import {
+    WebAuthApi,
+    Configuration,
+    SendCodeRequest
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new WebAuthApi(configuration);
+
+let sendCodeRequest: SendCodeRequest; //
+
+const { status, data } = await apiInstance.sendRegisterCode(
+    sendCodeRequest
+);
+```
+
+### Parameters
+
+|Name | Type | Description  | Notes|
+|------------- | ------------- | ------------- | -------------|
+| **sendCodeRequest** | **SendCodeRequest**|  | |
+
+
+### Return type
+
+void (empty response body)
+
+### Authorization
+
+No authorization required
+
+### HTTP request headers
+
+ - **Content-Type**: application/json
+ - **Accept**: Not defined
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**204** | code sent |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+# **setMyAvatar**
+> UserView setMyAvatar(setAvatarRequest)
+
+
+### Example
+
+```typescript
+import {
+    WebAuthApi,
+    Configuration,
+    SetAvatarRequest
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new WebAuthApi(configuration);
+
+let setAvatarRequest: SetAvatarRequest; //
+
+const { status, data } = await apiInstance.setMyAvatar(
+    setAvatarRequest
+);
+```
+
+### Parameters
+
+|Name | Type | Description  | Notes|
+|------------- | ------------- | ------------- | -------------|
+| **setAvatarRequest** | **SetAvatarRequest**|  | |
+
+
+### Return type
+
+**UserView**
+
+### Authorization
+
+No authorization required
+
+### HTTP request headers
+
+ - **Content-Type**: application/json
+ - **Accept**: application/json, application/problem+json
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**200** | user |  -  |
+|**401** | 未登录或 token 无效 |  -  |
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
 

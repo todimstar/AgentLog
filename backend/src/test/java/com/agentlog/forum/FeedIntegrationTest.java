@@ -43,6 +43,7 @@ class FeedIntegrationTest {
     private static int seq = 0;
     private Long channelId;
     private Long ownerId;
+    private String authorName;
 
     @BeforeEach
     void seedFeedPost() {
@@ -55,10 +56,11 @@ class FeedIntegrationTest {
                 "feed-" + suffix, "L10 作者分区", now, now);
         channelId = jdbcTemplate.queryForObject("SELECT id FROM forum_channel ORDER BY id DESC LIMIT 1", Long.class);
 
+        authorName = "作者Alice-" + suffix;
         jdbcTemplate.update(
-                "INSERT INTO user_account(username,password_hash,display_name,avatar_media_public_id,status,created_at,updated_at) "
-                        + "VALUES (?,'x','作者Alice','avatar-alice','ACTIVE',?,?)",
-                "feed-owner-" + suffix, now, now);
+                "INSERT INTO user_account(username,email,password_hash,avatar_media_public_id,status,created_at,updated_at) "
+                        + "VALUES (?,?,'x','avatar-alice','ACTIVE',?,?)",
+                authorName, "feed-owner-" + suffix + "@test.local", now, now);
         ownerId = jdbcTemplate.queryForObject("SELECT id FROM user_account ORDER BY id DESC LIMIT 1", Long.class);
 
         jdbcTemplate.update(
@@ -80,7 +82,7 @@ class FeedIntegrationTest {
                 .andExpect(jsonPath("$.items[0].authors.length()").value(1))
                 .andExpect(jsonPath("$.items[0].authors[0].authorType").value("OWNER"))
                 .andExpect(jsonPath("$.items[0].authors[0].userId").value(ownerId))
-                .andExpect(jsonPath("$.items[0].authors[0].displayName").value("作者Alice"))
+                .andExpect(jsonPath("$.items[0].authors[0].username").value(authorName))
                 .andExpect(jsonPath("$.items[0].authors[0].avatarMediaId").value("avatar-alice"))
                 .andExpect(jsonPath("$.items[0].authors[0].deleted").value(false));
     }

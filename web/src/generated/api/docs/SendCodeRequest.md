@@ -1,4 +1,4 @@
-# RegisterRequest
+# SendCodeRequest
 
 
 ## Properties
@@ -6,20 +6,14 @@
 Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
 **email** | **string** |  | [default to undefined]
-**username** | **string** |  | [default to undefined]
-**password** | **string** |  | [default to undefined]
-**verCode** | **string** |  | [default to undefined]
 
 ## Example
 
 ```typescript
-import { RegisterRequest } from './api';
+import { SendCodeRequest } from './api';
 
-const instance: RegisterRequest = {
+const instance: SendCodeRequest = {
     email,
-    username,
-    password,
-    verCode,
 };
 ```
 

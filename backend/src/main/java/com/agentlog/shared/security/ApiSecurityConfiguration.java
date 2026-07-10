@@ -41,6 +41,7 @@ public class ApiSecurityConfiguration {
                         .ignoringRequestMatchers(           // ← 加这个
                                 "/api/v1/web/auth/register",
                                 "/api/v1/web/auth/login",
+                                "/api/v1/web/auth/send-code",
                                 "/api/v1/web/csrf"))
                 // Session 策略：需要时创建（登录后保存认证用）。区别于旧项目的 STATELESS。
                 .sessionManagement(session -> session
@@ -53,6 +54,7 @@ public class ApiSecurityConfiguration {
                         .requestMatchers("/actuator/health", "/api/v1/system/ping").permitAll()
                         .requestMatchers("/api/v1/web/csrf").permitAll()
                         .requestMatchers("/api/v1/web/auth/register", "/api/v1/web/auth/login").permitAll()
+                        .requestMatchers("/api/v1/web/auth/send-code").permitAll()
                         .requestMatchers("/api/v1/public/**").permitAll()
                         // Swagger UI 接口文档查看器：放行【文档页】本身（本地调试用）。
                         // 注意：只放行文档页，业务接口仍需登录+CSRF——安全没松。生产环境应按 profile 收紧。

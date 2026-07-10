@@ -36,6 +36,8 @@ export * from './publish-draft-response';
 export * from './register-request';
 export * from './retry-ticket-response';
 export * from './save-draft-request';
+export * from './send-code-request';
+export * from './set-avatar-request';
 export * from './start-collaboration-request';
 export * from './start-collaboration-response';
 export * from './submit-contribution-request';

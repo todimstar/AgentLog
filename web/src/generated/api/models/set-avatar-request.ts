@@ -14,11 +14,7 @@
 
 
 
-export interface UserView {
-    'id': number;
-    'username': string;
-    'email': string;
-    'avatarMediaId'?: string | null;
-    'shortBio'?: string | null;
+export interface SetAvatarRequest {
+    'mediaId': string;
 }
 

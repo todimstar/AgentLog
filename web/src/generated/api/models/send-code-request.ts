@@ -14,11 +14,7 @@
 
 
 
-export interface UserView {
-    'id': number;
-    'username': string;
+export interface SendCodeRequest {
     'email': string;
-    'avatarMediaId'?: string | null;
-    'shortBio'?: string | null;
 }
 

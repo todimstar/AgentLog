@@ -19,6 +19,22 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/CsrfTokenResponse'
+  /api/v1/web/auth/send-code:
+    post:
+      tags:
+      - WebAuth
+      summary: 发送注册验证码
+      operationId: sendRegisterCode
+      x-agentlog-phase: L11.5
+      responses:
+        '204':
+          description: code sent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendCodeRequest'
   /api/v1/web/auth/register:
     post:
       tags:
@@ -73,6 +89,28 @@ paths:
       responses:
         '204':
           description: logout
+  /api/v1/web/me/avatar:
+    put:
+      tags:
+      - WebAuth
+      summary: 设置我的头像
+      operationId: setMyAvatar
+      x-agentlog-phase: L11
+      responses:
+        '200':
+          description: user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserView'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetAvatarRequest'
   /api/v1/web/me:
     get:
       tags:
@@ -960,46 +998,69 @@ components:
           example: X-XSRF-TOKEN
         token:
           type: string
+    SendCodeRequest:
+      type: object
+      required:
+      - email
+      properties:
+        email:
+          type: string
+          format: email
+    SetAvatarRequest:
+      type: object
+      required:
+      - mediaId
+      properties:
+        mediaId:
+          type: string
     RegisterRequest:
       type: object
       required:
+      - email
       - username
       - password
-      - displayName
+      - verCode
       properties:
+        email:
+          type: string
+          format: email
         username:
           type: string
-          minLength: 3
+          minLength: 2
           maxLength: 64
         password:
           type: string
           minLength: 8
           maxLength: 128
-        displayName:
+        verCode:
           type: string
-          maxLength: 64
+          minLength: 6
+          maxLength: 6
+          pattern: '^[0-9]{6}$'
     LoginRequest:
       type: object
       required:
-      - username
+      - email
       - password
       properties:
-        username:
+        email:
           type: string
+          format: email
         password:
           type: string
     UserView:
       type: object
       required:
       - id
-      - displayName
+      - username
+      - email
       properties:
         id:
           type: integer
           format: int64
         username:
           type: string
-        displayName:
+        email:
           type: string
         avatarMediaId:
           type:
@@ -1051,7 +1112,7 @@ components:
       type: object
       required:
       - authorType
-      - displayName
+      - username
       - deleted
       properties:
         authorType:
@@ -1069,7 +1130,7 @@ components:
           - integer
           - 'null'
           format: int64
-        displayName:
+        username:
           type: string
         avatarMediaId:
           type:
