@@ -160,7 +160,7 @@ public class DevicePairingService {
         }
         // 已消费或其它非 CONFIRMED 态：deviceCode 一次性，防重放。
         if (!PairingStatus.CONFIRMED.getCode().equals(pairing.getStatus())) {//因为来到这里之下的就是已批准的才继续操作，非批准那就是已消费态，是重放攻击/网络波动
-            throw new ApiException(ApiStatus.PAIRING_ALREADY_HANDLED);
+            throw new ApiException(ApiStatus.PAIRING_ALREADY_HANDLED);  //CLI方只要收到不是200ok就报错
         }
 
         // 已确认 → 签发 OwnerAccessToken + RefreshToken（明文只回一次，库存 digest）。
