@@ -5,3 +5,9 @@ spring:
     # 139 邮箱 SMTP 授权码登录（不是登录密码）。留空则 EmailVerificationService 降级：验证码只打后端日志，不发真邮件。
     username: your-account@139.com
     password: your-smtp-auth-code
+
+# L12：opaque 令牌 pepper（HMAC 密钥）。本地随便填一个非空长串即可；生产走 env var AGENTLOG_TOKEN_PEPPER。
+# 不填则设备配对换 token 时会因 pepper 为空报错。
+agentlog:
+  token:
+    pepper: change-me-to-any-long-random-local-string

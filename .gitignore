@@ -18,3 +18,7 @@ backend/src/main/resources/application-local.yml
 # 视频旁白 mp3 生成用 venv（edge-tts，生成期工具，运行期零依赖）
 .venv-tts/
 backend/src/magic-L11.5/06-assets/parts/
+backend/src/magic-L12/06-assets/parts/
+
+# maven-shade-plugin 副产物（CLI 打包生成，不入库）
+cli/dependency-reduced-pom.xml

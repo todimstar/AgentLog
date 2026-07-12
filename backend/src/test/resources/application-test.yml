@@ -7,3 +7,9 @@ spring:
     # 排除 Modulith 的 JDBC 事件发布自动配置：它会在启动期连库建事件表，
     # 与本测试无关，且其建表脚本（V013）本课还没引入，留到 L17。
     exclude: org.springframework.modulith.events.jdbc.JdbcEventPublicationAutoConfiguration
+
+# L12：令牌 pepper（生产走 env var，测试用固定值——只需非空即可算 HMAC 摘要，
+# 测试内自洽：同一 pepper 生成与校验，不涉及真实安全）。
+agentlog:
+  token:
+    pepper: test-only-pepper-not-a-secret

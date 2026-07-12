@@ -89,6 +89,11 @@ agentlog:
     agent-acting-ttl: PT1H
     handoff-ttl: PT24H
     attempt-lease-ttl: PT15M
+    device-pairing-ttl: PT10M       # L12：配对码有效期（10 分钟，过期即弃）
+  # L12：设备配对——CLI auth login 后返回给 CLI 打印的浏览器批准页地址。
+  # 开发默认指向前端 Vite(5173) 的 hash 路由；生产由后端服务 SPA 时改为同源绝对地址。
+  pairing:
+    verification-uri: ${AGENTLOG_PAIRING_VERIFICATION_URI:http://localhost:5173/#/cli-pair}
   worker:
     expired-attempt:
       interval: PT30S

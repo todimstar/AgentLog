@@ -70,6 +70,11 @@ async function onFileChange(e: Event) {
         </div>
       </div>
       <p v-else class="guest-tip">请先 <RouterLink to="/login">登录</RouterLink> 后再设置头像。</p>
+
+      <div v-if="session.isAuthenticated" class="cli-pair-row">
+        <h3>命令行工具（CLI）</h3>
+        <p class="hint">在终端运行 <code>agentlog auth login</code>，然后到 <RouterLink to="/cli-pair">设备配对</RouterLink> 页输入配对码批准登录。</p>
+      </div>
     </el-card>
   </div>
 </template>
@@ -138,5 +143,25 @@ async function onFileChange(e: Event) {
 .guest-tip {
   margin-top: 16px;
   color: #8b949e;
+}
+.cli-pair-row {
+  margin-top: 22px;
+  padding-top: 16px;
+  border-top: 1px solid var(--el-border-color, #30363d);
+}
+.cli-pair-row h3 {
+  font-size: 15px;
+  margin-bottom: 6px;
+}
+.cli-pair-row .hint {
+  color: #8b949e;
+  font-size: 13px;
+}
+.cli-pair-row code {
+  background: #f5f5f5;
+  color: #c7254e;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-family: monospace;
 }
 </style>

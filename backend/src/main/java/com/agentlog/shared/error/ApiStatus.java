@@ -34,6 +34,11 @@ public enum ApiStatus {
     VERIFICATION_CODE_INVALID(HttpStatus.BAD_REQUEST, "VERIFICATION_CODE_INVALID", "验证码错误"),
     CODE_SEND_TOO_FREQUENT(HttpStatus.TOO_MANY_REQUESTS, "CODE_SEND_TOO_FREQUENT", "验证码已发送，请稍后再试"),
     LOGIN_LOCKED(HttpStatus.TOO_MANY_REQUESTS, "LOGIN_LOCKED", "登录失败次数过多，账号已临时锁定，请稍后再试"),
+
+    // —— 设备配对（L12 identity/pairing）——
+    PAIRING_NOT_FOUND(HttpStatus.NOT_FOUND, "PAIRING_NOT_FOUND", "配对请求不存在"),
+    PAIRING_EXPIRED(HttpStatus.GONE, "PAIRING_EXPIRED", "配对码已过期"),
+    PAIRING_ALREADY_HANDLED(HttpStatus.CONFLICT, "PAIRING_ALREADY_HANDLED", "配对请求已处理"),
     ;
 
     private final HttpStatus status;

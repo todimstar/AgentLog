@@ -6,6 +6,37 @@
 > L06–L11.5 条目为 2026-07-09 断更补录：由 11 个挖掘子代理逐行解析 58 个会话转录（157 条变更明细，
 > 在 `docs/changelog-evidence/mine*.json`，含续档分叉去重）与 git 全史交叉核实而成。
 
+## 0.1.0-SNAPSHOT - L12 CLI 与浏览器设备配对（OAuth 设备授权流 · 待提交）
+
+日期：2026-07-11
+
+### Added
+- **迁移 V010**（`V010__create_device_pairing.sql`）：三表——`client_installation`（设备/CLI 注册·长期，installation_code 唯一）+ `device_pairing_request`（握手票据·一次性，deviceCode 存 `BINARY(32)` HMAC 摘要、userCode 明文短码、10min 过期）+ `owner_access_session`（配对成功签发的 owner 令牌会话，存 access/refresh 双摘要）。编号 V010（非课程卡 V007，DRIFT D-02）。
+- **令牌基建** `shared/security/TokenService`（opaque token 生成 + HMAC-SHA256(pepper) 摘要，脱库不可逆推）+ `TokenProperties`（pepper + 各 TTL，绑定已预置的 `agentlog.token.*`）——CLI/Agent 双轨认证地基。
+- **identity/pairing 子命名空间**（模块归属定案：物理模块树无 pairing、模块契约归 IdentityFacade、赶工版先例三口径一致 → identity 内子命名空间，预留未来抽独立 access 模块接缝）：`DevicePairingService`（create/confirm/exchange，注入 Clock 可测）+ `Cli/WebDevicePairingController` + 5 DTO + 3 DO/Mapper + 3 状态字典（PairingStatus/InstallationStatus/OwnerSessionStatus，做法A 仿 MediaStatus）。
+- **端点**：`POST /api/v1/cli/device-pairings`（匿名·发起）、`.../token`（匿名·轮询 PENDING/APPROVED/EXPIRED）、**`POST /api/v1/web/device-pairings/confirm`**（登录态+CSRF·浏览器确认，D-08 新增，currentUserId 从 Session 派生防越权）。错误码 `PAIRING_NOT_FOUND`(404)/`PAIRING_EXPIRED`(410)/`PAIRING_ALREADY_HANDLED`(409)。
+- **CLI 模块首次出代码**（`agentlog-cli`）：`AgentLogCli`(picocli 入口) + `AuthCommand`(login 设备流 / status) + `ApiClient`(JDK HttpClient) + `CliConfig`(config.json 非密) + `CredentialStore`(credentials.json 密，尽力收紧权限) + `CliPaths`(支持 `AGENTLOG_HOME` 覆盖——同机多 CLI/skill 各自隔离配对与凭据)。cli/pom 加 shade 插件产出可运行 fat-jar。
+- **前端** `DevicePairingPage.vue`（`/cli-pair` 路由，输 userCode 走 confirm，按错误码本地化提示）+ SettingsPage 加「命令行工具·设备配对」入口。
+- **教学**：`magic-L12/00-L12讲义.md`（深讲义·就地讲透两码分离/opaque+HMAC/一次性/双轨/D-08）+ 方案B视频 `06-L12…方案B-mp3.html`（edge-tts mp3 6.6min + 真进度条 seek + IDEA 高亮 + 字幕随焦点换边 + 片尾 5 题递进测验，真实源文件行号）+ `06-make-audio.py` + `AgentLog-L12.postman_collection.json`。
+
+### Changed
+- `ApiSecurityConfiguration`：2 个匿名 CLI 端点入 permitAll + `csrf().ignoringRequestMatchers`（仅这两个；确认端点照旧登录+CSRF）。令牌消费的独立 CLI 认证链（Chain 2）留 L13。
+- `application.yml`：token 段补 `device-pairing-ttl: PT10M` + 新增 `agentlog.pairing.verification-uri`（默认前端 5173 hash 路由）；`application-test.yml` 补测试 pepper；`application-local.yml.example` 补 pepper 说明。
+- 契约（活契约 `docs/api` + Pack 副本 `03-api`）：新增 confirm 端点 + `ConfirmPairingRequest` schema；Pack `endpoint-catalog.md` 补 confirm 行。
+
+### Verified
+- 后端 `./mvnw -pl backend test`：**37 绿**（新增 `DevicePairingIntegrationTest` 5 例：全链配对成功/过期 EXPIRED/一次性重放 409/错误 userCode 404/匿名确认 401；ModularityTest 边界通过、V010 未撞 FlywayMigrationTest 断言）。
+- CLI `./mvnw -pl cli test`：4 绿（installationCode 稳定性 / config 默认+记忆 / token roundtrip+过期判断 / config 与 credentials 分离不泄漏 token）；`java -jar agentlog-cli.jar auth status` 冒烟：stdout JSON + stderr 人类诊断分流正确、`--help` 列子命令。
+- 前端 `npm run build`：vue-tsc -b + vite build 通过（0 类型错）。
+- 方案B视频 Playwright 实测：加载零报错（除 favicon 404）、38 句时间轴与 timeline.js 匹配、真实行号高亮（L94–95 生成两码 / L99 存摘要）、字幕随焦点换边、6:37 音频加载。
+
+### Notes / 出处
+- 冻结面漂移 **D-08**（`16-codex/DRIFT-REGISTER.md`，重新冻结 **v1.1+drift-20260711**）：契约缺浏览器确认端点，新增并回写活契约 + Pack 副本 + endpoint-catalog。
+- 架构决策：①令牌模型 = **Opaque + 令牌表**（主人拍板）；②模块归属 = **identity/pairing 子命名空间**（调研物理模块树/模块契约/赶工版三口径 + 主人拍板，本机记忆 `pairing-module-placement`）；③令牌消费 Bearer 过滤器 + assume 机娘 = **L13**（本课只铸+存，不消费——单一职责）。
+- 子代理 429 逐层回退阶梯验证：opus 子代理 429 → 改 haiku 子代理一次通过（本机记忆 `subagent-mining-scheme` 已补全四档阶梯）。
+- 施工与验证 [会话 63bfb354（L12，2026-07-11 导师带练）]；参考赶工分支 lessons/L07-onward 同课实现（identity 内 PairingService/TokenService/CLI 五文件）交叉核实。
+- 待办：refresh 轮换 + Bearer 过滤器（L13）；配对码过期清理 Worker；主人本机 Postman/端到端前须设 `AGENTLOG_TOKEN_PEPPER` 或 `application-local.yml` pepper + 重启 8080 加载 V010。
+
 ## 0.1.0-SNAPSHOT - L11.5+ 安全加固 · 教学基建升级 · 文档树重新冻结（本批待提交）
 
 日期：2026-07-08 ~ 2026-07-09

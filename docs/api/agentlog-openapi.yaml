@@ -625,6 +625,26 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/ExchangePairingRequest'
+  /api/v1/web/device-pairings/confirm:
+    post:
+      tags:
+      - WebAuth
+      summary: 浏览器确认设备配对
+      description: 主人在浏览器登录后输入 CLI 显示的 userCode 批准设备（OAuth 设备授权流的用户验证步）。
+      operationId: confirmPairing
+      x-agentlog-phase: L12
+      security:
+      - webSession: []
+        csrfHeader: []
+      responses:
+        '204':
+          description: confirmed
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfirmPairingRequest'
   /api/v1/cli/agent-acting-sessions:
     post:
       tags:
@@ -1714,6 +1734,13 @@ components:
         accessExpiresAt:
           type: string
           format: date-time
+    ConfirmPairingRequest:
+      type: object
+      required:
+      - userCode
+      properties:
+        userCode:
+          type: string
     CreateActingSessionRequest:
       type: object
       required:

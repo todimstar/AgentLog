@@ -42,7 +42,11 @@ public class ApiSecurityConfiguration {
                                 "/api/v1/web/auth/register",
                                 "/api/v1/web/auth/login",
                                 "/api/v1/web/auth/send-code",
-                                "/api/v1/web/csrf"))
+                                "/api/v1/web/csrf",
+                                // L12：CLI 配对两端点匿名调用（CLI 无 Cookie/CSRF token），豁免 CSRF。
+                                // 注意只豁免这两个 CLI 端点；/web/device-pairings/confirm 仍需 CSRF（浏览器写）。
+                                "/api/v1/cli/device-pairings",
+                                "/api/v1/cli/device-pairings/token"))
                 // Session 策略：需要时创建（登录后保存认证用）。区别于旧项目的 STATELESS。
                 .sessionManagement(session -> session
                         .sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
@@ -56,6 +60,9 @@ public class ApiSecurityConfiguration {
                         .requestMatchers("/api/v1/web/auth/register", "/api/v1/web/auth/login").permitAll()
                         .requestMatchers("/api/v1/web/auth/send-code").permitAll()
                         .requestMatchers("/api/v1/public/**").permitAll()
+                        // L12：CLI 设备配对发起 + 轮询换 token 为匿名端点（CLI 尚未持有任何令牌，
+                        // 靠 deviceCode 一次性 + 10min 过期 + 库存 digest 自保）。仅这两个；其余 /cli/** 留 L13 令牌链保护。
+                        .requestMatchers("/api/v1/cli/device-pairings", "/api/v1/cli/device-pairings/token").permitAll()
                         // Swagger UI 接口文档查看器：放行【文档页】本身（本地调试用）。
                         // 注意：只放行文档页，业务接口仍需登录+CSRF——安全没松。生产环境应按 profile 收紧。
                         .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**").permitAll()
