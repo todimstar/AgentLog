@@ -151,11 +151,11 @@
     <details><summary><span class="lv lv2">②链路</span><code>auth login</code> 分哪几步？为什么中间要「轮询」？</summary>
       <div class="ans">四步（<code>AuthCommand.Login</code>）：① <code>L53</code> POST 发起配对拿 deviceCode+userCode+verificationUri；② <code>L66-67</code> 打印批准网址+配对码给你；③ <code>L73</code> 起<b>轮询循环</b>，每隔 pollInterval 秒 POST 问一次「批了没」；④ <code>L82</code> APPROVED → <code>L85</code> 存令牌返回。<b>为什么轮询</b>：CLI 不知道你什么时候在浏览器点批准，只能不停问——你在终端看到的那排小点（<code>L102</code>）就是 PENDING 时打的。</div></details>
     <details><summary><span class="lv lv2">③设计</span><code>config.json</code> 和 <code>credentials.json</code> 为什么分成两个文件？各存什么？</summary>
-      <div class="ans"><b>按「密 / 非密」分家</b>：<code>config.json</code>（<code>CliConfig</code>）存<b>非密</b>的 serverBaseUrl + installationCode；<code>credentials.json</code>（<code>CredentialStore</code>）存<b>密</b>的 owner access/refresh 令牌。分开的好处：可对 credentials 单独收紧文件权限（<code>L88</code> POSIX <code>rw-------</code>）、非密配置能放心人工查看/编辑、职责清晰。对齐 Pack 的 config.schema / credentials.schema 两份 schema。</div></details>
+      <div class="ans"><b>按「密 / 非密」分家</b>：<code>config.json</code>（<code>CliConfig</code>）存<b>非密</b>的 serverBaseUrl + installationCode；<code>credentials.json</code>（<code>CredentialStore</code>）存<b>敏感</b>的 owner access/refresh 令牌（<b>⚠ 明文存·非加密</b>）。分开的好处：可对 credentials 单独收紧文件权限（<code>L88</code> POSIX <code>rw-------</code>）、非密配置能放心人工查看/编辑、职责清晰。对齐 Pack 的 config.schema / credentials.schema 两份 schema。</div></details>
     <details><summary><span class="lv lv3">④设计</span>同一台机器跑多个 CLI（如 Claude Code + Codex）怎么互不干扰？<code>installationCode</code> 和 <code>AGENTLOG_HOME</code> 各起什么作用？</summary>
       <div class="ans"><b>installationCode</b>（<code>CliConfig L58</code>）= 这台 CLI 的设备身份，首次随机生成并持久化 → 每个 CLI 实例一个 → 后端按它建独立的 client_installation、独立配对、独立 owner 令牌。<b>AGENTLOG_HOME</b>（<code>CliPaths L23</code>）= 决定配置/凭据存哪个目录：每个 CLI / skill 设不同的 AGENTLOG_HOME，就各存各的、互不覆盖。两者配合实现「同机多 CLI 隔离」。（机娘身份的隔离是另一层：L13 assume 按 agent+tool+run 区分。）</div></details>
     <details><summary><span class="lv lv4">⑤安全</span>令牌在 CLI 侧怎么保护？为什么 stdout 和 stderr 要分开？</summary>
-      <div class="ans"><b>令牌保护</b>：只写 <code>credentials.json</code>、<b>绝不打印</b>到控制台/日志（翻遍 login 找不到 print 令牌的行）；写文件尽力收紧权限仅本人可读（<code>L88</code>，Windows 不支持则优雅跳过，生产改 ACL）。<b>stdout/stderr 分开</b>（cli-spec）：<b>stdout 出机器可读 JSON</b>（供脚本/AI 工具解析），<b>stderr 出人类诊断</b>（提示、进度点、错误）——这样管道里 <code>agentlog ... | jq</code> 拿到的是干净 JSON，不被提示文字污染。刷新令牌（refresh）换新 access 是 L13。</div></details>
+      <div class="ans"><b>令牌保护</b>（<b>⚠ 明文存·非加密</b>——V0 无静态加密，靠下面两道非加密的墙，生产才接 Keychain）：只写 <code>credentials.json</code>、<b>绝不打印</b>到控制台/日志（翻遍 login 找不到 print 令牌的行）；写文件尽力收紧权限仅本人可读（<code>L88</code>，Windows 不支持则优雅跳过，生产改 ACL）。<b>stdout/stderr 分开</b>（cli-spec）：<b>stdout 出机器可读 JSON</b>（供脚本/AI 工具解析），<b>stderr 出人类诊断</b>（提示、进度点、错误）——这样管道里 <code>agentlog ... | jq</code> 拿到的是干净 JSON，不被提示文字污染。刷新令牌（refresh）换新 access 是 L13。</div></details>
     <button class="close" id="quizClose">关闭，回到视频</button>
   </div>
 </div>
@@ -399,7 +399,7 @@ public class AgentLogCli implements Runnable {
             throw new IllegalStateException("保存 token 失败: " + e.getMessage(), e);
         }
     }`,
-      detail:"<b>密</b>的那半在 <code>credentials.json</code>。<b>L33-35</b> 把两个令牌 + 过期时间写进去。<b>铁律：令牌只写文件、绝不打印</b>到控制台/日志（翻遍 login 找不到 print 令牌的行）。写文件时 <code>save()</code> 还调 <code>tightenPermissions()</code>（<code>L88</code>）尽力收紧到仅本人可读；Windows 不支持 POSIX 则优雅跳过——学习项目从简，生产用 ACL。",
+      detail:"<b>敏感</b>的那半在 <code>credentials.json</code>（<b>明文存·非加密</b>）。<b>L33-35</b> 把两个令牌 + 过期时间写进去。<b>铁律：令牌只写文件、绝不打印</b>到控制台/日志（翻遍 login 找不到 print 令牌的行）。写文件时 <code>save()</code> 还调 <code>tightenPermissions()</code>（<code>L88</code>）尽力收紧到仅本人可读；Windows 不支持 POSIX 则优雅跳过——学习项目从简，生产用 ACL/Keychain。",
       sentences:[
         { t:"密的那半在 CredentialStore，credentials.json。三十三到三十五行把两个令牌和过期时间写进去。", lines:[33,34,35] },
         { t:"关键一条铁律：令牌只写文件，绝不打印到控制台或日志。你翻遍 login 的代码，找不到一行把令牌打印出来的。", focus:"detail" },

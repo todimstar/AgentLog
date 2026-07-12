@@ -10,7 +10,9 @@ import java.time.Instant;
 /**
  * CLI 本地凭据存储 —— credentials.json（对齐 Pack 07-cli/schemas/credentials.schema.json）。
  *
- * 只存密：owner access/refresh token + access 过期时间。
+ * 只存敏感数据：owner access/refresh token + access 过期时间。
+ *   ⚠ 是【明文存】不是加密——V0 靠「文件权限 rw------- + 绝不打印」两道**非加密**的墙保护；
+ *   真正的静态加密（接系统 Keychain）是后续/生产的事（credential-policy V0）。
  * 安全（credential-policy「不打印秘密、日志过滤」）：token 只写文件、绝不打印到控制台/日志。
  *   写文件时尽力收紧权限为仅本人可读（POSIX rw-------）；Windows 不支持 POSIX 会被优雅跳过
  *   （学习项目从简，生产应改用 ACL 收紧，见 credential-policy V0）。
