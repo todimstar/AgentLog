@@ -1,0 +1,707 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>L12 CLI 与浏览器设备配对 · 方案B（edge-tts 预生成 mp3 · 真进度条）</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;background:#0d1117;color:#e6edf3;height:100vh;display:flex;flex-direction:column;overflow:hidden;font-size:14px}
+  header{padding:9px 16px;background:#161b22;border-bottom:1px solid #30363d;display:flex;align-items:center;gap:14px;flex-shrink:0}
+  header h1{font-size:15px}
+  .legend{display:flex;gap:6px;flex-wrap:wrap;margin-left:6px}
+  .lg{font-size:11px;padding:2px 8px;border-radius:10px;background:#21262d;border:1px solid #30363d;color:#8b949e}
+  .lg.on{color:#fff}
+  .spacer{flex:1}
+  #voice{font-size:11px;color:#7d8590}
+  .main{flex:1;display:flex;min-height:0}
+  .left{flex:1.35;display:flex;flex-direction:column;min-width:0;border-right:1px solid #30363d}
+  .tree{background:#0d1117;border-bottom:1px solid #30363d;max-height:30%;overflow:auto;padding:8px 0}
+  .tree .th{font-size:11px;color:#7d8590;padding:2px 14px 6px;text-transform:uppercase;letter-spacing:.5px}
+  .node{font-family:"SF Mono",Consolas,monospace;font-size:12.5px;padding:2px 14px;white-space:nowrap;color:#adbac7;cursor:pointer}
+  .node.dir{cursor:default;color:#7d8590}
+  .node .ic{opacity:.7;margin-right:5px}
+  .node.file.on{background:#132a3e;color:#79c0ff;border-left:3px solid #1f6feb;padding-left:11px}
+  .breadcrumb{font-family:monospace;font-size:11.5px;color:#7d8590;padding:6px 16px;background:#0d1117;border-bottom:1px solid #21262d;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .breadcrumb b{color:#f0b429}
+  .code{flex:1;overflow:auto;background:#0d1117;padding:10px 0;transition:box-shadow .3s}
+  .code.glow{box-shadow:inset 0 0 0 2px #3fb950}
+  pre.code-pre{font-family:"SF Mono",Consolas,"Cascadia Code",monospace;font-size:13px;line-height:1.6}
+  .line{display:flex;padding:0 16px;white-space:pre;transition:background .25s,opacity .25s;border-left:3px solid transparent}
+  .line .ln{color:#484f58;width:38px;text-align:right;margin-right:14px;user-select:none;flex-shrink:0}
+  .line.hot{background:#1f2d1f;border-left-color:#3fb950;animation:pulse .8s ease 1}
+  .line.hot .ln{color:#3fb950;font-weight:700}
+  .line.dim{opacity:.30}
+  @keyframes pulse{0%{background:#2e4a2e}100%{background:#1f2d1f}}
+  /* IDEA Darcula 风语法高亮 */
+  .tk-kw{color:#cc7832;font-weight:600}
+  .tk-str{color:#6a8759}
+  .tk-cm{color:#7a7a73;font-style:italic}
+  .tk-ann{color:#bbb529}
+  .tk-num{color:#6897bb}
+  .tk-call{color:#ffc66d}
+  .tk-type{color:#a9b7c6}
+  .right{flex:1;display:flex;flex-direction:column;min-width:320px}
+  .flow{flex:0 0 auto;max-height:46%;overflow:auto;background:#161b22;padding:12px 14px;border-bottom:1px solid #30363d}
+  .flow .th{font-size:11px;color:#7d8590;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px}
+  .lane{display:flex;align-items:center;gap:8px;margin-bottom:9px}
+  .lane-name{font-size:11.5px;width:104px;flex-shrink:0;color:#8b949e;text-align:right;line-height:1.2}
+  .lane.on .lane-name{color:#fff;font-weight:600}
+  .chips{display:flex;gap:6px;flex-wrap:wrap}
+  .chip{font-size:11px;padding:3px 9px;border-radius:12px;background:#21262d;border:1px solid #30363d;color:#8b949e;white-space:nowrap;cursor:pointer}
+  .chip.done{color:#3fb950;border-color:#238636}
+  .chip.on{background:#3fb950;color:#0d1117;border-color:#3fb950;font-weight:700;box-shadow:0 0 0 3px rgba(63,185,80,.25)}
+  .detail{flex:1;overflow:auto;padding:16px 18px;background:#0d1117;transition:box-shadow .3s}
+  .detail.glow{box-shadow:inset 0 0 0 2px #f0b429}
+  .detail .th{font-size:11px;color:#3fb950;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px;font-weight:600}
+  .detail-body{font-size:14.5px;line-height:1.85;color:#c9d1d9}
+  .detail-body b{color:#f0b429}
+  .detail-body code{background:#161b22;padding:1px 5px;border-radius:4px;font-family:monospace;font-size:12.5px;color:#79c0ff}
+  .subtitle{flex-shrink:0;background:#010409;border-top:1px solid #30363d;padding:12px 24px;min-height:64px;display:flex;align-items:center;gap:16px}
+  .focusbadge{flex-shrink:0;font-size:12px;padding:4px 10px;border-radius:12px;background:#161b22;border:1px solid #30363d;color:#8b949e;white-space:nowrap;transition:all .25s}
+  .focusbadge.code{color:#3fb950;border-color:#238636}
+  .focusbadge.detail{color:#f0b429;border-color:#9e6a03}
+  .subtitle .txt{font-size:17px;line-height:1.6;color:#f0f6fc;transition:all .25s}
+  /* 字幕跟随注视区换边：看左侧代码 → [字幕, 徽章] 靠左；看右侧详解 → [徽章, 字幕] 靠右 */
+  .subtitle.focus-code .txt{order:1;text-align:left;margin-right:auto;max-width:58%}
+  .subtitle.focus-code .focusbadge{order:2}
+  .subtitle.focus-detail .focusbadge{order:1}
+  .subtitle.focus-detail .txt{order:2;text-align:right;margin-left:auto;max-width:58%}
+  /* 片尾测验 */
+  .quiz-mask{position:fixed;inset:0;background:rgba(1,4,9,.82);display:none;align-items:center;justify-content:center;z-index:30}
+  .quiz-mask.show{display:flex}
+  .quiz{width:min(860px,92vw);max-height:86vh;overflow:auto;background:#161b22;border:1px solid #30363d;border-radius:12px;padding:22px 26px}
+  .quiz h2{font-size:17px;margin-bottom:4px;color:#f0f6fc}
+  .quiz .sub{font-size:12px;color:#7d8590;margin-bottom:14px}
+  .quiz details{border:1px solid #30363d;border-radius:8px;margin-bottom:10px;background:#0d1117}
+  .quiz summary{cursor:pointer;padding:11px 14px;font-size:14.5px;line-height:1.65;color:#e6edf3;list-style:none}
+  .quiz summary::before{content:'▸ ';color:#3fb950}
+  .quiz details[open] summary::before{content:'▾ '}
+  .quiz .lv{font-size:11px;padding:1px 8px;border-radius:9px;margin-right:8px;border:1px solid}
+  .quiz .lv1{color:#3fb950;border-color:#238636}.quiz .lv2{color:#58a6ff;border-color:#1f6feb}.quiz .lv3{color:#f0b429;border-color:#9e6a03}.quiz .lv4{color:#ff7b72;border-color:#da3633}
+  .quiz .ans{padding:4px 16px 14px;font-size:13.5px;line-height:1.9;color:#c9d1d9;border-top:1px dashed #30363d}
+  .quiz .ans b{color:#f0b429}.quiz .ans code{background:#161b22;padding:1px 5px;border-radius:4px;font-family:monospace;font-size:12px;color:#79c0ff}
+  .quiz .close{margin-top:6px;width:100%}
+  .controls{flex-shrink:0;padding:10px 16px;background:#161b22;border-top:1px solid #30363d}
+  .progress{position:relative;height:14px;border-radius:4px;margin-bottom:10px;background:#21262d;cursor:pointer;overflow:hidden}
+  .progress .fill{position:absolute;left:0;top:0;bottom:0;background:linear-gradient(90deg,#238636,#3fb950);width:0;pointer-events:none}
+  .progress .tick{position:absolute;top:0;bottom:0;width:1px;background:#0d1117;pointer-events:none;opacity:.75}
+  .progress .tick.step{width:2px;background:#010409;opacity:1}
+  .progress:hover{filter:brightness(1.2)}
+  .btns{display:flex;align-items:center;gap:9px}
+  button{background:#21262d;color:#e6edf3;border:1px solid #30363d;border-radius:6px;padding:7px 13px;cursor:pointer;font-size:14px}
+  button:hover{background:#30363d}
+  button.primary{background:#238636;border-color:#2ea043;font-weight:600}
+  button:disabled{opacity:.4;cursor:not-allowed}
+  label{font-size:12px;color:#7d8590;display:flex;align-items:center;gap:5px}
+  input[type=range]{width:110px}
+  .meta{font-size:12px;color:#7d8590}
+  .time{font-family:monospace;font-size:12px;color:#adbac7}
+  .hint{font-size:11px;color:#7d8590;margin-top:8px}
+  .missing{background:#3d1d1d;border:1px solid #f85149;color:#ffa198;padding:8px 12px;border-radius:6px;font-size:12.5px;margin-bottom:8px;display:none}
+  kbd{background:#21262d;border:1px solid #30363d;border-radius:4px;padding:0 5px;font-family:monospace;font-size:11px;color:#adbac7}
+</style>
+</head>
+<body>
+<header>
+  <h1>🎬 L12 CLI 与浏览器设备配对（OAuth 设备授权流）· 方案B</h1>
+  <div class="legend" id="legend"></div>
+  <div class="spacer"></div>
+  <span id="voice">🎧 预生成 mp3 · 云健（edge-tts）</span>
+</header>
+
+<div class="main">
+  <div class="left">
+    <div class="tree"><div class="th">📁 涉及文件（行号=真实源文件行号）</div><div id="tree"></div></div>
+    <div class="breadcrumb" id="crumb">— 点击 ▶ 开始 —</div>
+    <div class="code" id="codePanel"><pre class="code-pre" id="code"></pre></div>
+  </div>
+  <div class="right">
+    <div class="flow"><div class="th">🧭 四条线 · 点节点可跳转</div><div id="flow"></div></div>
+    <div class="detail" id="detailPanel"><div class="th">💡 深入详解</div><div class="detail-body" id="detail">方案B（预生成 mp3）：旁白是 edge-tts 离线生成的一整条音频，所以这是<b>真·进度条</b>——任意位置点击秒级跳转、暂停从当前字续播（不回头）、<b>语速实时调</b>（0.6×~2.0×，立即生效不重读）。字幕/代码高亮由音频时间轴驱动，讲到哪句左侧高亮哪几行真实行号。快捷键：<kbd>空格</kbd> 播放/暂停，<kbd>←</kbd><kbd>→</kbd> 上/下一句，<kbd>Shift+←/→</kbd> 上/下一步。</div></div>
+  </div>
+</div>
+
+<div class="subtitle focus-code" id="subtitleBar">
+  <span class="focusbadge" id="focusBadge">👀 焦点</span>
+  <span class="txt" id="subtitle">准备好了吗？点 ▶ 开始。本课讲：没有浏览器的 CLI，怎么借你的浏览器安全登录。</span>
+</div>
+
+<div class="controls">
+  <div class="missing" id="missing">⚠ 找不到 06-assets/L12-session.mp3 或 timeline.js —— 在仓库根目录运行 <code>.venv-tts/Scripts/python backend/src/magic-L12/06-make-audio.py</code> 生成后刷新本页。</div>
+  <div class="progress" id="progress"><div class="fill" id="fill"></div></div>
+  <div class="btns">
+    <button id="playBtn" class="primary">▶ 开始播放</button>
+    <button id="prevBtn" title="上一句（Shift=上一步）">⏮ 句</button>
+    <button id="nextBtn" title="下一句（Shift=下一步）">句 ⏭</button>
+    <button id="quizBtn" title="片尾测验（听完自动弹出）">📝 测验</button>
+    <span class="time" id="timeLabel">0:00 / 0:00</span>
+    <span class="spacer"></span>
+    <label>语速 <input type="range" id="speed" min="0.6" max="2.0" step="0.1" value="1.0"><span id="speedVal">1.0×</span></label>
+    <span class="meta" id="counter">步 0/0 · 句 0/0</span>
+  </div>
+  <div class="hint">进度条上细线=句边界、粗线=步边界，点任意位置精确跳转；语速立即生效（变速不变调）。代码为 IDEA 风语法高亮 + 真实源文件行号；字幕自动待在该注视的一侧下方。听完自动弹出 📝 递进测验。</div>
+</div>
+
+<audio id="au" src="06-assets/L12-session.mp3" preload="auto"></audio>
+
+<!-- 片尾测验：由浅入深 5 题，点开看答案。听完音频自动弹出，也可随时点 📝 测验。 -->
+<div class="quiz-mask" id="quizMask">
+  <div class="quiz">
+    <h2>📝 课后测验 · CLI 设备配对（OAuth 设备授权流）</h2>
+    <div class="sub">由浅入深 5 题。先自己说出答案再点开对照——能讲顺 = 真懂了，卡壳的题回到对应线重听。</div>
+    <details><summary><span class="lv lv1">①基础</span>设备流为什么要 <code>deviceCode</code> 和 <code>userCode</code> 两个码？各自给谁用、长什么样？</summary>
+      <div class="ans"><b>deviceCode</b>：长随机串，<b>给机器</b>（CLI）私藏、轮询换令牌用；<b>userCode</b>：短码（<code>ABCD-EFGH</code>），<b>给人</b>在浏览器手输确认用。拆两个是因为「<b>能安全轮询的通道</b>」和「<b>人能手输的通道</b>」安全属性不同——短码熵低不能当长期凭证，长码人手打不动。这是 RFC 8628 的核心洞察 → 对应视频「线0·三方握手」。</div></details>
+    <details><summary><span class="lv lv2">②链路</span>从 <code>auth login</code> 到 CLI 拿到令牌，三方握手是哪三步？「浏览器确认」那步为什么必须登录态？</summary>
+      <div class="ans">① CLI <code>POST /cli/device-pairings</code>（匿名）→ 拿 deviceCode+userCode+verificationUri；② 你在浏览器（已登录）<code>POST /web/device-pairings/confirm</code> 输 userCode 批准；③ CLI 轮询 <code>POST /cli/device-pairings/token</code> 换 owner 令牌。<b>确认必须登录态</b>：<code>currentUserId = CurrentUser.requireId()</code>（<code>WebDevicePairingController L34</code>）从 Session 派生，<b>绝不让前端传</b>——否则能把别人的配对确认到自己名下（防越权）。</div></details>
+    <details><summary><span class="lv lv3">③原理</span>令牌为什么库里只存 HMAC 摘要、不存明文？<code>pepper</code> 起什么作用？为什么用 HMAC 而不是纯 SHA-256？</summary>
+      <div class="ans">明文令牌只在响应回客户端<b>一次</b>，库存 <code>HMAC-SHA256(pepper, 明文)</code> 的 <code>BINARY(32)</code> 摘要（<code>TokenService L46</code>）。<b>不存明文</b>：脱库时攻击者拿到的只是摘要，没 <b>pepper</b>（服务端密钥，走 env var 不进 git）算不出明文，无法冒用——同密码存 bcrypt，可验证不可逆推。<b>用 HMAC 不用纯哈希</b>：HMAC 带 pepper 这把密钥，挡住对短令牌的<b>彩虹表/预计算</b>撞库。这是 CLI/Agent 双轨认证的地基。</div></details>
+    <details><summary><span class="lv lv3">④设计</span><code>deviceCode</code> 换到令牌后为什么立刻置 <code>CONSUMED</code>？不这样会怎样？</summary>
+      <div class="ans"><code>exchangePairing</code> 成功后把 pairing 置 <b>CONSUMED</b>（<code>DevicePairingService L185</code>），同一 deviceCode 第二次来换直接 <b>409 PAIRING_ALREADY_HANDLED</b>。不这样：谁截获了 deviceCode 就能<b>反复换出多个有效令牌</b>。<b>一次性兑换券，用完即废</b>——防重放的命门（对应集成测试 <code>deviceCodeOneShot</code>）。另一半安全是「过期」：超 10min 置 EXPIRED（<code>L120/L154</code>）。</div></details>
+    <details><summary><span class="lv lv4">⑤综合</span>什么是「双轨认证」？本课签发的 owner 令牌为什么「还不能用」？L12 和 L13 怎么分工？</summary>
+      <div class="ans"><b>双轨认证</b>=按客户端类型分链：<b>浏览器走 Session+CSRF</b>（Cookie 认证，<code>/web/**</code>）、<b>CLI/Agent 走 opaque 令牌</b>（Bearer，<code>/cli/** /agent/**</code>）——L05 就埋下的设计。本课签发的 OwnerAccessToken <b>还没有过滤器去消费它</b>：<b>L12「铸令牌」</b>（配对握手+签发+落库），<b>L13「用令牌」</b>（Bearer 过滤器 Chain 2 + assume 机娘签 Chain 3 令牌 + refresh）。每课单一职责，所以本课两个 CLI 端点匿名、只往白名单加它俩。</div></details>
+    <button class="close" id="quizClose">关闭，回到视频</button>
+  </div>
+</div>
+
+<script src="06-assets/timeline.js"></script>
+<script>
+// ============ 内容模型（行号 = 2026-07-11 L12 施工后真实行号，可对照 IDE） ============
+const MODEL = {
+  threads: [
+    { id:"t0", name:"线0 三方握手" },
+    { id:"t1", name:"线1 令牌安全内幕" },
+    { id:"t2", name:"线2 状态机·防重放" },
+    { id:"t3", name:"线3 双轨认证边界" }
+  ],
+  fileTree: [
+    { path:"identity/pairing/application/DevicePairingService.java", label:"DevicePairingService" },
+    { path:"shared/security/TokenService.java", label:"TokenService" },
+    { path:"db/migration/V010__create_device_pairing.sql", label:"V010 迁移" },
+    { path:"shared/security/ApiSecurityConfiguration.java", label:"ApiSecurityConfiguration" },
+    { path:"identity/pairing/api/WebDevicePairingController.java", label:"WebDevicePairingController" },
+    { path:"identity/pairing/domain/PairingStatus.java", label:"PairingStatus" }
+  ],
+  steps: [
+    { thread:"t0", file:null, fileStart:null,
+      structurePath:"设备授权流 ▸ 三方握手大图", flowNode:"三方握手",
+      codeSnippet:`CLI（无浏览器）              后端                 浏览器（你已登录）
+   │  ① 发起配对 ───────────►│                          │
+   │ ◄─ deviceCode（长·机器私藏轮询）                     │
+   │    userCode（短·给人手输）                           │
+   │    verificationUri（批准网址）                       │
+   │  ② 打印：浏览器打开 URL，输入 userCode                │
+   │                         │       ③ 你输 userCode ──►│
+   │                         │ ◄──── 确认（Session+CSRF）┤
+   │  ④ 轮询 deviceCode ────►│  已确认 → 签发 owner 令牌   │
+   │ ◄─ ownerAccessToken ────┤     （明文只回一次）        │`,
+      detail:"本课是 M2「智能体接入层」开幕——让<b>没有浏览器的 CLI</b> 借你另一块屏幕上已登录的浏览器完成授权，用的是业界标准 <b>OAuth 2.0 设备授权流（RFC 8628）</b>（你在电视上登 Netflix、跑 <code>gh auth login</code> 就是它）。<b>两个码是精髓</b>：<code>deviceCode</code> 长、给机器轮询；<code>userCode</code> 短、给人手输——两条通道安全属性不同，所以分家。",
+      sentences:[
+        { t:"本课开场，AgentLog 进入新阶段：让没有浏览器的命令行工具，也能安全登录，用的是业界标准 OAuth 设备授权流。", focus:"detail" },
+        { t:"整个流程是三方握手：CLI 发起配对，后端发两个码；你在浏览器批准；CLI 再来换令牌。左边这张图就是全程。", lines:[2,7,9] },
+        { t:"关键在这两个码。deviceCode 是长的，给机器私藏轮询用；userCode 是短的，给你在浏览器手输。", lines:[3,4] },
+        { t:"为什么要拆两个？能安全轮询的通道，和人能手输的通道，安全属性不一样——短码不能当长期凭证，长码人打不动。这就是设备流的精髓。", focus:"detail" }
+      ] },
+
+    { thread:"t0", file:"identity/pairing/application/DevicePairingService.java", fileStart:75,
+      structurePath:"createPairing ▸ 发起配对·生成两码", flowNode:"① 发起配对",
+      codeSnippet:`    @Transactional
+    public CreatePairingResponse createPairing(CreatePairingRequest request) {
+        Instant now = Instant.now(clock);
+
+        // installation：同 installationCode 复用（一台设备多次配对不重复建），否则新建。
+        ClientInstallationDO installation = installationMapper.selectOne(
+                Wrappers.<ClientInstallationDO>lambdaQuery()
+                        .eq(ClientInstallationDO::getInstallationCode, request.installationCode()));
+        if (installation == null) {
+            installation = new ClientInstallationDO();
+            installation.setInstallationCode(request.installationCode());
+            installation.setDeviceName(request.deviceName());
+            installation.setStatus(InstallationStatus.PENDING.getCode());
+            installation.setCreatedAt(now);
+            installation.setUpdatedAt(now);
+            installationMapper.insert(installation);
+        }
+
+        // 生成 deviceCode（CLI 私藏）+ userCode（给人看）。
+        String deviceCode = tokenService.generateRawToken("device_");
+        String userCode = randomUserCode();
+
+        DevicePairingRequestDO pairing = new DevicePairingRequestDO();
+        pairing.setInstallationId(installation.getId());
+        pairing.setDeviceCodeDigest(tokenService.digest(deviceCode)); // 只存 digest
+        pairing.setUserCode(userCode);
+        pairing.setStatus(PairingStatus.PENDING.getCode());
+        pairing.setExpiresAt(now.plus(tokenProps.getDevicePairingTtl()));
+        pairing.setCreatedAt(now);
+        pairingMapper.insert(pairing);
+
+        int expiresIn = (int) tokenProps.getDevicePairingTtl().toSeconds();
+        return new CreatePairingResponse(deviceCode, userCode, verificationUri, expiresIn, POLL_INTERVAL_SECONDS);
+    }`,
+      detail:"第一步 <code>createPairing</code> 是<b>匿名</b>端点（CLI 还没任何令牌）。<b>L94/L95</b> 生成两个码；<b>L99</b> 存的是 <code>digest(deviceCode)</code> 摘要而非明文——明文只在 <b>L107</b> 的响应里回 CLI 一次。<code>installationCode</code> 复用保证一台设备不重复建安装记录；<code>verificationUri</code> 是给 CLI 打印给你的批准网址。",
+      sentences:[
+        { t:"第一步，CLI 发起配对，走这个 createPairing。它匿名调用，因为 CLI 此刻还没有任何令牌。", lines:[76] },
+        { t:"九十四行生成 deviceCode，九十五行生成 userCode，一个给机器，一个给人，正是刚才说的两个码。", lines:[94,95] },
+        { t:"九十九行是安全的第一个要点：库里存的不是 deviceCode 明文，是它的摘要；明文只在响应里回给 CLI 这一次。", lines:[99] },
+        { t:"同一台设备重复配对不会重复建安装记录，认 installationCode 复用；返回里还带上 verificationUri，就是让 CLI 打印给你的那个批准网址。", lines:[80,107] }
+      ] },
+
+    { thread:"t1", file:"shared/security/TokenService.java", fileStart:38,
+      structurePath:"generateRawToken / digest ▸ opaque + HMAC", flowNode:"令牌怎么生成",
+      codeSnippet:`    /** 生成明文 token：prefix + base64url(32 随机字节)。如 generateRawToken("device_")。 */
+    public String generateRawToken(String prefix) {
+        byte[] bytes = new byte[32];
+        RANDOM.nextBytes(bytes);
+        return prefix + URL_ENCODER.encodeToString(bytes);
+    }
+
+    /** 算 HMAC-SHA256(pepper, 明文token) → 32 字节摘要（存库）。 */
+    public byte[] digest(String rawToken) {
+        try {
+            Mac mac = Mac.getInstance("HmacSHA256");
+            mac.init(new SecretKeySpec(props.getPepper().getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
+            return mac.doFinal(rawToken.getBytes(StandardCharsets.UTF_8));
+        } catch (Exception e) {
+            throw new IllegalStateException("token 摘要计算失败", e);
+        }
+    }`,
+      detail:"<b>Opaque（不透明）令牌</b>=一串没有内部结构的随机字符串，服务端靠<b>查表</b>验证（对比 JWT 自带签名可自验证）。选 opaque 是为了<b>可即时吊销</b>。<b>L46 digest</b> 用 <code>HMAC-SHA256(pepper, 明文)</code>：库只存摘要，脱库也算不出明文（没 pepper）；<b>用 HMAC 不用纯哈希</b>——pepper 挡住彩虹表预计算。<code>pepper</code> 走 env var，不进 git。",
+      sentences:[
+        { t:"这个摘要怎么算的？看令牌基建 TokenService。三十九行生成明文令牌：前缀加三十二个随机字节的 base64。", lines:[39,40,41,42] },
+        { t:"四十六行的 digest 才是关键：用 HMAC-SHA256，拿服务端的 pepper 当密钥，把明文令牌算成三十二字节摘要，库里只存这个摘要。", lines:[46,48,49,50] },
+        { t:"为什么不存明文？万一脱库，攻击者拿到的只是摘要，没有 pepper 算不出明文，冒用不了。跟密码存 bcrypt 一个道理，可验证、不可逆推。", focus:"detail" },
+        { t:"为什么用 HMAC 不用纯哈希？HMAC 带了 pepper 这把密钥，挡住彩虹表预计算；pepper 走环境变量，绝不进 git。这是 CLI 和机娘双轨认证的地基。", lines:[49] }
+      ] },
+
+    { thread:"t1", file:"db/migration/V010__create_device_pairing.sql", fileStart:32,
+      structurePath:"device_pairing_request ▸ 摘要 BINARY(32) + 短码明文", flowNode:"表怎么存",
+      codeSnippet:`CREATE TABLE device_pairing_request (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  installation_id BIGINT NOT NULL,
+  device_code_digest BINARY(32) NOT NULL,          -- deviceCode 的 HMAC 摘要（明文只回 CLI 一次）
+  user_code VARCHAR(16) NOT NULL,                  -- 给人看的短码（浏览器里输），明文存（短期、低敏感）
+  status VARCHAR(32) NOT NULL,                      -- PENDING / CONFIRMED / CONSUMED / EXPIRED
+  confirmed_by_user_id BIGINT NULL,
+  expires_at DATETIME(3) NOT NULL,                 -- 配对码 10 分钟过期（验收项「过期处理」）
+  confirmed_at DATETIME(3) NULL,
+  created_at DATETIME(3) NOT NULL,
+  UNIQUE KEY uk_pairing_digest (device_code_digest),
+  UNIQUE KEY uk_pairing_user_code (user_code),      -- userCode 全局唯一，浏览器输入能唯一定位一条配对
+  KEY idx_pairing_expiry (status, expires_at)
+);`,
+      detail:"两个码的<b>存法不同，是按敏感度和寿命定的</b>：<b>L35</b> <code>device_code_digest BINARY(32)</code> 装 HMAC 摘要（长期凭证的兑换券，只存摘要）；<b>L36</b> <code>user_code</code> 明文存（短、低敏感、10min 即弃，不值得加密）。<b>L43</b> userCode 唯一键保证浏览器输入能唯一定位配对。迁移号 <b>V010</b>（非蓝图 V007，DRIFT D-02）。",
+      sentences:[
+        { t:"落到表结构。device_pairing_request 这张表，三十五行 device_code_digest 是 BINARY 三十二，正好装下那个摘要。", lines:[35] },
+        { t:"三十六行 user_code 反而是明文存的：它短、低敏感、十分钟就作废，不值得加密。两个码的存法不同，是按敏感度和寿命定的。", lines:[36] },
+        { t:"四十三行给 user_code 加了唯一键：保证你在浏览器输入的短码，能唯一定位到一条配对请求。", lines:[43] }
+      ] },
+
+    { thread:"t3", file:"shared/security/ApiSecurityConfiguration.java", fileStart:58,
+      structurePath:"permitAll ▸ 两个 CLI 端点匿名", flowNode:"匿名放行",
+      codeSnippet:`                        .requestMatchers("/actuator/health", "/api/v1/system/ping").permitAll()
+                        .requestMatchers("/api/v1/web/csrf").permitAll()
+                        .requestMatchers("/api/v1/web/auth/register", "/api/v1/web/auth/login").permitAll()
+                        .requestMatchers("/api/v1/web/auth/send-code").permitAll()
+                        .requestMatchers("/api/v1/public/**").permitAll()
+                        // L12：CLI 设备配对发起 + 轮询换 token 为匿名端点（CLI 尚未持有任何令牌，
+                        // 靠 deviceCode 一次性 + 10min 过期 + 库存 digest 自保）。仅这两个；其余 /cli/** 留 L13 令牌链保护。
+                        .requestMatchers("/api/v1/cli/device-pairings", "/api/v1/cli/device-pairings/token").permitAll()`,
+      detail:"CLI 配对入口<b>必须匿名</b>（配对的目的就是拿第一个令牌）。<b>L65</b> 加进 <code>permitAll()</code> 免登录，同时上方 <code>csrf().ignoringRequestMatchers(...)</code> 也豁免这两个（CLI 无 Cookie 拿不到 CSRF 令牌）——<b>两处一起改，缺一个都调不通</b>。「匿名」不是漏洞：靠 deviceCode 长随机+一次性+10min 过期+存摘要自保。<b>只放行这两个</b>，确认端点照旧要登录+CSRF。",
+      sentences:[
+        { t:"既然 CLI 端点匿名，安全配置就得放行。六十五行把发起配对和轮询这两个端点加进 permitAll，免登录。", lines:[65] },
+        { t:"同时它们还得豁免 CSRF——CLI 没有浏览器 Cookie，拿不到 CSRF 令牌。这两处一起改，缺一个都调不通。", focus:"detail" },
+        { t:"但注意，只放行这两个 CLI 端点；浏览器确认那个端点绝不放行，它照旧要登录加 CSRF。这就是双轨认证的第一次照面。", lines:[65] }
+      ] },
+
+    { thread:"t0", file:"identity/pairing/api/WebDevicePairingController.java", fileStart:31,
+      structurePath:"confirm ▸ 浏览器确认·登录态", flowNode:"② 浏览器确认",
+      codeSnippet:`    @PostMapping("/confirm")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void confirm(@Valid @RequestBody ConfirmPairingRequest request) {
+        long currentUserId = CurrentUser.requireId();
+        pairingService.confirmPairing(currentUserId, request.userCode());
+    }`,
+      detail:"第二步：你在浏览器（已登录）输 userCode 批准，走 <code>POST /api/v1/web/device-pairings/confirm</code>，<b>需 Session + CSRF</b>。<b>L34 是防越权的命门</b>：<code>currentUserId</code> 从登录态 <code>CurrentUser.requireId()</code> 派生，<b>绝不由前端传</b>。此端点<b>原契约里没有</b>——设备流缺它跑不通，故新增并登记冻结面漂移 <b>D-08</b>。",
+      sentences:[
+        { t:"第二步，你在浏览器批准，走这个 confirm 端点，它需要登录态。", lines:[31,32,33] },
+        { t:"三十四行是防越权的命门：currentUserId 从登录 Session 里取，绝不让前端传，否则攻击者能把别人的配对确认到自己名下。", lines:[34] },
+        { t:"顺带说，这个确认端点原来的契约里没有——设备流缺了它跑不通，所以我们新增了它，并登记成冻结面漂移 D 零八。", focus:"detail" }
+      ] },
+
+    { thread:"t2", file:"identity/pairing/application/DevicePairingService.java", fileStart:110,
+      structurePath:"confirmPairing ▸ 过期→CONFIRMED→绑定", flowNode:"确认逻辑",
+      codeSnippet:`    /** 第 2 步：主人浏览器输入 userCode 批准（需登录，currentUserId 来自 Session）。 */
+    @Transactional
+    public void confirmPairing(long currentUserId, String userCode) {
+        Instant now = Instant.now(clock);
+        DevicePairingRequestDO pairing = pairingMapper.selectOne(
+                Wrappers.<DevicePairingRequestDO>lambdaQuery()
+                        .eq(DevicePairingRequestDO::getUserCode, userCode));
+        if (pairing == null) {
+            throw new ApiException(ApiStatus.PAIRING_NOT_FOUND);
+        }
+        if (now.isAfter(pairing.getExpiresAt())) {
+            pairing.setStatus(PairingStatus.EXPIRED.getCode());
+            pairingMapper.updateById(pairing);
+            throw new ApiException(ApiStatus.PAIRING_EXPIRED);
+        }
+        if (!PairingStatus.PENDING.getCode().equals(pairing.getStatus())) {
+            throw new ApiException(ApiStatus.PAIRING_ALREADY_HANDLED);
+        }
+
+        pairing.setStatus(PairingStatus.CONFIRMED.getCode());
+        pairing.setConfirmedByUserId(currentUserId);
+        pairing.setConfirmedAt(now);
+        pairingMapper.updateById(pairing);
+
+        // 绑定 installation 到主人 + 激活。
+        ClientInstallationDO installation = installationMapper.selectById(pairing.getInstallationId());
+        installation.setOwnerUserId(currentUserId);
+        installation.setStatus(InstallationStatus.ACTIVE.getCode());
+        installation.setUpdatedAt(now);
+        installationMapper.updateById(installation);
+    }`,
+      detail:"按 <code>userCode</code> 查配对 → 逐项检查。<b>L120</b> 过期就置 <code>EXPIRED</code> 打回（过期处理的一半）；<b>L129</b> 推进到 <code>CONFIRMED</code> 并记下批准人；<b>L137</b> 把这台设备绑定到你、转 <code>ACTIVE</code>——设备就此认你当主人。<code>now</code> 由注入的 <code>Clock</code> 取（<b>可测</b>）。",
+      sentences:[
+        { t:"确认的逻辑在 confirmPairing：按你输入的 userCode 查出配对请求，然后开始检查。", lines:[112,114] },
+        { t:"一百二十行先看过期：超过十分钟就置 EXPIRED 打回，这是验收项过期处理的一半。", lines:[120,121] },
+        { t:"一百二十九行把状态推进到 CONFIRMED，记下是哪个主人批准的。", lines:[129,130] },
+        { t:"一百三十七行同时把这台设备绑定到你、状态转 ACTIVE。到这，设备就认你当主人了。", lines:[136,137] }
+      ] },
+
+    { thread:"t2", file:"identity/pairing/application/DevicePairingService.java", fileStart:142,
+      structurePath:"exchangePairing ▸ 轮询·签发·CONSUMED", flowNode:"③ 换令牌",
+      codeSnippet:`    @Transactional
+    public ExchangePairingResponse exchangePairing(String deviceCode) {
+        Instant now = Instant.now(clock);
+        byte[] digest = tokenService.digest(deviceCode);
+        DevicePairingRequestDO pairing = pairingMapper.selectOne(
+                Wrappers.<DevicePairingRequestDO>lambdaQuery()
+                        .eq(DevicePairingRequestDO::getDeviceCodeDigest, digest));
+        if (pairing == null) {
+            throw new ApiException(ApiStatus.PAIRING_NOT_FOUND);
+        }
+        // 过期处理（验收项）：轮询到过期返回 EXPIRED（正常轮询结果，非异常）。
+        if (now.isAfter(pairing.getExpiresAt())) {
+            return ExchangePairingResponse.expired();
+        }
+        // 还没批准：让 CLI 继续轮询。
+        if (PairingStatus.PENDING.getCode().equals(pairing.getStatus())) {
+            return ExchangePairingResponse.pending();
+        }
+        // 已消费或其它非 CONFIRMED 态：deviceCode 一次性，防重放。
+        if (!PairingStatus.CONFIRMED.getCode().equals(pairing.getStatus())) {
+            throw new ApiException(ApiStatus.PAIRING_ALREADY_HANDLED);
+        }
+
+        // 已确认 → 签发 OwnerAccessToken + RefreshToken（明文只回一次，库存 digest）。
+        String accessToken = tokenService.generateRawToken("owner_at_");
+        String refreshToken = tokenService.generateRawToken("owner_rt_");
+        Instant accessExp = now.plus(tokenProps.getOwnerAccessTtl());
+        Instant refreshExp = now.plus(tokenProps.getOwnerRefreshTtl());
+
+        OwnerAccessSessionDO session = new OwnerAccessSessionDO();
+        session.setInstallationId(pairing.getInstallationId());
+        session.setOwnerUserId(pairing.getConfirmedByUserId());
+        session.setAccessTokenDigest(tokenService.digest(accessToken));
+        session.setRefreshTokenDigest(tokenService.digest(refreshToken));
+        session.setStatus(OwnerSessionStatus.ACTIVE.getCode());
+        session.setAccessExpiresAt(accessExp);
+        session.setRefreshExpiresAt(refreshExp);
+        session.setCreatedAt(now);
+        session.setUpdatedAt(now);
+        sessionMapper.insert(session);
+
+        // pairing 置 CONSUMED：一次性，deviceCode 不能再换 token。
+        pairing.setStatus(PairingStatus.CONSUMED.getCode());
+        pairingMapper.updateById(pairing);
+
+        return ExchangePairingResponse.approved(accessToken, refreshToken, accessExp);
+    }`,
+      detail:"第三步轮询换令牌，按 <code>deviceCode</code> 摘要查。<b>L154</b> 过期→<code>EXPIRED</code>、<b>L158</b> 未批准→<code>PENDING</code>（都是<b>正常轮询结果非报错</b>，故 200+工厂方法）。确认了 <b>L167/168</b> 签发 access+refresh，落 <code>owner_access_session</code>；<b>L185</b> 置 <code>CONSUMED</code>——一次性防重放（重放→409）。",
+      sentences:[
+        { t:"第三步，CLI 轮询换令牌，走 exchangePairing，它按 deviceCode 的摘要查配对。", lines:[144,146] },
+        { t:"一百五十四行，过期就返回 EXPIRED；还没批准就返回 PENDING，让 CLI 继续轮询。注意这俩都是正常轮询结果，不是报错。", lines:[154,155,158,159] },
+        { t:"已确认了，一百六十七、一百六十八行签发两个令牌：owner access 和 refresh，明文照例只回这一次。", lines:[167,168] },
+        { t:"一百八十五行是防重放的命门：换完令牌立刻把配对置 CONSUMED，同一个 deviceCode 第二次来换直接拒。", lines:[185] },
+        { t:"为什么要一次性？不然截获了 deviceCode 的人，能反复换出很多有效令牌。一次性兑换券，用完即废。", focus:"detail" }
+      ] },
+
+    { thread:"t2", file:"identity/pairing/domain/PairingStatus.java", fileStart:13,
+      structurePath:"PairingStatus ▸ 状态字典", flowNode:"状态机",
+      codeSnippet:`public enum PairingStatus {
+
+    PENDING("PENDING"),
+    CONFIRMED("CONFIRMED"),
+    CONSUMED("CONSUMED"),
+    EXPIRED("EXPIRED");`,
+      detail:"配对请求的一生：<code>PENDING</code>（等批准）→ <code>CONFIRMED</code>（已批准）→ <code>CONSUMED</code>（已换令牌，一次性）；超时 <code>EXPIRED</code>。做成<b>常量字典</b>（enum）而非散落的字符串，是本项目一贯做法（仿 <code>MediaStatus</code>/<code>UserStatus</code>）——状态值有<b>唯一事实源</b>，服务里 <code>PairingStatus.PENDING.getCode()</code> 引用，改一处就够。",
+      sentences:[
+        { t:"这四个状态就是配对的一生：PENDING 等批准，CONFIRMED 已批准，CONSUMED 已换过令牌，EXPIRED 超时。", lines:[15,16,17,18] },
+        { t:"把它们做成常量字典，而不是散落的字符串，是本项目的一贯做法——状态值有唯一的事实源，改一处就够。", focus:"detail" }
+      ] },
+
+    { thread:"t3", file:null, fileStart:null,
+      structurePath:"双轨认证 ▸ 按客户端类型分链", flowNode:"双轨认证大图",
+      codeSnippet:`双轨认证（按客户端类型分链）
+
+Chain 1  Web Session        浏览器里的「人」       /web/**  /public/**    ← L05 已有
+Chain 2  Owner 令牌(opaque)  CLI 上的「人类主人」   /cli/**               ← L13 起用
+Chain 3  Agent 令牌(opaque)  CLI 上被假扮的「机娘」 /agent/**             ← L13 起用
+
+本课(L12)：铸出 Owner 令牌，但还没有过滤器消费它 —— 用令牌是 L13。`,
+      detail:"<b>双轨认证</b>=按客户端类型分链，是 L05 就埋下的设计：<b>浏览器有 Cookie 走 Session+CSRF</b>；<b>CLI/Agent 无头走 opaque Bearer 令牌</b>。本课在配对里已见雏形（CLI 端点匿名换令牌 vs confirm 走 Session）。⚠ 本课只<b>铸</b>令牌，<b>用令牌的 Bearer 过滤器（Chain 2）+ assume 机娘（Chain 3）留 L13</b>——每课单一职责。",
+      sentences:[
+        { t:"退一步看全局。同样是配对，浏览器端点走 Session 加 CSRF，CLI 端点匿名换 opaque 令牌，这就是双轨认证。", lines:[3,4] },
+        { t:"按客户端类型分轨：浏览器有 Cookie 用 Session，CLI 无头用 Bearer 令牌。这是 L05 就埋下的设计。", lines:[3,4,5] },
+        { t:"不过本课签发的 owner 令牌，还没有过滤器去消费它。铸令牌是本课，用令牌的 Bearer 过滤器和独立 CLI 认证链，是下一课 L13。每课单一职责。", lines:[7] }
+      ] },
+
+    { thread:"t0", file:null, fileStart:null,
+      structurePath:"总结 ▸ 一张小抄 + 面试答法", flowNode:"小抄+面试",
+      codeSnippet:`【设备授权流 · 一张小抄】
+
+三步:  ① 发起配对 → deviceCode(长/私藏) + userCode(短/给人) + verificationUri
+       ② 浏览器输 userCode 批准（登录态，防越权）
+       ③ CLI 凭 deviceCode 轮询换 → OwnerAccessToken + Refresh
+
+三支点:  明文只回一次 · 库存 HMAC(pepper) 摘要 · deviceCode 一次性(CONSUMED)防重放
+
+面试:  「CLI 怎么登录」→ OAuth 设备授权流；
+       deviceCode 长(机器轮询)、userCode 短(人手输)，两条通道安全属性不同，所以分家。`,
+      detail:"<b>最小单元</b>：三步握手（发起→浏览器确认→轮询换令牌）+ 三个安全支点（明文只回一次 / 库存 HMAC 摘要 / deviceCode 一次性防重放）。<b>面试</b>：被问「怎么让 CLI/无浏览器设备登录」，答 <b>OAuth 设备授权流</b>，讲清 deviceCode 与 userCode 为何分家——比背概念扎实得多。下一课 L13：Bearer 过滤器消费令牌 + assume 机娘。",
+      sentences:[
+        { t:"收尾，一张小抄。设备流三步：发起配对拿两码，浏览器输短码批准，CLI 凭长码换令牌。", lines:[3,4,5] },
+        { t:"三个安全支点记牢：明文只回一次，库存 HMAC 摘要，deviceCode 一次性防重放。", lines:[7] },
+        { t:"面试被问怎么让 CLI 登录，就答 OAuth 设备授权流，说清 deviceCode 和 userCode 为什么分家——这比背概念扎实得多。", lines:[9,10] }
+      ] }
+  ]
+};
+
+// ============ 播放器引擎 v5（真音频驱动）============
+// 时间源 = <audio> 的 currentTime；进度条=真时间轴，任意点击精确 seek；暂停从当前【字】续播；
+// playbackRate 实时变速不变调。字幕/高亮同步：timeline.js 给出每句 [start,end]，timeupdate 里定位当前句。
+const $ = id => document.getElementById(id);
+const au = $('au');
+const TL = window.AUDIO_TIMELINE || null;
+
+const FLAT = [];
+MODEL.steps.forEach((s, si) => s.sentences.forEach((sn, pi) => FLAT.push({ si, pi, sn })));
+const TOTAL = FLAT.length;
+
+let cur = -1, renderedStep = -1;
+
+if (!TL || TL.length !== TOTAL) { $('missing').style.display = 'block'; }
+const DURATION = TL ? TL[TL.length - 1][1] : 0;
+
+$('legend').innerHTML = MODEL.threads.map(t => `<span class="lg" data-t="${t.id}">${t.name}</span>`).join('');
+
+function buildTree() {
+  const root = {};
+  MODEL.fileTree.forEach(f => {
+    const parts = f.path.split('/');
+    let curNode = root;
+    parts.forEach((p, i) => {
+      const isFile = i === parts.length - 1;
+      curNode[p] = curNode[p] || { __file: isFile ? f : null, __children: {} };
+      curNode = curNode[p].__children;
+    });
+  });
+  const out = [];
+  (function walk(node, depth) {
+    Object.keys(node).forEach(name => {
+      const n = node[name];
+      const isFile = n.__file;
+      out.push(`<div class="node ${isFile ? 'file' : 'dir'}" ${isFile ? `data-file="${isFile.path}"` : ''} style="padding-left:${14 + depth * 16}px"><span class="ic">${isFile ? '📄' : '📁'}</span>${name}</div>`);
+      if (!isFile) walk(n.__children, depth + 1);
+    });
+  })(root, 0);
+  $('tree').innerHTML = out.join('');
+  [...document.querySelectorAll('.node.file')].forEach(node => {
+    node.onclick = () => {
+      const i = MODEL.steps.findIndex(s => s.file === node.dataset.file);
+      if (i >= 0) seekToSentence(firstSentenceOfStep(i));
+    };
+  });
+}
+buildTree();
+
+function buildFlow() {
+  const byThread = {};
+  MODEL.steps.forEach((s, i) => { (byThread[s.thread] = byThread[s.thread] || []).push({ ...s, i }); });
+  $('flow').innerHTML = MODEL.threads.map(t => {
+    const chips = (byThread[t.id] || []).map(s => `<span class="chip" data-i="${s.i}">${s.flowNode}</span>`).join('');
+    return `<div class="lane" data-t="${t.id}"><span class="lane-name">${t.name}</span><span class="chips">${chips || '<span class="chip" style="opacity:.4;cursor:default">—</span>'}</span></div>`;
+  }).join('');
+  [...document.querySelectorAll('.chip[data-i]')].forEach(c => { c.onclick = () => seekToSentence(firstSentenceOfStep(+c.dataset.i)); });
+}
+buildFlow();
+
+function firstSentenceOfStep(si) { return FLAT.findIndex(f => f.si === si); }
+
+// —— 真时间轴进度条：句边界细线 / 步边界粗线；点任意处精确 seek ——
+if (TL) {
+  FLAT.forEach((f, k) => {
+    if (k === 0) return;
+    const tick = document.createElement('div');
+    tick.className = 'tick' + (f.pi === 0 ? ' step' : '');
+    tick.style.left = (TL[k][0] / DURATION * 100) + '%';
+    $('progress').appendChild(tick);
+  });
+  $('progress').onclick = e => {
+    const r = $('progress').getBoundingClientRect();
+    au.currentTime = Math.max(0, Math.min(DURATION - .05, (e.clientX - r.left) / r.width * DURATION));
+    if (au.paused) au.play();
+  };
+}
+
+function fmt(sec) { const m = Math.floor(sec / 60), s = Math.floor(sec % 60); return m + ':' + String(s).padStart(2, '0'); }
+
+// —— IDEA Darcula 风语法高亮（单趟正则，防止对已注入的 span 二次着色） ——
+function esc(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+const JAVA_RE = /("[^"]*")|(@[A-Za-z]\w*)|\b(public|private|protected|static|final|class|record|enum|interface|void|new|return|if|else|try|catch|throw|throws|extends|implements|import|package|this|null|true|false|switch|case|default|for|while|boolean|int|long|double|float)\b|\b(\d[\d_]*L?)\b|\.([a-z]\w*)(?=\s*\()/g;
+function hlJava(raw) {
+  const t = raw.trimStart();
+  if (/^(\/\/|\/\*|\*)/.test(t)) return '<span class="tk-cm">' + esc(raw) + '</span>';   // 整行注释/javadoc
+  let rest = raw, tail = '';
+  const ci = rest.indexOf('//');
+  if (ci >= 0 && ((rest.slice(0, ci).match(/"/g) || []).length % 2 === 0)) {            // 行内注释（避开字符串里的 //）
+    tail = '<span class="tk-cm">' + esc(rest.slice(ci)) + '</span>'; rest = rest.slice(0, ci);
+  }
+  let out = '', last = 0, m;
+  JAVA_RE.lastIndex = 0;
+  while ((m = JAVA_RE.exec(rest))) {
+    out += esc(rest.slice(last, m.index));
+    if (m[1]) out += '<span class="tk-str">' + esc(m[1]) + '</span>';
+    else if (m[2]) out += '<span class="tk-ann">' + esc(m[2]) + '</span>';
+    else if (m[3]) out += '<span class="tk-kw">' + m[3] + '</span>';
+    else if (m[4]) out += '<span class="tk-num">' + m[4] + '</span>';
+    else if (m[5]) out += '.<span class="tk-call">' + m[5] + '</span>';
+    last = JAVA_RE.lastIndex;
+  }
+  return out + esc(rest.slice(last)) + tail;
+}
+function hlText(raw) {   // 示意图 / SQL：只把 // 或 -- 注释染灰，其余保持原样
+  let ci = raw.indexOf('//');
+  if (ci < 0) ci = raw.indexOf('--');
+  if (ci < 0) return esc(raw);
+  return esc(raw.slice(0, ci)) + '<span class="tk-cm">' + esc(raw.slice(ci)) + '</span>';
+}
+
+function renderCode(step) {
+  $('code').innerHTML = '';
+  const base = step.fileStart;
+  const isJava = step.file && step.file.endsWith('.java');
+  step.codeSnippet.split('\n').forEach((ln, i) => {
+    const div = document.createElement('div');
+    div.className = 'line';
+    div.dataset.abs = base != null ? (base + i) : (i + 1);
+    const num = document.createElement('span'); num.className = 'ln';
+    num.textContent = base != null ? (base + i) : '·';
+    const tx = document.createElement('span'); tx.innerHTML = isJava ? hlJava(ln) : hlText(ln);
+    div.appendChild(num); div.appendChild(tx); $('code').appendChild(div);
+  });
+}
+function renderStep(si) {
+  renderedStep = si;
+  const s = MODEL.steps[si];
+  [...document.querySelectorAll('.node.file')].forEach(n => n.classList.toggle('on', n.dataset.file === s.file));
+  const onNode = document.querySelector('.node.file.on'); if (onNode) onNode.scrollIntoView({ block: 'nearest' });
+  const lineCount = s.codeSnippet.split('\n').length;
+  $('crumb').innerHTML = s.file
+    ? `📄 ${s.file} &nbsp;›&nbsp; <b>${s.structurePath}</b> &nbsp;·&nbsp; L${s.fileStart}–L${s.fileStart + lineCount - 1}（真实行号，可对照 IDE）`
+    : `⚙ ${s.structurePath} &nbsp;·&nbsp; <b>示意图（非项目源码）</b>`;
+  renderCode(s);
+  [...document.querySelectorAll('.chip[data-i]')].forEach(c => { const ci = +c.dataset.i; c.classList.toggle('on', ci === si); c.classList.toggle('done', ci < si); });
+  [...document.querySelectorAll('.lane')].forEach(l => l.classList.toggle('on', l.dataset.t === s.thread));
+  [...document.querySelectorAll('.lg')].forEach(l => l.classList.toggle('on', l.dataset.t === s.thread));
+  const onChip = document.querySelector('.chip.on'); if (onChip) onChip.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  $('detail').innerHTML = s.detail;
+}
+
+function showSentence(k) {
+  cur = k;
+  const { si, pi, sn } = FLAT[k];
+  if (si !== renderedStep) renderStep(si);
+  const step = MODEL.steps[si];
+
+  const hiset = new Set(sn.lines || []);
+  let first = null;
+  [...document.querySelectorAll('#code .line')].forEach(div => {
+    const abs = +div.dataset.abs;
+    div.classList.remove('hot', 'dim');
+    if (hiset.size) {
+      if (hiset.has(abs)) { div.classList.add('hot'); if (!first) first = div; }
+      else div.classList.add('dim');
+    }
+  });
+  if (first) first.scrollIntoView({ block: 'center', behavior: 'smooth' });
+
+  const focus = sn.focus || (hiset.size ? 'code' : 'detail');
+  $('codePanel').classList.toggle('glow', focus === 'code');
+  $('detailPanel').classList.toggle('glow', focus === 'detail');
+  // 字幕换边：字幕文本始终待在"该注视的面板"下方（左代码/右详解）
+  $('subtitleBar').className = 'subtitle ' + (focus === 'code' ? 'focus-code' : 'focus-detail');
+  const badge = $('focusBadge');
+  if (focus === 'code') {
+    badge.className = 'focusbadge code';
+    badge.textContent = step.fileStart != null && hiset.size
+      ? `👈 看左侧代码 L${Math.min(...hiset)}${hiset.size > 1 ? '–L' + Math.max(...hiset) : ''}`
+      : '👈 看左侧';
+  } else {
+    badge.className = 'focusbadge detail';
+    badge.textContent = '👉 看右侧详解';
+  }
+
+  $('subtitle').textContent = sn.t;
+  $('counter').textContent = `步 ${si + 1}/${MODEL.steps.length} · 句 ${k + 1}/${TOTAL}`;
+  $('prevBtn').disabled = k === 0; $('nextBtn').disabled = k === TOTAL - 1;
+}
+
+// —— 音频时间 → 当前句（timeupdate 每 ~250ms 一次，线性找足够快） ——
+function sentenceAt(t) {
+  for (let k = TOTAL - 1; k >= 0; k--) if (t >= TL[k][0] - 0.05) return k;
+  return 0;
+}
+au.addEventListener('timeupdate', () => {
+  if (!TL) return;
+  $('fill').style.width = (au.currentTime / DURATION * 100) + '%';
+  $('timeLabel').textContent = fmt(au.currentTime) + ' / ' + fmt(DURATION);
+  const k = sentenceAt(au.currentTime);
+  if (k !== cur) showSentence(k);
+});
+au.addEventListener('play', () => { $('playBtn').textContent = '⏸ 暂停'; $('playBtn').classList.remove('primary'); });
+au.addEventListener('pause', () => { $('playBtn').textContent = au.ended ? '↺ 重播' : '▶ 继续'; $('playBtn').classList.add('primary'); });
+au.addEventListener('ended', () => { $('playBtn').textContent = '↺ 重播'; $('playBtn').classList.add('primary'); $('quizMask').classList.add('show'); });
+au.addEventListener('error', () => { $('missing').style.display = 'block'; });
+au.addEventListener('loadedmetadata', () => { $('timeLabel').textContent = '0:00 / ' + fmt(DURATION || au.duration); });
+
+function seekToSentence(k) {
+  if (!TL || k < 0) return;
+  au.currentTime = TL[k][0] + 0.01;
+  showSentence(k);
+  if (au.paused) au.play();
+}
+$('playBtn').onclick = () => {
+  if (!TL) return;
+  if (au.paused) { if (au.ended) au.currentTime = 0; au.play(); } else au.pause();
+};
+$('prevBtn').onclick = e => { seekToSentence(e.shiftKey ? firstSentenceOfStep(Math.max(0, FLAT[Math.max(cur, 0)].si - 1)) : Math.max(0, cur - 1)); };
+$('nextBtn').onclick = e => { seekToSentence(e.shiftKey ? firstSentenceOfStep(Math.min(MODEL.steps.length - 1, FLAT[Math.max(cur, 0)].si + 1)) : Math.min(TOTAL - 1, cur + 1)); };
+$('speed').oninput = () => {           // 真·实时变速：音频变速不变调，立即生效
+  au.playbackRate = parseFloat($('speed').value);
+  $('speedVal').textContent = parseFloat($('speed').value).toFixed(1) + '×';
+};
+$('quizBtn').onclick = () => $('quizMask').classList.add('show');
+$('quizClose').onclick = () => $('quizMask').classList.remove('show');
+$('quizMask').onclick = e => { if (e.target === $('quizMask')) $('quizMask').classList.remove('show'); };
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT') return;
+  if (e.code === 'Space') { e.preventDefault(); $('playBtn').click(); }
+  else if (e.code === 'ArrowRight') { e.preventDefault(); seekToSentence(e.shiftKey ? firstSentenceOfStep(Math.min(MODEL.steps.length - 1, FLAT[Math.max(cur, 0)].si + 1)) : Math.min(TOTAL - 1, cur + 1)); }
+  else if (e.code === 'ArrowLeft') { e.preventDefault(); seekToSentence(e.shiftKey ? firstSentenceOfStep(Math.max(0, FLAT[Math.max(cur, 0)].si - 1)) : Math.max(0, cur - 1)); }
+});
+</script>
+</body>
+</html>

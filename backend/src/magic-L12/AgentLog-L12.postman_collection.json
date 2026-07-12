@@ -1,0 +1,228 @@
+{
+  "info": {
+    "name": "AgentLog-L12 · CLI 与浏览器设备配对",
+    "description": "L12 OAuth 设备授权流后端三端点验收。\n\n使用顺序：①发起配对（匿名）→ ②建立浏览器登录态 → ③浏览器确认 + 换令牌。\n请求内置测试脚本会自动把 deviceCode/userCode/csrfToken 存进集合变量，逐个点【Send】即可串起来。\n\n⚠️ 前置：后端 8080 已重启（加载 V010 + application-local.yml 里的 agentlog.token.pepper）；MySQL(3307)/Redis 在跑。",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080" },
+    { "key": "email", "value": "pairowner@example.com" },
+    { "key": "password", "value": "password123" },
+    { "key": "username", "value": "pairowner" },
+    { "key": "verCode", "value": "000000" },
+    { "key": "csrfToken", "value": "" },
+    { "key": "deviceCode", "value": "" },
+    { "key": "userCode", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "① CLI 发起配对（匿名）",
+      "item": [
+        {
+          "name": "Create Pairing — 发起配对",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                  "const b = pm.response.json();",
+                  "pm.test('返回 deviceCode / userCode / verificationUri', () => {",
+                  "  pm.expect(b.deviceCode).to.be.a('string');",
+                  "  pm.expect(b.userCode).to.be.a('string');",
+                  "  pm.expect(b.verificationUri).to.be.a('string');",
+                  "});",
+                  "pm.collectionVariables.set('deviceCode', b.deviceCode);",
+                  "pm.collectionVariables.set('userCode', b.userCode);",
+                  "console.log('userCode（待会去确认时用）=', b.userCode);",
+                  "console.log('verificationUri =', b.verificationUri);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"installationCode\": \"postman-inst-001\",\n  \"deviceName\": \"postman-device\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/api/v1/cli/device-pairings", "host": ["{{baseUrl}}"], "path": ["api","v1","cli","device-pairings"] },
+            "description": "匿名端点。返回 deviceCode（CLI 私藏轮询）+ userCode（给人在浏览器输）。脚本已把两者存进集合变量。"
+          }
+        },
+        {
+          "name": "Poll Token — 确认前应为 PENDING",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('status = PENDING（还没批准）', () => pm.expect(pm.response.json().status).to.eql('PENDING'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "body": { "mode": "raw", "raw": "{\n  \"deviceCode\": \"{{deviceCode}}\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/v1/cli/device-pairings/token", "host": ["{{baseUrl}}"], "path": ["api","v1","cli","device-pairings","token"] },
+            "description": "在浏览器确认前轮询：应返回 PENDING（正常轮询结果，非错误）。"
+          }
+        }
+      ]
+    },
+    {
+      "name": "② 建立浏览器登录态",
+      "item": [
+        {
+          "name": "Send Code（注册用·可选，验证码看后端控制台日志）",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{email}}\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/v1/web/auth/send-code", "host": ["{{baseUrl}}"], "path": ["api","v1","web","auth","send-code"] },
+            "description": "若还没有账号：发验证码。未配 SMTP 时验证码打在后端控制台日志（DEV 后门），把它填进集合变量 verCode 再调 Register。已有账号可跳过本 folder，直接 Login。"
+          }
+        },
+        {
+          "name": "Register（可选）",
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{email}}\",\n  \"username\": \"{{username}}\",\n  \"password\": \"{{password}}\",\n  \"verCode\": \"{{verCode}}\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/v1/web/auth/register", "host": ["{{baseUrl}}"], "path": ["api","v1","web","auth","register"] },
+            "description": "用上一步日志里的验证码注册。已有账号跳过。"
+          }
+        },
+        {
+          "name": "Login — 登录（种 Session Cookie）",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "console.log('已登录，Session Cookie 已由 Postman 保存');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/v1/web/auth/login", "host": ["{{baseUrl}}"], "path": ["api","v1","web","auth","login"] },
+            "description": "登录成功后 Postman 的 Cookie Jar 保存 JSESSIONID + XSRF-TOKEN，后续请求自动带上。登录接口本身 CSRF 豁免。"
+          }
+        }
+      ]
+    },
+    {
+      "name": "③ 浏览器确认 + 换令牌",
+      "item": [
+        {
+          "name": "Get CSRF — 取 CSRF token（登录后）",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('csrfToken', pm.response.json().token);",
+                  "console.log('csrfToken 已捕获，供 Confirm 用');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/v1/web/csrf", "host": ["{{baseUrl}}"], "path": ["api","v1","web","csrf"] },
+            "description": "确认端点是浏览器写接口，需 CSRF。这里取 token 存进集合变量；XSRF-TOKEN Cookie 由 Postman 自动带。"
+          }
+        },
+        {
+          "name": "Confirm Pairing — 主人批准（需登录 + CSRF）",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('204 No Content（批准成功）', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-XSRF-TOKEN", "value": "{{csrfToken}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"userCode\": \"{{userCode}}\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/v1/web/device-pairings/confirm", "host": ["{{baseUrl}}"], "path": ["api","v1","web","device-pairings","confirm"] },
+            "description": "用①捕获的 userCode 批准。currentUserId 从 Session 派生（不由此传入）。成功 204。\n错误码可自测：改 userCode 为 ZZZZ-ZZZZ → 404 PAIRING_NOT_FOUND；不登录调用 → 401。"
+          }
+        },
+        {
+          "name": "Poll Token — 确认后应为 APPROVED + 令牌",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test('status = APPROVED', () => pm.expect(b.status).to.eql('APPROVED'));",
+                  "pm.test('返回 owner 令牌', () => {",
+                  "  pm.expect(b.ownerAccessToken).to.be.a('string');",
+                  "  pm.expect(b.ownerRefreshToken).to.be.a('string');",
+                  "});",
+                  "console.log('拿到 OwnerAccessToken（明文只此一次）');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "body": { "mode": "raw", "raw": "{\n  \"deviceCode\": \"{{deviceCode}}\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/v1/cli/device-pairings/token", "host": ["{{baseUrl}}"], "path": ["api","v1","cli","device-pairings","token"] },
+            "description": "确认后再轮询：APPROVED + ownerAccessToken/ownerRefreshToken（明文只回一次）。"
+          }
+        },
+        {
+          "name": "Poll Token — 重放应为 409（一次性防重放）",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('409 Conflict', () => pm.response.to.have.status(409));",
+                  "pm.test('code = PAIRING_ALREADY_HANDLED', () => pm.expect(pm.response.json().code).to.eql('PAIRING_ALREADY_HANDLED'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "body": { "mode": "raw", "raw": "{\n  \"deviceCode\": \"{{deviceCode}}\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/v1/cli/device-pairings/token", "host": ["{{baseUrl}}"], "path": ["api","v1","cli","device-pairings","token"] },
+            "description": "同一 deviceCode 第二次换令牌：pairing 已 CONSUMED → 409 PAIRING_ALREADY_HANDLED。验证一次性防重放。"
+          }
+        }
+      ]
+    }
+  ]
+}

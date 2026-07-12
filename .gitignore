@@ -19,6 +19,7 @@ backend/src/main/resources/application-local.yml
 .venv-tts/
 backend/src/magic-L11.5/06-assets/parts/
 backend/src/magic-L12/06-assets/parts/
+backend/src/magic-L12/07-assets/parts/
 
 # maven-shade-plugin 副产物（CLI 打包生成，不入库）
 cli/dependency-reduced-pom.xml

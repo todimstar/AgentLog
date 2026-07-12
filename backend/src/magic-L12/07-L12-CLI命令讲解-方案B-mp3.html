@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>L12 CLI 命令讲解 · 方案B（edge-tts 预生成 mp3 · 真进度条）</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;background:#0d1117;color:#e6edf3;height:100vh;display:flex;flex-direction:column;overflow:hidden;font-size:14px}
+  header{padding:9px 16px;background:#161b22;border-bottom:1px solid #30363d;display:flex;align-items:center;gap:14px;flex-shrink:0}
+  header h1{font-size:15px}
+  .legend{display:flex;gap:6px;flex-wrap:wrap;margin-left:6px}
+  .lg{font-size:11px;padding:2px 8px;border-radius:10px;background:#21262d;border:1px solid #30363d;color:#8b949e}
+  .lg.on{color:#fff}
+  .spacer{flex:1}
+  #voice{font-size:11px;color:#7d8590}
+  .main{flex:1;display:flex;min-height:0}
+  .left{flex:1.35;display:flex;flex-direction:column;min-width:0;border-right:1px solid #30363d}
+  .tree{background:#0d1117;border-bottom:1px solid #30363d;max-height:30%;overflow:auto;padding:8px 0}
+  .tree .th{font-size:11px;color:#7d8590;padding:2px 14px 6px;text-transform:uppercase;letter-spacing:.5px}
+  .node{font-family:"SF Mono",Consolas,monospace;font-size:12.5px;padding:2px 14px;white-space:nowrap;color:#adbac7;cursor:pointer}
+  .node.dir{cursor:default;color:#7d8590}
+  .node .ic{opacity:.7;margin-right:5px}
+  .node.file.on{background:#132a3e;color:#79c0ff;border-left:3px solid #1f6feb;padding-left:11px}
+  .breadcrumb{font-family:monospace;font-size:11.5px;color:#7d8590;padding:6px 16px;background:#0d1117;border-bottom:1px solid #21262d;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .breadcrumb b{color:#f0b429}
+  .code{flex:1;overflow:auto;background:#0d1117;padding:10px 0;transition:box-shadow .3s}
+  .code.glow{box-shadow:inset 0 0 0 2px #3fb950}
+  pre.code-pre{font-family:"SF Mono",Consolas,"Cascadia Code",monospace;font-size:13px;line-height:1.6}
+  .line{display:flex;padding:0 16px;white-space:pre;transition:background .25s,opacity .25s;border-left:3px solid transparent}
+  .line .ln{color:#484f58;width:38px;text-align:right;margin-right:14px;user-select:none;flex-shrink:0}
+  .line.hot{background:#1f2d1f;border-left-color:#3fb950;animation:pulse .8s ease 1}
+  .line.hot .ln{color:#3fb950;font-weight:700}
+  .line.dim{opacity:.30}
+  @keyframes pulse{0%{background:#2e4a2e}100%{background:#1f2d1f}}
+  .tk-kw{color:#cc7832;font-weight:600}
+  .tk-str{color:#6a8759}
+  .tk-cm{color:#7a7a73;font-style:italic}
+  .tk-ann{color:#bbb529}
+  .tk-num{color:#6897bb}
+  .tk-call{color:#ffc66d}
+  .tk-type{color:#a9b7c6}
+  .right{flex:1;display:flex;flex-direction:column;min-width:320px}
+  .flow{flex:0 0 auto;max-height:46%;overflow:auto;background:#161b22;padding:12px 14px;border-bottom:1px solid #30363d}
+  .flow .th{font-size:11px;color:#7d8590;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px}
+  .lane{display:flex;align-items:center;gap:8px;margin-bottom:9px}
+  .lane-name{font-size:11.5px;width:112px;flex-shrink:0;color:#8b949e;text-align:right;line-height:1.2}
+  .lane.on .lane-name{color:#fff;font-weight:600}
+  .chips{display:flex;gap:6px;flex-wrap:wrap}
+  .chip{font-size:11px;padding:3px 9px;border-radius:12px;background:#21262d;border:1px solid #30363d;color:#8b949e;white-space:nowrap;cursor:pointer}
+  .chip.done{color:#3fb950;border-color:#238636}
+  .chip.on{background:#3fb950;color:#0d1117;border-color:#3fb950;font-weight:700;box-shadow:0 0 0 3px rgba(63,185,80,.25)}
+  .detail{flex:1;overflow:auto;padding:16px 18px;background:#0d1117;transition:box-shadow .3s}
+  .detail.glow{box-shadow:inset 0 0 0 2px #f0b429}
+  .detail .th{font-size:11px;color:#3fb950;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px;font-weight:600}
+  .detail-body{font-size:14.5px;line-height:1.85;color:#c9d1d9}
+  .detail-body b{color:#f0b429}
+  .detail-body code{background:#161b22;padding:1px 5px;border-radius:4px;font-family:monospace;font-size:12.5px;color:#79c0ff}
+  .subtitle{flex-shrink:0;background:#010409;border-top:1px solid #30363d;padding:12px 24px;min-height:64px;display:flex;align-items:center;gap:16px}
+  .focusbadge{flex-shrink:0;font-size:12px;padding:4px 10px;border-radius:12px;background:#161b22;border:1px solid #30363d;color:#8b949e;white-space:nowrap;transition:all .25s}
+  .focusbadge.code{color:#3fb950;border-color:#238636}
+  .focusbadge.detail{color:#f0b429;border-color:#9e6a03}
+  .subtitle .txt{font-size:17px;line-height:1.6;color:#f0f6fc;transition:all .25s}
+  .subtitle.focus-code .txt{order:1;text-align:left;margin-right:auto;max-width:58%}
+  .subtitle.focus-code .focusbadge{order:2}
+  .subtitle.focus-detail .focusbadge{order:1}
+  .subtitle.focus-detail .txt{order:2;text-align:right;margin-left:auto;max-width:58%}
+  .quiz-mask{position:fixed;inset:0;background:rgba(1,4,9,.82);display:none;align-items:center;justify-content:center;z-index:30}
+  .quiz-mask.show{display:flex}
+  .quiz{width:min(860px,92vw);max-height:86vh;overflow:auto;background:#161b22;border:1px solid #30363d;border-radius:12px;padding:22px 26px}
+  .quiz h2{font-size:17px;margin-bottom:4px;color:#f0f6fc}
+  .quiz .sub{font-size:12px;color:#7d8590;margin-bottom:14px}
+  .quiz details{border:1px solid #30363d;border-radius:8px;margin-bottom:10px;background:#0d1117}
+  .quiz summary{cursor:pointer;padding:11px 14px;font-size:14.5px;line-height:1.65;color:#e6edf3;list-style:none}
+  .quiz summary::before{content:'▸ ';color:#3fb950}
+  .quiz details[open] summary::before{content:'▾ '}
+  .quiz .lv{font-size:11px;padding:1px 8px;border-radius:9px;margin-right:8px;border:1px solid}
+  .quiz .lv1{color:#3fb950;border-color:#238636}.quiz .lv2{color:#58a6ff;border-color:#1f6feb}.quiz .lv3{color:#f0b429;border-color:#9e6a03}.quiz .lv4{color:#ff7b72;border-color:#da3633}
+  .quiz .ans{padding:4px 16px 14px;font-size:13.5px;line-height:1.9;color:#c9d1d9;border-top:1px dashed #30363d}
+  .quiz .ans b{color:#f0b429}.quiz .ans code{background:#161b22;padding:1px 5px;border-radius:4px;font-family:monospace;font-size:12px;color:#79c0ff}
+  .quiz .close{margin-top:6px;width:100%}
+  .controls{flex-shrink:0;padding:10px 16px;background:#161b22;border-top:1px solid #30363d}
+  .progress{position:relative;height:14px;border-radius:4px;margin-bottom:10px;background:#21262d;cursor:pointer;overflow:hidden}
+  .progress .fill{position:absolute;left:0;top:0;bottom:0;background:linear-gradient(90deg,#238636,#3fb950);width:0;pointer-events:none}
+  .progress .tick{position:absolute;top:0;bottom:0;width:1px;background:#0d1117;pointer-events:none;opacity:.75}
+  .progress .tick.step{width:2px;background:#010409;opacity:1}
+  .progress:hover{filter:brightness(1.2)}
+  .btns{display:flex;align-items:center;gap:9px}
+  button{background:#21262d;color:#e6edf3;border:1px solid #30363d;border-radius:6px;padding:7px 13px;cursor:pointer;font-size:14px}
+  button:hover{background:#30363d}
+  button.primary{background:#238636;border-color:#2ea043;font-weight:600}
+  button:disabled{opacity:.4;cursor:not-allowed}
+  label{font-size:12px;color:#7d8590;display:flex;align-items:center;gap:5px}
+  input[type=range]{width:110px}
+  .meta{font-size:12px;color:#7d8590}
+  .time{font-family:monospace;font-size:12px;color:#adbac7}
+  .hint{font-size:11px;color:#7d8590;margin-top:8px}
+  .missing{background:#3d1d1d;border:1px solid #f85149;color:#ffa198;padding:8px 12px;border-radius:6px;font-size:12.5px;margin-bottom:8px;display:none}
+  kbd{background:#21262d;border:1px solid #30363d;border-radius:4px;padding:0 5px;font-family:monospace;font-size:11px;color:#adbac7}
+</style>
+</head>
+<body>
+<header>
+  <h1>🎬 L12 CLI 命令讲解（终端 + 浏览器）· 方案B</h1>
+  <div class="legend" id="legend"></div>
+  <div class="spacer"></div>
+  <span id="voice">🎧 预生成 mp3 · 云健（edge-tts）</span>
+</header>
+
+<div class="main">
+  <div class="left">
+    <div class="tree"><div class="th">📁 CLI 五文件（行号=真实源文件行号）</div><div id="tree"></div></div>
+    <div class="breadcrumb" id="crumb">— 点击 ▶ 开始 —</div>
+    <div class="code" id="codePanel"><pre class="code-pre" id="code"></pre></div>
+  </div>
+  <div class="right">
+    <div class="flow"><div class="th">🧭 四条线 · 点节点可跳转</div><div id="flow"></div></div>
+    <div class="detail" id="detailPanel"><div class="th">💡 深入详解</div><div class="detail-body" id="detail">方案B（预生成 mp3）：真·进度条——任意点击秒级跳转、暂停从当前字续播、语速实时调。本视频讲 CLI（命令行工具）这一头：它是终端程序、AI 工具的「手」，怎么跑 <code>auth login</code>、怎么和浏览器配合、令牌怎么存。快捷键：<kbd>空格</kbd> 播放/暂停，<kbd>←</kbd><kbd>→</kbd> 上/下一句，<kbd>Shift+←/→</kbd> 上/下一步。</div></div>
+  </div>
+</div>
+
+<div class="subtitle focus-code" id="subtitleBar">
+  <span class="focusbadge" id="focusBadge">👀 焦点</span>
+  <span class="txt" id="subtitle">准备好了吗？点 ▶ 开始。这次讲 CLI：终端里怎么跑、和浏览器怎么配合。</span>
+</div>
+
+<div class="controls">
+  <div class="missing" id="missing">⚠ 找不到 07-assets/L12-cli-session.mp3 或 timeline.js —— 在仓库根目录运行 <code>.venv-tts/Scripts/python backend/src/magic-L12/07-make-audio.py</code> 生成后刷新本页。</div>
+  <div class="progress" id="progress"><div class="fill" id="fill"></div></div>
+  <div class="btns">
+    <button id="playBtn" class="primary">▶ 开始播放</button>
+    <button id="prevBtn" title="上一句（Shift=上一步）">⏮ 句</button>
+    <button id="nextBtn" title="下一句（Shift=下一步）">句 ⏭</button>
+    <button id="quizBtn" title="片尾测验（听完自动弹出）">📝 测验</button>
+    <span class="time" id="timeLabel">0:00 / 0:00</span>
+    <span class="spacer"></span>
+    <label>语速 <input type="range" id="speed" min="0.6" max="2.0" step="0.1" value="1.0"><span id="speedVal">1.0×</span></label>
+    <span class="meta" id="counter">步 0/0 · 句 0/0</span>
+  </div>
+  <div class="hint">进度条上细线=句边界、粗线=步边界，点任意位置精确跳转；语速立即生效。代码为 IDEA 风语法高亮 + 真实源文件行号；字幕自动待在该注视的一侧。听完自动弹出 📝 递进测验。</div>
+</div>
+
+<audio id="au" src="07-assets/L12-cli-session.mp3" preload="auto"></audio>
+
+<div class="quiz-mask" id="quizMask">
+  <div class="quiz">
+    <h2>📝 课后测验 · CLI 命令行工具</h2>
+    <div class="sub">由浅入深 5 题。先自己说出答案再点开对照——能讲顺 = 真懂了，卡壳的题回到对应线重听。</div>
+    <details><summary><span class="lv lv1">①基础</span>CLI 是什么？在哪里跑？和浏览器 / 前端网页是什么关系？</summary>
+      <div class="ans">CLI = 命令行工具，是 <b>AI 工具的「手」</b>——一个<b>终端程序</b>，被动执行命令，<b>不在浏览器里、不在前端网页里</b>。配对时「<b>一手终端、一手浏览器</b>」：终端跑 <code>agentlog auth login</code> 拿配对码，浏览器开 <code>/#/cli-pair</code> 输码批准，终端那头自动完成。前端 <code>/settings</code> 的提示只告诉你「批准页在哪」，不是让你在前端跑 CLI。</div></details>
+    <details><summary><span class="lv lv2">②链路</span><code>auth login</code> 分哪几步？为什么中间要「轮询」？</summary>
+      <div class="ans">四步（<code>AuthCommand.Login</code>）：① <code>L53</code> POST 发起配对拿 deviceCode+userCode+verificationUri；② <code>L66-67</code> 打印批准网址+配对码给你；③ <code>L73</code> 起<b>轮询循环</b>，每隔 pollInterval 秒 POST 问一次「批了没」；④ <code>L82</code> APPROVED → <code>L85</code> 存令牌返回。<b>为什么轮询</b>：CLI 不知道你什么时候在浏览器点批准，只能不停问——你在终端看到的那排小点（<code>L102</code>）就是 PENDING 时打的。</div></details>
+    <details><summary><span class="lv lv2">③设计</span><code>config.json</code> 和 <code>credentials.json</code> 为什么分成两个文件？各存什么？</summary>
+      <div class="ans"><b>按「密 / 非密」分家</b>：<code>config.json</code>（<code>CliConfig</code>）存<b>非密</b>的 serverBaseUrl + installationCode；<code>credentials.json</code>（<code>CredentialStore</code>）存<b>密</b>的 owner access/refresh 令牌。分开的好处：可对 credentials 单独收紧文件权限（<code>L88</code> POSIX <code>rw-------</code>）、非密配置能放心人工查看/编辑、职责清晰。对齐 Pack 的 config.schema / credentials.schema 两份 schema。</div></details>
+    <details><summary><span class="lv lv3">④设计</span>同一台机器跑多个 CLI（如 Claude Code + Codex）怎么互不干扰？<code>installationCode</code> 和 <code>AGENTLOG_HOME</code> 各起什么作用？</summary>
+      <div class="ans"><b>installationCode</b>（<code>CliConfig L58</code>）= 这台 CLI 的设备身份，首次随机生成并持久化 → 每个 CLI 实例一个 → 后端按它建独立的 client_installation、独立配对、独立 owner 令牌。<b>AGENTLOG_HOME</b>（<code>CliPaths L23</code>）= 决定配置/凭据存哪个目录：每个 CLI / skill 设不同的 AGENTLOG_HOME，就各存各的、互不覆盖。两者配合实现「同机多 CLI 隔离」。（机娘身份的隔离是另一层：L13 assume 按 agent+tool+run 区分。）</div></details>
+    <details><summary><span class="lv lv4">⑤安全</span>令牌在 CLI 侧怎么保护？为什么 stdout 和 stderr 要分开？</summary>
+      <div class="ans"><b>令牌保护</b>：只写 <code>credentials.json</code>、<b>绝不打印</b>到控制台/日志（翻遍 login 找不到 print 令牌的行）；写文件尽力收紧权限仅本人可读（<code>L88</code>，Windows 不支持则优雅跳过，生产改 ACL）。<b>stdout/stderr 分开</b>（cli-spec）：<b>stdout 出机器可读 JSON</b>（供脚本/AI 工具解析），<b>stderr 出人类诊断</b>（提示、进度点、错误）——这样管道里 <code>agentlog ... | jq</code> 拿到的是干净 JSON，不被提示文字污染。刷新令牌（refresh）换新 access 是 L13。</div></details>
+    <button class="close" id="quizClose">关闭，回到视频</button>
+  </div>
+</div>
+
+<script src="07-assets/timeline.js"></script>
+<script>
+// ============ 内容模型（行号 = 2026-07-12 L12 CLI 施工后真实行号，可对照 IDE） ============
+const MODEL = {
+  threads: [
+    { id:"t0", name:"线0 CLI 定位·跑法" },
+    { id:"t1", name:"线1 login 设备流编排" },
+    { id:"t2", name:"线2 本地存储与隔离" },
+    { id:"t3", name:"线3 HTTP·输出·安全" }
+  ],
+  fileTree: [
+    { path:"cli/AgentLogCli.java", label:"AgentLogCli" },
+    { path:"cli/AuthCommand.java", label:"AuthCommand" },
+    { path:"cli/ApiClient.java", label:"ApiClient" },
+    { path:"cli/CliConfig.java", label:"CliConfig" },
+    { path:"cli/CliPaths.java", label:"CliPaths" },
+    { path:"cli/CredentialStore.java", label:"CredentialStore" }
+  ],
+  steps: [
+    { thread:"t0", file:null, fileStart:null,
+      structurePath:"CLI 定位 ▸ 一手终端一手浏览器", flowNode:"终端+浏览器",
+      codeSnippet:`CLI = AI 工具的「手」（终端程序，被动执行命令，不在浏览器/前端里）
+
+  ┌── 终端 ────────────────┐          ┌── 浏览器（你已登录）──┐
+  │ $ agentlog auth login   │          │                        │
+  │   → 打印 userCode + URL  │          │  打开  /#/cli-pair      │
+  │   → 轮询…（打点 . . .）  │◄──配对──►│  输 userCode → 批准      │
+  │   → ✓ 配对成功            │          │                        │
+  │ $ agentlog auth status  │          └────────────────────────┘
+  └─────────────────────────┘
+              一手终端、一手浏览器`,
+      detail:"本视频讲 CLI 这一头。<b>最容易懵的点</b>：CLI 是<b>终端程序</b>，不在浏览器/前端里——它是 AI 工具的「手」，被动执行命令。配对时<b>一手终端、一手浏览器</b>：终端 <code>auth login</code> 拿码 → 浏览器 <code>/#/cli-pair</code> 输码批准 → 终端自动完成。因为 CLI 没浏览器，登录得<b>借你另一块屏幕上已登录的浏览器</b>（设备授权流的形态）。",
+      sentences:[
+        { t:"上一个视频讲后端怎么发码验令牌，这个视频讲另一头——CLI，也就是命令行工具，它到底是什么、怎么跑。", focus:"detail" },
+        { t:"先破一个最容易懵的点：CLI 是个终端程序，不在浏览器里，也不在前端网页里。它是 AI 工具的手，被动执行命令。", lines:[1] },
+        { t:"配对时是一手终端、一手浏览器：终端跑 auth login 拿到配对码，浏览器打开批准页输码点批准，终端那头自动完成。", lines:[4,6,7] },
+        { t:"为什么这么别扭？因为 CLI 没有浏览器，登录得借你另一块屏幕上已登录的浏览器——这正是设备授权流的形态。", focus:"detail" }
+      ] },
+
+    { thread:"t0", file:"cli/AgentLogCli.java", fileStart:16,
+      structurePath:"AgentLogCli ▸ picocli 入口", flowNode:"入口",
+      codeSnippet:`@Command(name = "agentlog",
+        mixinStandardHelpOptions = true,
+        version = "agentlog-cli 0.1.0",
+        description = "AgentLog 命令行工具",
+        subcommands = {AuthCommand.class})
+public class AgentLogCli implements Runnable {
+
+    @Override
+    public void run() {
+        // 不带子命令时打印帮助。
+        new CommandLine(this).usage(System.err);
+    }
+
+    public static void main(String[] args) {
+        int exitCode = new CommandLine(new AgentLogCli()).execute(args);
+        System.exit(exitCode);
+    }
+}`,
+      detail:"用 <b>picocli</b> 框架：<b>L16</b> 一个 <code>@Command</code> 注解就把类变成命令 <code>agentlog</code>；<b>L20</b> 注册子命令 <code>AuthCommand</code>（所以有 <code>agentlog auth login</code>）；<b>L30</b> <code>execute()</code> 自动解析参数、路由到子命令、调用。本课只挂 auth，L13 加 <code>agent assume</code>、L14 加投稿。",
+      sentences:[
+        { t:"先看入口。AgentLogCli 用 picocli 框架，十六行一个 Command 注解，就把这个类变成了命令 agentlog。", lines:[16] },
+        { t:"二十行注册子命令 AuthCommand——所以你能敲 agentlog auth login。本课只挂 auth，后面 L13 加 agent assume。", lines:[20] },
+        { t:"三十行 main 里 execute 一跑，picocli 自动解析参数、找到对应子命令、调用它，你不用手写参数解析。", lines:[29,30] }
+      ] },
+
+    { thread:"t1", file:"cli/AuthCommand.java", fileStart:40,
+      structurePath:"Login.call ▸ 发起配对", flowNode:"① 发起配对",
+      codeSnippet:`        public Integer call() throws Exception {
+            CliConfig config = new CliConfig();
+            if (server != null && !server.isBlank()) {
+                config.setServerBaseUrl(server);
+            }
+            String baseUrl = config.serverBaseUrl();
+            String installationCode = config.getOrCreateInstallationCode();
+            ApiClient api = new ApiClient(baseUrl);
+
+            // 1) 发起配对。
+            ObjectNode createBody = mapper.createObjectNode()
+                    .put("installationCode", installationCode)
+                    .put("deviceName", System.getProperty("os.name") + "-cli");
+            ApiClient.Result pair = api.postJson("/api/v1/cli/device-pairings", createBody.toString());
+            if (!pair.ok()) {
+                System.err.println("✗ 配对发起失败: HTTP " + pair.status());
+                return 1;
+            }
+            String deviceCode = pair.body().get("deviceCode").asText();
+            String userCode = pair.body().get("userCode").asText();
+            String verifyUri = pair.body().get("verificationUri").asText();`,
+      detail:"<code>auth login</code> 正主。<b>L45</b> 拿后端地址、<b>L46</b> 拿或生成本机 <code>installationCode</code>（这台 CLI 的设备身份，同机多 CLI 靠它区分）；<b>L53</b> POST <b>匿名</b>发起配对（CLI 还没令牌）；<b>L58-60</b> 取出后端发的 deviceCode / userCode / 批准页地址。",
+      sentences:[
+        { t:"auth login 的正主在这。四十一行读本地配置，四十五行拿后端地址，四十六行拿或生成本机的 installationCode。", lines:[41,45,46] },
+        { t:"installationCode 是这台 CLI 的设备身份，第一次跑随机生成、存本地，以后每次配对都用它——同机多个 CLI 靠它区分。", lines:[46] },
+        { t:"五十行拼请求体，五十三行 POST 发起配对。这一步匿名，CLI 手上还没任何令牌。", lines:[50,53] },
+        { t:"五十八到六十行，从响应里取出后端发的 deviceCode、userCode、还有批准页地址 verificationUri。", lines:[58,59,60] }
+      ] },
+
+    { thread:"t1", file:"cli/AuthCommand.java", fileStart:64,
+      structurePath:"Login ▸ 提示 + 轮询循环", flowNode:"② 轮询",
+      codeSnippet:`            // 2) 提示主人去浏览器批准（人类诊断走 stderr）。
+            System.err.println();
+            System.err.println("  请在浏览器打开：" + verifyUri);
+            System.err.println("  输入配对码：    " + userCode);
+            System.err.println("  （" + (expiresIn / 60) + " 分钟内有效，等待批准…）");
+            System.err.println();
+
+            // 3) 轮询换 token。
+            long deadline = System.nanoTime() + expiresIn * 1_000_000_000L;
+            while (System.nanoTime() < deadline) {
+                Thread.sleep(pollInterval * 1000L);
+                ApiClient.Result poll = api.postJson("/api/v1/cli/device-pairings/token",
+                        mapper.createObjectNode().put("deviceCode", deviceCode).toString());
+                if (!poll.ok()) {
+                    System.err.println("✗ 轮询失败: HTTP " + poll.status());
+                    return 1;
+                }
+                String status = poll.body().path("status").asText("");`,
+      detail:"<b>L66-67</b> 把批准网址+配对码打印出来（走 <b>stderr</b>——人类诊断）。<b>L73</b> 起<b>轮询循环</b>：<b>L74</b> 先睡 pollInterval 秒，<b>L75</b> POST 轮询端点把 deviceCode 递过去问「批了没」，<b>L81</b> 读回 status。这就是设备流里 CLI「不停问」的动作。",
+      sentences:[
+        { t:"六十六六十七行，把批准网址和配对码打印到屏幕——注意走的是标准错误 stderr，等会讲为什么。", lines:[66,67] },
+        { t:"七十三行开始轮询循环：每隔几秒问一次后端，直到拿到结果或超时。这就是设备流里 CLI 那个不停问的动作。", lines:[73] },
+        { t:"七十四行先睡 pollInterval 秒，七十五行 POST 轮询端点，把 deviceCode 递过去问：批准了没？", lines:[74,75] },
+        { t:"八十一行读回来的 status：APPROVED 批了、EXPIRED 过期了、PENDING 还没批，三条岔路。", lines:[81] }
+      ] },
+
+    { thread:"t1", file:"cli/AuthCommand.java", fileStart:82,
+      structurePath:"Login ▸ 三条岔路", flowNode:"③ 存令牌",
+      codeSnippet:`                if ("APPROVED".equals(status)) {
+                    JsonNode b = poll.body();
+                    // 4) 存 token（不打印！）。
+                    new CredentialStore().saveTokens(
+                            b.get("ownerAccessToken").asText(),
+                            b.get("ownerRefreshToken").asText(),
+                            b.path("accessExpiresAt").asText(null));
+                    System.err.println("✓ 配对成功，已登录。凭据已安全保存到本地。");
+                    printJson(mapper.createObjectNode()
+                            .put("status", "ok")
+                            .put("installationCode", installationCode)
+                            .put("accessExpiresAt", b.path("accessExpiresAt").asText(null)));
+                    return 0;
+                }
+                if ("EXPIRED".equals(status)) {
+                    System.err.println("✗ 配对码已过期，请重新运行 auth login。");
+                    printJson(mapper.createObjectNode().put("status", "expired"));
+                    return 1;
+                }
+                // PENDING：继续轮询。
+                System.err.print(".");
+                System.err.flush();`,
+      detail:"轮询三条岔路：<b>L82 APPROVED</b> → <b>L85</b> 把两个令牌存本地、返回成功（<b>令牌只存不打印</b>）；<b>L101 PENDING</b> → 打个点（<code>System.err.print(\".\")</code>）继续轮询（你终端看到的那排小点）；<b>L96 EXPIRED</b> → 提示重来。三条岔路就是轮询的全部。",
+      sentences:[
+        { t:"八十二行批准了：八十五行把后端发的两个令牌存进本地，然后返回成功。注意——令牌只存文件，绝不打印到屏幕。", lines:[82,85] },
+        { t:"一百零一行是 PENDING：还没批，打个点继续轮询。你在终端看到的那排小点，就是它。", lines:[101,102] },
+        { t:"九十六行 EXPIRED：配对码过了十分钟，提示重来。这三条岔路，就是轮询的全部逻辑。", lines:[96,97] }
+      ] },
+
+    { thread:"t3", file:"cli/ApiClient.java", fileStart:29,
+      structurePath:"ApiClient ▸ 手写最小 HTTP", flowNode:"HTTP 客户端",
+      codeSnippet:`    public Result postJson(String path, String jsonBody) {
+        try {
+            HttpRequest req = HttpRequest.newBuilder(URI.create(baseUrl + path))
+                    .header("Content-Type", "application/json")
+                    .timeout(Duration.ofSeconds(15))
+                    .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
+                    .build();
+            HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
+            JsonNode body = resp.body() == null || resp.body().isBlank()
+                    ? mapper.createObjectNode() : mapper.readTree(resp.body());
+            return new Result(resp.statusCode(), body);
+        } catch (Exception e) {
+            throw new RuntimeException("请求失败: " + path + " — " + e.getMessage(), e);
+        }
+    }`,
+      detail:"那些 <code>postJson</code> 的实现。用 <b>JDK 自带的 HttpClient</b>（<code>java.net.http</code>），<b>不依赖 Spring</b>——CLI 是独立轻量程序。<b>L31-36</b> 发 POST、收响应、解析 JSON，<b>L39</b> 包成带状态码的 <code>Result</code>。为什么不用后端生成的客户端？CLI 只调三两个接口，<b>手写最小 HTTP 更轻、启动更快</b>。",
+      sentences:[
+        { t:"刚才那些 postJson，实现在 ApiClient。它用 JDK 自带的 HttpClient，不依赖 Spring——CLI 是独立轻量程序。", lines:[31] },
+        { t:"三十一到三十六行就是标准的发 POST、收响应、解析 JSON，三十九行包成一个带状态码的 Result。", lines:[34,36,39] },
+        { t:"为什么不用后端那套生成的客户端？CLI 只调三两个接口，手写最小 HTTP 更轻、启动更快。", focus:"detail" }
+      ] },
+
+    { thread:"t2", file:"cli/CliConfig.java", fileStart:52,
+      structurePath:"CliConfig ▸ config.json 非密·installationCode", flowNode:"非密配置",
+      codeSnippet:`    public String getOrCreateInstallationCode() {
+        try {
+            ObjectNode root = load();
+            if (root.hasNonNull("installationCode")) {
+                return root.get("installationCode").asText();
+            }
+            String code = "cli-" + UUID.randomUUID().toString().replace("-", "").substring(0, 16);
+            root.put("installationCode", code);
+            save(root);
+            return code;
+        } catch (Exception e) {
+            throw new IllegalStateException("读取/生成 installationCode 失败: " + e.getMessage(), e);
+        }
+    }`,
+      detail:"本地存储分两个文件，先看<b>非密</b>的 <code>config.json</code>（存 serverBaseUrl + installationCode）。<b>L55</b> 本地存过就直接返回（保证同一台 CLI 每次同一身份）；<b>L58</b> 没存过就随机生成一个存下来。<b>这就是「同机多 CLI 各自一个 installationCode、天然隔离」的实现。</b>",
+      sentences:[
+        { t:"本地存储分两个文件，先看非密的 config.json，管它的是 CliConfig，重点是这个 installationCode。", lines:[52] },
+        { t:"五十五行先看本地有没有存过，有就直接返回——保证同一台 CLI 每次都是同一个身份。", lines:[55,56] },
+        { t:"没有就五十八行随机生成一个、存下来。这就是我说的：同机跑多个 CLI，各自一个 installationCode，天然隔离。", lines:[58,59] }
+      ] },
+
+    { thread:"t2", file:"cli/CliPaths.java", fileStart:22,
+      structurePath:"CliPaths ▸ AGENTLOG_HOME 隔离", flowNode:"目录隔离",
+      codeSnippet:`    public static Path home() {
+        String override = System.getenv("AGENTLOG_HOME");
+        if (override != null && !override.isBlank()) {
+            return Paths.get(override);
+        }
+        return Paths.get(System.getProperty("user.home"), ".agentlog");
+    }
+
+    public static Path configFile() {
+        return home().resolve("config.json");
+    }
+
+    public static Path credentialsFile() {
+        return home().resolve("credentials.json");
+    }`,
+      detail:"多个 CLI 的配置怎么放到不同地方？<b>L23</b> 先看环境变量 <code>AGENTLOG_HOME</code>：设了就用你指定的目录，<b>L27</b> 没设就用默认 <code>~/.agentlog</code>。<b>每个 skill / CLI 设一个不同的 AGENTLOG_HOME，配置和凭据就各存各的、互不干扰</b>——正是「同机多 CLI/skill 并存」的隔离手段。",
+      sentences:[
+        { t:"那多个 CLI 的配置怎么放到不同地方？看 CliPaths。二十三行先看环境变量 AGENTLOG_HOME。", lines:[23] },
+        { t:"设了就用你指定的目录，没设就用默认的用户目录下 .agentlog。每个 skill 设一个不同的 AGENTLOG_HOME，配置和凭据就各存各的、互不干扰。", lines:[25,27] }
+      ] },
+
+    { thread:"t2", file:"cli/CredentialStore.java", fileStart:30,
+      structurePath:"CredentialStore ▸ credentials.json 密·令牌不打印", flowNode:"密凭据",
+      codeSnippet:`    public void saveTokens(String accessToken, String refreshToken, String accessExpiresAt) {
+        try {
+            ObjectNode root = load();
+            root.put("ownerAccessToken", accessToken);
+            root.put("ownerRefreshToken", refreshToken);
+            root.put("accessExpiresAt", accessExpiresAt);
+            save(root);
+        } catch (Exception e) {
+            throw new IllegalStateException("保存 token 失败: " + e.getMessage(), e);
+        }
+    }`,
+      detail:"<b>密</b>的那半在 <code>credentials.json</code>。<b>L33-35</b> 把两个令牌 + 过期时间写进去。<b>铁律：令牌只写文件、绝不打印</b>到控制台/日志（翻遍 login 找不到 print 令牌的行）。写文件时 <code>save()</code> 还调 <code>tightenPermissions()</code>（<code>L88</code>）尽力收紧到仅本人可读；Windows 不支持 POSIX 则优雅跳过——学习项目从简，生产用 ACL。",
+      sentences:[
+        { t:"密的那半在 CredentialStore，credentials.json。三十三到三十五行把两个令牌和过期时间写进去。", lines:[33,34,35] },
+        { t:"关键一条铁律：令牌只写文件，绝不打印到控制台或日志。你翻遍 login 的代码，找不到一行把令牌打印出来的。", focus:"detail" },
+        { t:"写文件时还尽力把权限收紧到仅本人可读；Windows 不支持就优雅跳过——学习项目从简，生产要用 ACL 收紧。", focus:"detail" }
+      ] },
+
+    { thread:"t3", file:"cli/AuthCommand.java", fileStart:121,
+      structurePath:"Status.call ▸ 纯本地判断", flowNode:"auth status",
+      codeSnippet:`        public Integer call() {
+            CredentialStore store = new CredentialStore();
+            String token = store.getAccessToken();
+            ObjectNode out = mapper.createObjectNode();
+            if (token == null) {
+                System.err.println("未登录。运行 agentlog auth login 进行配对。");
+                out.put("status", "logged_out");
+            } else {
+                boolean valid = store.isAccessValid(Instant.now());
+                String exp = store.getAccessExpiresAt();
+                // 不打印 token 本身，只报状态 + 过期时间。
+                System.err.println(valid
+                        ? "已登录。Access Token 有效期至：" + exp
+                        : "Access Token 已过期（需 auth refresh，L13）。有效期至：" + exp);
+                out.put("status", valid ? "logged_in" : "access_expired").put("accessExpiresAt", exp);
+            }
+            System.out.println(out.toString());
+            return 0;
+        }`,
+      detail:"<code>auth status</code> 更简单：<b>L123</b> 读本地令牌，没有报未登录；有就 <b>L129</b> 本地比过期时间——<b>纯本地判断、不联网，断网也能查</b>。<b>L132</b> 报「已登录、有效期至几点」，<b>同样不打印令牌本身</b>。令牌过期后用 refresh 换新的，是下一课 L13。",
+      sentences:[
+        { t:"auth status 更简单：一百二十三行读本地令牌，没有就报未登录。", lines:[123,125] },
+        { t:"有就一百二十九行本地比一下过期时间——注意，这是纯本地判断，不联网，断网也能查状态。", lines:[129] },
+        { t:"一百三十二行报「已登录、有效期至几点」，但同样不打印令牌本身。刷新令牌换新的，是下一课 L13。", lines:[132] }
+      ] },
+
+    { thread:"t0", file:null, fileStart:null,
+      structurePath:"总结 ▸ 一张小抄", flowNode:"小抄+面试",
+      codeSnippet:`【CLI · 一张小抄】
+
+五文件:  AgentLogCli(入口·picocli)    AuthCommand(login/status)    ApiClient(HTTP)
+         CliConfig(config.json 非密)   CredentialStore(credentials.json 密)
+         CliPaths(AGENTLOG_HOME 隔离同机多 CLI)
+
+跑法:    ./mvnw -pl cli package
+         java -jar cli/target/agentlog-cli.jar auth login    ← 终端拿码
+         浏览器 /#/cli-pair 输码批准
+         java -jar cli/target/agentlog-cli.jar auth status    ← 查状态
+
+铁律:    令牌只存不打印 · stdout 出 JSON / stderr 出人话 · config 非密与 credentials 密分家`,
+      detail:"<b>五文件</b>：入口 AgentLogCli、命令 AuthCommand、HTTP 客户端 ApiClient、非密配置 CliConfig、密凭据 CredentialStore（+ CliPaths 隔离）。<b>跑法</b>：package 打 jar → <code>auth login</code> 拿码 → 浏览器批准页输码 → <code>auth status</code> 查。<b>面试一句</b>：CLI 是 AI 工具的手，用设备授权流登录，令牌只存不打印，config 非密与 credentials 密分家。",
+      sentences:[
+        { t:"收尾一张小抄。CLI 五个文件：入口 AgentLogCli、命令 AuthCommand、HTTP 客户端 ApiClient、非密配置 CliConfig、密凭据 CredentialStore。", lines:[3,4] },
+        { t:"跑法记牢：终端 mvn package 打 jar，java -jar auth login 拿码，浏览器批准页输码，auth status 查状态。一手终端一手浏览器。", lines:[8,9,10,11] },
+        { t:"面试或跟人讲就一句：CLI 是 AI 工具的手，用设备授权流登录，令牌只存不打印，config 非密和 credentials 密分家。", focus:"detail" }
+      ] }
+  ]
+};
+
+// ============ 播放器引擎 v5（真音频驱动，与后端视频同引擎）============
+const $ = id => document.getElementById(id);
+const au = $('au');
+const TL = window.AUDIO_TIMELINE || null;
+
+const FLAT = [];
+MODEL.steps.forEach((s, si) => s.sentences.forEach((sn, pi) => FLAT.push({ si, pi, sn })));
+const TOTAL = FLAT.length;
+
+let cur = -1, renderedStep = -1;
+
+if (!TL || TL.length !== TOTAL) { $('missing').style.display = 'block'; }
+const DURATION = TL ? TL[TL.length - 1][1] : 0;
+
+$('legend').innerHTML = MODEL.threads.map(t => `<span class="lg" data-t="${t.id}">${t.name}</span>`).join('');
+
+function buildTree() {
+  const root = {};
+  MODEL.fileTree.forEach(f => {
+    const parts = f.path.split('/');
+    let curNode = root;
+    parts.forEach((p, i) => {
+      const isFile = i === parts.length - 1;
+      curNode[p] = curNode[p] || { __file: isFile ? f : null, __children: {} };
+      curNode = curNode[p].__children;
+    });
+  });
+  const out = [];
+  (function walk(node, depth) {
+    Object.keys(node).forEach(name => {
+      const n = node[name];
+      const isFile = n.__file;
+      out.push(`<div class="node ${isFile ? 'file' : 'dir'}" ${isFile ? `data-file="${isFile.path}"` : ''} style="padding-left:${14 + depth * 16}px"><span class="ic">${isFile ? '📄' : '📁'}</span>${name}</div>`);
+      if (!isFile) walk(n.__children, depth + 1);
+    });
+  })(root, 0);
+  $('tree').innerHTML = out.join('');
+  [...document.querySelectorAll('.node.file')].forEach(node => {
+    node.onclick = () => {
+      const i = MODEL.steps.findIndex(s => s.file === node.dataset.file);
+      if (i >= 0) seekToSentence(firstSentenceOfStep(i));
+    };
+  });
+}
+buildTree();
+
+function buildFlow() {
+  const byThread = {};
+  MODEL.steps.forEach((s, i) => { (byThread[s.thread] = byThread[s.thread] || []).push({ ...s, i }); });
+  $('flow').innerHTML = MODEL.threads.map(t => {
+    const chips = (byThread[t.id] || []).map(s => `<span class="chip" data-i="${s.i}">${s.flowNode}</span>`).join('');
+    return `<div class="lane" data-t="${t.id}"><span class="lane-name">${t.name}</span><span class="chips">${chips || '<span class="chip" style="opacity:.4;cursor:default">—</span>'}</span></div>`;
+  }).join('');
+  [...document.querySelectorAll('.chip[data-i]')].forEach(c => { c.onclick = () => seekToSentence(firstSentenceOfStep(+c.dataset.i)); });
+}
+buildFlow();
+
+function firstSentenceOfStep(si) { return FLAT.findIndex(f => f.si === si); }
+
+if (TL) {
+  FLAT.forEach((f, k) => {
+    if (k === 0) return;
+    const tick = document.createElement('div');
+    tick.className = 'tick' + (f.pi === 0 ? ' step' : '');
+    tick.style.left = (TL[k][0] / DURATION * 100) + '%';
+    $('progress').appendChild(tick);
+  });
+  $('progress').onclick = e => {
+    const r = $('progress').getBoundingClientRect();
+    au.currentTime = Math.max(0, Math.min(DURATION - .05, (e.clientX - r.left) / r.width * DURATION));
+    if (au.paused) au.play();
+  };
+}
+
+function fmt(sec) { const m = Math.floor(sec / 60), s = Math.floor(sec % 60); return m + ':' + String(s).padStart(2, '0'); }
+
+function esc(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+const JAVA_RE = /("[^"]*")|(@[A-Za-z]\w*)|\b(public|private|protected|static|final|class|record|enum|interface|void|new|return|if|else|try|catch|throw|throws|extends|implements|import|package|this|null|true|false|switch|case|default|for|while|boolean|int|long|double|float)\b|\b(\d[\d_]*L?)\b|\.([a-z]\w*)(?=\s*\()/g;
+function hlJava(raw) {
+  const t = raw.trimStart();
+  if (/^(\/\/|\/\*|\*)/.test(t)) return '<span class="tk-cm">' + esc(raw) + '</span>';
+  let rest = raw, tail = '';
+  const ci = rest.indexOf('//');
+  if (ci >= 0 && ((rest.slice(0, ci).match(/"/g) || []).length % 2 === 0)) {
+    tail = '<span class="tk-cm">' + esc(rest.slice(ci)) + '</span>'; rest = rest.slice(0, ci);
+  }
+  let out = '', last = 0, m;
+  JAVA_RE.lastIndex = 0;
+  while ((m = JAVA_RE.exec(rest))) {
+    out += esc(rest.slice(last, m.index));
+    if (m[1]) out += '<span class="tk-str">' + esc(m[1]) + '</span>';
+    else if (m[2]) out += '<span class="tk-ann">' + esc(m[2]) + '</span>';
+    else if (m[3]) out += '<span class="tk-kw">' + m[3] + '</span>';
+    else if (m[4]) out += '<span class="tk-num">' + m[4] + '</span>';
+    else if (m[5]) out += '.<span class="tk-call">' + m[5] + '</span>';
+    last = JAVA_RE.lastIndex;
+  }
+  return out + esc(rest.slice(last)) + tail;
+}
+function hlText(raw) {
+  let ci = raw.indexOf('//');
+  if (ci < 0) ci = raw.indexOf('--');
+  if (ci < 0) return esc(raw);
+  return esc(raw.slice(0, ci)) + '<span class="tk-cm">' + esc(raw.slice(ci)) + '</span>';
+}
+
+function renderCode(step) {
+  $('code').innerHTML = '';
+  const base = step.fileStart;
+  const isJava = step.file && step.file.endsWith('.java');
+  step.codeSnippet.split('\n').forEach((ln, i) => {
+    const div = document.createElement('div');
+    div.className = 'line';
+    div.dataset.abs = base != null ? (base + i) : (i + 1);
+    const num = document.createElement('span'); num.className = 'ln';
+    num.textContent = base != null ? (base + i) : '·';
+    const tx = document.createElement('span'); tx.innerHTML = isJava ? hlJava(ln) : hlText(ln);
+    div.appendChild(num); div.appendChild(tx); $('code').appendChild(div);
+  });
+}
+function renderStep(si) {
+  renderedStep = si;
+  const s = MODEL.steps[si];
+  [...document.querySelectorAll('.node.file')].forEach(n => n.classList.toggle('on', n.dataset.file === s.file));
+  const onNode = document.querySelector('.node.file.on'); if (onNode) onNode.scrollIntoView({ block: 'nearest' });
+  const lineCount = s.codeSnippet.split('\n').length;
+  $('crumb').innerHTML = s.file
+    ? `📄 ${s.file} &nbsp;›&nbsp; <b>${s.structurePath}</b> &nbsp;·&nbsp; L${s.fileStart}–L${s.fileStart + lineCount - 1}（真实行号，可对照 IDE）`
+    : `⚙ ${s.structurePath} &nbsp;·&nbsp; <b>示意图（非项目源码）</b>`;
+  renderCode(s);
+  [...document.querySelectorAll('.chip[data-i]')].forEach(c => { const ci = +c.dataset.i; c.classList.toggle('on', ci === si); c.classList.toggle('done', ci < si); });
+  [...document.querySelectorAll('.lane')].forEach(l => l.classList.toggle('on', l.dataset.t === s.thread));
+  [...document.querySelectorAll('.lg')].forEach(l => l.classList.toggle('on', l.dataset.t === s.thread));
+  const onChip = document.querySelector('.chip.on'); if (onChip) onChip.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  $('detail').innerHTML = s.detail;
+}
+
+function showSentence(k) {
+  cur = k;
+  const { si, pi, sn } = FLAT[k];
+  if (si !== renderedStep) renderStep(si);
+  const step = MODEL.steps[si];
+
+  const hiset = new Set(sn.lines || []);
+  let first = null;
+  [...document.querySelectorAll('#code .line')].forEach(div => {
+    const abs = +div.dataset.abs;
+    div.classList.remove('hot', 'dim');
+    if (hiset.size) {
+      if (hiset.has(abs)) { div.classList.add('hot'); if (!first) first = div; }
+      else div.classList.add('dim');
+    }
+  });
+  if (first) first.scrollIntoView({ block: 'center', behavior: 'smooth' });
+
+  const focus = sn.focus || (hiset.size ? 'code' : 'detail');
+  $('codePanel').classList.toggle('glow', focus === 'code');
+  $('detailPanel').classList.toggle('glow', focus === 'detail');
+  $('subtitleBar').className = 'subtitle ' + (focus === 'code' ? 'focus-code' : 'focus-detail');
+  const badge = $('focusBadge');
+  if (focus === 'code') {
+    badge.className = 'focusbadge code';
+    badge.textContent = step.fileStart != null && hiset.size
+      ? `👈 看左侧代码 L${Math.min(...hiset)}${hiset.size > 1 ? '–L' + Math.max(...hiset) : ''}`
+      : '👈 看左侧';
+  } else {
+    badge.className = 'focusbadge detail';
+    badge.textContent = '👉 看右侧详解';
+  }
+
+  $('subtitle').textContent = sn.t;
+  $('counter').textContent = `步 ${si + 1}/${MODEL.steps.length} · 句 ${k + 1}/${TOTAL}`;
+  $('prevBtn').disabled = k === 0; $('nextBtn').disabled = k === TOTAL - 1;
+}
+
+function sentenceAt(t) {
+  for (let k = TOTAL - 1; k >= 0; k--) if (t >= TL[k][0] - 0.05) return k;
+  return 0;
+}
+au.addEventListener('timeupdate', () => {
+  if (!TL) return;
+  $('fill').style.width = (au.currentTime / DURATION * 100) + '%';
+  $('timeLabel').textContent = fmt(au.currentTime) + ' / ' + fmt(DURATION);
+  const k = sentenceAt(au.currentTime);
+  if (k !== cur) showSentence(k);
+});
+au.addEventListener('play', () => { $('playBtn').textContent = '⏸ 暂停'; $('playBtn').classList.remove('primary'); });
+au.addEventListener('pause', () => { $('playBtn').textContent = au.ended ? '↺ 重播' : '▶ 继续'; $('playBtn').classList.add('primary'); });
+au.addEventListener('ended', () => { $('playBtn').textContent = '↺ 重播'; $('playBtn').classList.add('primary'); $('quizMask').classList.add('show'); });
+au.addEventListener('error', () => { $('missing').style.display = 'block'; });
+au.addEventListener('loadedmetadata', () => { $('timeLabel').textContent = '0:00 / ' + fmt(DURATION || au.duration); });
+
+function seekToSentence(k) {
+  if (!TL || k < 0) return;
+  au.currentTime = TL[k][0] + 0.01;
+  showSentence(k);
+  if (au.paused) au.play();
+}
+$('playBtn').onclick = () => {
+  if (!TL) return;
+  if (au.paused) { if (au.ended) au.currentTime = 0; au.play(); } else au.pause();
+};
+$('prevBtn').onclick = e => { seekToSentence(e.shiftKey ? firstSentenceOfStep(Math.max(0, FLAT[Math.max(cur, 0)].si - 1)) : Math.max(0, cur - 1)); };
+$('nextBtn').onclick = e => { seekToSentence(e.shiftKey ? firstSentenceOfStep(Math.min(MODEL.steps.length - 1, FLAT[Math.max(cur, 0)].si + 1)) : Math.min(TOTAL - 1, cur + 1)); };
+$('speed').oninput = () => {
+  au.playbackRate = parseFloat($('speed').value);
+  $('speedVal').textContent = parseFloat($('speed').value).toFixed(1) + '×';
+};
+$('quizBtn').onclick = () => $('quizMask').classList.add('show');
+$('quizClose').onclick = () => $('quizMask').classList.remove('show');
+$('quizMask').onclick = e => { if (e.target === $('quizMask')) $('quizMask').classList.remove('show'); };
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT') return;
+  if (e.code === 'Space') { e.preventDefault(); $('playBtn').click(); }
+  else if (e.code === 'ArrowRight') { e.preventDefault(); seekToSentence(e.shiftKey ? firstSentenceOfStep(Math.min(MODEL.steps.length - 1, FLAT[Math.max(cur, 0)].si + 1)) : Math.min(TOTAL - 1, cur + 1)); }
+  else if (e.code === 'ArrowLeft') { e.preventDefault(); seekToSentence(e.shiftKey ? firstSentenceOfStep(Math.max(0, FLAT[Math.max(cur, 0)].si - 1)) : Math.max(0, cur - 1)); }
+});
+</script>
+</body>
+</html>
