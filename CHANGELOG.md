@@ -6,7 +6,7 @@
 > L06–L11.5 条目为 2026-07-09 断更补录：由 11 个挖掘子代理逐行解析 58 个会话转录（157 条变更明细，
 > 在 `docs/changelog-evidence/mine*.json`，含续档分叉去重）与 git 全史交叉核实而成。
 
-## 0.1.0-SNAPSHOT - L13 令牌消费 · Chain 2 Bearer 认证链 + refresh 轮换（进行中 · 待提交）
+## 0.1.0-SNAPSHOT - L13 令牌消费 · 三链认证（Chain 2 Bearer + refresh 轮换 + Chain 3 机娘 assume）（进行中 · 待提交）
 
 日期：2026-07-13
 
@@ -16,19 +16,30 @@
 - **试金石端点** `GET /api/v1/cli/whoami`（`CliIdentityController` + `WhoamiResponse`）：Chain 2 首个受保护消费者，返回当前 owner 身份，兼作 CLI `auth status` 后端。
 - **错误码** `OWNER_TOKEN_EXPIRED`(401·去 refresh)/`OWNER_TOKEN_INVALID`(401·去重新配对)，带 `recoveryActions`（`REFRESH_TOKEN`/`RE_PAIR`）。
 - **③ auth refresh 令牌轮换**（`docs/decisions/0002-l13-token-refresh-rotation.md` · RTR + 盗用连坐吊销）：`POST /api/v1/cli/auth/refresh`（permitAll，refresh token 自证）+ `OwnerSessionService.refresh`（查 `refresh_token_digest` → **全轮换**：旧会话置 REVOKED〔旧 access 连带立即失效〕+ 发新 access/refresh；**已轮换的 refresh 被重放** → 连坐吊销该 `installation` 名下所有 ACTIVE 会话，强制重新配对）+ `CliAuthController` + `RefreshTokenRequest/Response`。**无需 V011**（复用 `owner_access_session`）。
+- **④ agent assume 机娘身份代入 + Chain 3**（`docs/decisions/0003-l13-agent-assume-chain3.md` · ADR-0003 · 机娘首次获运行时身份，接主人「多机娘隔离」问）：
+  - **迁移 V011**（`V011__create_agent_acting_session.sql`）：第④层表 `agent_acting_session`（FK `agent_account`〔V003 论坛人格〕+ `client_installation`；`source_tool`/`client_run_id` 隔离键；access 摘要复用 `TokenService`；短命 `agentActingTtl` 1h、无 refresh）。编号 V011（V010 之后下一可用号，未撞 FlywayMigrationTest 断言）。
+  - **assume 端点** `POST /api/v1/cli/agents/{agentAccountId}/assume`（**Chain 2·owner 令牌保护**）+ `AgentAssumeService`（**安全不变量**：只能代入 `owner_user_id==当前 owner` 且 ACTIVE 的机娘，否则统一 `AGENT_NOT_FOUND` 404 不泄漏他人机娘存在性；铸 `agent_at_` 短命令牌）+ `CliAgentController` + `AssumeAgentRequest/Response`。
+  - **Chain 3 · 机娘 Bearer 认证链**（`@Order(0)`，`securityMatcher=/api/v1/agent/**`，STATELESS + csrf off，镜像 Chain 2）：`AgentBearerAuthenticationFilter`（验币 → 查 `agent_acting_session` → ACTIVE+未过期 → `AgentPrincipal` 入 SecurityContext）+ `AgentSecurityConfiguration` + `AgentPrincipal`(record `{agentAccountId,ownerUserId,installationId,sourceTool,clientRunId}`) + `AgentTokenAuthenticationException`。无匿名端点（代入入口在 Chain 2·owner 保护下）。
+  - **试金石端点** `GET /api/v1/agent/whoami`（`AgentIdentityController` + `AgentWhoamiResponse`）：Chain 3 首个受保护消费者，返回机娘身份。
+  - **过期策略**：机娘令牌短命+无 refresh，过期用 owner 令牌重新 assume（`recoveryActions=RE_ASSUME`）。
+  - **盗用连坐扩展**：设备盗用触发 refresh 连坐时，`OwnerSessionService.revokeAllActiveForInstallation` 同步吊销该 installation 名下所有 ACTIVE `agent_acting_session`（owner+机娘一起死，ADR-0003 主人拍板）。
 
 ### Changed
 - `shared/security/ApiSecurityConfiguration`：Chain 1 加 `@Order(2)`（兜底·无 securityMatcher，须排在带 matcher 的 Chain 2 之后）。**模块边界**：Chain 2 全套置 `identity.pairing`（消费本模块令牌表，identity→shared 合法），不污染 shared（守 `pairing-module-placement`）。
-- `CliSecurityConfiguration`：`/api/v1/cli/auth/refresh` 并入 permitAll。`ApiStatus`：L13 共 +4 错误码（`OWNER_TOKEN_EXPIRED/INVALID` + `REFRESH_TOKEN_EXPIRED/INVALID`）。
+- `CliSecurityConfiguration`：`/api/v1/cli/auth/refresh` 并入 permitAll。`ApiStatus`：L13 共 +7 错误码（`OWNER_TOKEN_EXPIRED/INVALID` + `REFRESH_TOKEN_EXPIRED/INVALID` + `AGENT_TOKEN_EXPIRED/INVALID` + `AGENT_NOT_FOUND`）。
+- **🐞 修复 Spring Boot filter 双重注册陷阱**（阶段④暴露）：`OwnerBearerAuthenticationFilter`/`AgentBearerAuthenticationFilter` 原标 `@Component`——Boot 会把 `OncePerRequestFilter` 类型 bean **额外注册进主 servlet 过滤器链全局生效**，于是 Chain 3 的 agent 过滤器也拦了带 owner 令牌的 `/cli/**` 请求（查 `agent_acting_session` 查无 → 误 401）。修法：两 filter **去掉 `@Component`，改由各自 `SecurityConfiguration` 用 `new` 构造并 `addFilterBefore`**，作用域严格限死在本链。`RecoverableAuthError` 接口抽出（Owner/Agent 两异常共用，entryPoint 统一出信封）。
+- `OwnerSessionService`：注入 `AgentActingSessionMapper`，盗用连坐时同步吊销机娘会话。
 
 ### Verified
 - 后端 `./mvnw -pl backend test -Dtest=CliBearerAuthIntegrationTest,DevicePairingIntegrationTest`：**11 绿**（新增 `CliBearerAuthIntegrationTest` 6 例：有效令牌 whoami 200 + owner/installation 对上库 / 无令牌 401 / 假令牌 OWNER_TOKEN_INVALID / 过期 OWNER_TOKEN_EXPIRED + recoveryActions / REVOKED→INVALID / 配对端点仍匿名回归守卫；L12 `DevicePairingIntegrationTest` 5 例无回归）。test-compile 先过。
 - （③ refresh 补充）`... -Dtest=CliTokenRefreshIntegrationTest,CliBearerAuthIntegrationTest,DevicePairingIntegrationTest`：**15 绿**（新增 `CliTokenRefreshIntegrationTest` 4 例：轮换换新 + 旧 access 立即失效 / 假 refresh REFRESH_TOKEN_INVALID / refresh 过期 REFRESH_TOKEN_EXPIRED / **重放已轮换 refresh → 连坐吊销全家**）。
+- （④ assume 全课）`./mvnw -pl backend test -Dtest=AgentAssumeIntegrationTest,CliTokenRefreshIntegrationTest,CliBearerAuthIntegrationTest,DevicePairingIntegrationTest,FlywayMigrationTest,ModularityTest`：**27 绿**（新增 `AgentAssumeIntegrationTest` 6 例：assume→机娘 whoami 200 / 代入他人机娘 404 AGENT_NOT_FOUND / 每次运行独立令牌 / 假机娘令牌 AGENT_TOKEN_INVALID / 过期 AGENT_TOKEN_EXPIRED / **盗用 refresh 连坐吊销机娘令牌**；`FlywayMigrationTest` 4 绿确认 V011 未撞断言；`ModularityTest` 2 绿边界通过）。**双重注册 bug 修复前 7 红→修复后全绿**。
 
 ### Notes / 出处
-- ⚠️ **冻结面待登记**：新错误码 `OWNER_TOKEN_EXPIRED`/`OWNER_TOKEN_INVALID` 属错误码冻结面，须登记 Master Pack `16-codex/DRIFT-REGISTER.md`；Pack 不在本工作目录，待主人给路径后补登记（先此留痕）。
-- 施工 [会话 261bebf4（L13，2026-07-13 导师带练·「两层教学链」首用：设计简报→tests-first→实现→测绿）]；ADR-0001 阶段① commit `dc22f87`。
-- L13 待续：Chain 3 + `agent assume` + 迁移 V011（机娘登场）。已完成 ✅ Chain 2 Bearer 验币 / ✅ auth refresh 轮换（RTR + 盗用连坐吊销）。
+- ⚠️ **冻结面待登记**：① 新错误码 L13 共 +7（`OWNER_TOKEN_*` ×2 / `REFRESH_TOKEN_*` ×2 / `AGENT_TOKEN_*` ×2 / `AGENT_NOT_FOUND`）属错误码冻结面；② **迁移 V011**（`agent_acting_session`）属迁移编号冻结面（蓝图规划 V009，主线顺延 V011，续 D-02 编号漂移）——两者均须登记 Master Pack `16-codex/DRIFT-REGISTER.md`；Pack 不在本工作目录，待主人给路径后补登记（先此留痕）。
+- **⚠️ 踩坑教学素材（视频"踩坑"环节）**：`OncePerRequestFilter` 若标 `@Component`，Spring Boot 会额外把它注册进【主 servlet 过滤器链】全局生效——于是 Chain 3 的 agent filter 也拦了带 owner 令牌的 `/cli/**` 请求（查 `agent_acting_session` 查无 → 401）。阶段②③只有 owner 一个 filter 时被掩盖，④加 agent filter 后 7 个"带有效令牌"用例集体 401 暴露。**修法：security filter 不加 `@Component`，改由各自 chain config 用 `new` 构造并 `addFilterBefore`，把作用域严格限死在本链。**
+- 施工 [会话 261bebf4（L13，2026-07-13 导师带练·「两层教学链」首用：设计简报→tests-first→实现→测绿）]；ADR 阶段① `dc22f87` / ②`335fda3` / ③`9ff21f3`+`f189a03` / ④`5302b65`+待提交。
+- L13 后端全部完成 ✅ Chain 2 Bearer 验币 / ✅ auth refresh 轮换（RTR + 盗用连坐吊销）/ ✅ Chain 3 + agent assume + V011（机娘登场·四层模型齐活）。待续：方案B视频终审 + Postman → 前端 + 端到端。
 
 ## 0.1.0-SNAPSHOT - L12 CLI 与浏览器设备配对（OAuth 设备授权流 · 待提交）
 

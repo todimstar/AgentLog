@@ -1,8 +1,11 @@
 package com.agentlog.identity.pairing.application;
 
 import com.agentlog.identity.pairing.api.dto.RefreshTokenResponse;
+import com.agentlog.identity.pairing.domain.AgentSessionStatus;
 import com.agentlog.identity.pairing.domain.OwnerSessionStatus;
+import com.agentlog.identity.pairing.infrastructure.persistence.dataobject.AgentActingSessionDO;
 import com.agentlog.identity.pairing.infrastructure.persistence.dataobject.OwnerAccessSessionDO;
+import com.agentlog.identity.pairing.infrastructure.persistence.mapper.AgentActingSessionMapper;
 import com.agentlog.identity.pairing.infrastructure.persistence.mapper.OwnerAccessSessionMapper;
 import com.agentlog.shared.error.ApiException;
 import com.agentlog.shared.error.ApiStatus;
@@ -26,13 +29,15 @@ import org.springframework.stereotype.Service;
 public class OwnerSessionService {
 
     private final OwnerAccessSessionMapper sessionMapper;
+    private final AgentActingSessionMapper agentSessionMapper;
     private final TokenService tokenService;
     private final TokenProperties tokenProps;
     private final Clock clock;
 
-    public OwnerSessionService(OwnerAccessSessionMapper sessionMapper, TokenService tokenService,
-            TokenProperties tokenProps, Clock clock) {
+    public OwnerSessionService(OwnerAccessSessionMapper sessionMapper, AgentActingSessionMapper agentSessionMapper,
+            TokenService tokenService, TokenProperties tokenProps, Clock clock) {
         this.sessionMapper = sessionMapper;
+        this.agentSessionMapper = agentSessionMapper;
         this.tokenService = tokenService;
         this.tokenProps = tokenProps;
         this.clock = clock;
@@ -88,13 +93,19 @@ public class OwnerSessionService {
         return new RefreshTokenResponse(accessToken, refreshToken, accessExp);
     }
 
-    /** 盗用响应：吊销某设备安装名下所有 ACTIVE 会话（整条链作废，强制重新配对）。 */
+    /** 盗用响应：吊销某设备安装名下所有 ACTIVE 会话（owner + 机娘一起作废，强制重新配对）。 */
     private void revokeAllActiveForInstallation(Long installationId, Instant now) {
         sessionMapper.update(null, new LambdaUpdateWrapper<OwnerAccessSessionDO>()
                 .eq(OwnerAccessSessionDO::getInstallationId, installationId)
                 .eq(OwnerAccessSessionDO::getStatus, OwnerSessionStatus.ACTIVE.getCode())
                 .set(OwnerAccessSessionDO::getStatus, OwnerSessionStatus.REVOKED.getCode())
                 .set(OwnerAccessSessionDO::getUpdatedAt, now));
+        // 连坐：该设备名下的机娘会话（agent_acting_session）一并吊销（ADR-0003 主人拍板）。
+        agentSessionMapper.update(null, new LambdaUpdateWrapper<AgentActingSessionDO>()
+                .eq(AgentActingSessionDO::getInstallationId, installationId)
+                .eq(AgentActingSessionDO::getStatus, AgentSessionStatus.ACTIVE.getCode())
+                .set(AgentActingSessionDO::getStatus, AgentSessionStatus.REVOKED.getCode())
+                .set(AgentActingSessionDO::getUpdatedAt, now));
     }
 
     private ApiException invalid() {

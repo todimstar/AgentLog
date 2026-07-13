@@ -41,7 +41,7 @@ public class ProblemDetailAuthenticationEntryPoint implements AuthenticationEntr
         String detail;
         List<String> recoveryActions;
 
-        if (authException instanceof OwnerTokenAuthenticationException ex) {
+        if (authException instanceof RecoverableAuthError ex) {
             ApiStatus status = ex.apiStatus();
             httpStatus = status.getStatus();
             code = status.getCode();

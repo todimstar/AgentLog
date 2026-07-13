@@ -17,7 +17,6 @@ import org.springframework.lang.NonNull;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 /**
@@ -30,8 +29,11 @@ import org.springframework.web.filter.OncePerRequestFilter;
  *   4. 命中且有效 → OwnerPrincipal{ownerUserId, installationId} 入 SecurityContext。
  *
  * 失败直接委托 entryPoint 出信封（不在此手拼 JSON），与全局错误格式一致。
+ *
+ * ⚠️ 刻意不加 @Component：OncePerRequestFilter 若是 Spring bean，Boot 会额外把它注册进【主 servlet 过滤器链】
+ *   对所有 URL 全局生效——于是带 owner 令牌的 /agent/** 请求也会被它拦、或反之，导致跨链误判 401。
+ *   正确做法是只由 {@link CliSecurityConfiguration} 用 new 构造并 addFilterBefore 进本链，严格限定作用域。
  */
-@Component
 public class OwnerBearerAuthenticationFilter extends OncePerRequestFilter {
 
     private static final String BEARER_PREFIX = "Bearer ";
