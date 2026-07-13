@@ -6,6 +6,27 @@
 > L06–L11.5 条目为 2026-07-09 断更补录：由 11 个挖掘子代理逐行解析 58 个会话转录（157 条变更明细，
 > 在 `docs/changelog-evidence/mine*.json`，含续档分叉去重）与 git 全史交叉核实而成。
 
+## 0.1.0-SNAPSHOT - L13 令牌消费 · Chain 2 CLI Bearer 认证链（进行中 · 待提交）
+
+日期：2026-07-13
+
+### Added
+- **ADR-0001**（`docs/decisions/0001-l13-cli-bearer-chain.md`）：L13「两层教学链」①架构思考层产物——Chain 2 设计简报（问题→设计空间→权衡→决策，苏格拉底式）。主人拍板两岔路：principal=`{owner+installation}`、错误语义区分过期/无效。
+- **Chain 2 · CLI Bearer 认证链**（`identity/pairing/security/**`）：`OwnerBearerAuthenticationFilter`（OncePerRequestFilter：读 `Authorization: Bearer` → `TokenService.digest` **复用铸币算法** → 查 `owner_access_session` → ACTIVE+未过期 → 认证）+ `CliSecurityConfiguration`（`@Order(1)` SecurityFilterChain，`securityMatcher=/api/v1/cli/**`，STATELESS + csrf disable，配对两端点仍 permitAll）+ `OwnerPrincipal`(record `{ownerUserId,installationId}`) + `OwnerTokenAuthenticationException` + `ProblemDetailAuthenticationEntryPoint`（filter 层错误也出统一 ProblemDetail 信封，与 GlobalExceptionHandler 一致）。
+- **试金石端点** `GET /api/v1/cli/whoami`（`CliIdentityController` + `WhoamiResponse`）：Chain 2 首个受保护消费者，返回当前 owner 身份，兼作 CLI `auth status` 后端。
+- **错误码** `OWNER_TOKEN_EXPIRED`(401·去 refresh)/`OWNER_TOKEN_INVALID`(401·去重新配对)，带 `recoveryActions`（`REFRESH_TOKEN`/`RE_PAIR`）。
+
+### Changed
+- `shared/security/ApiSecurityConfiguration`：Chain 1 加 `@Order(2)`（兜底·无 securityMatcher，须排在带 matcher 的 Chain 2 之后）。**模块边界**：Chain 2 全套置 `identity.pairing`（消费本模块令牌表，identity→shared 合法），不污染 shared（守 `pairing-module-placement`）。
+
+### Verified
+- 后端 `./mvnw -pl backend test -Dtest=CliBearerAuthIntegrationTest,DevicePairingIntegrationTest`：**11 绿**（新增 `CliBearerAuthIntegrationTest` 6 例：有效令牌 whoami 200 + owner/installation 对上库 / 无令牌 401 / 假令牌 OWNER_TOKEN_INVALID / 过期 OWNER_TOKEN_EXPIRED + recoveryActions / REVOKED→INVALID / 配对端点仍匿名回归守卫；L12 `DevicePairingIntegrationTest` 5 例无回归）。test-compile 先过。
+
+### Notes / 出处
+- ⚠️ **冻结面待登记**：新错误码 `OWNER_TOKEN_EXPIRED`/`OWNER_TOKEN_INVALID` 属错误码冻结面，须登记 Master Pack `16-codex/DRIFT-REGISTER.md`；Pack 不在本工作目录，待主人给路径后补登记（先此留痕）。
+- 施工 [会话 261bebf4（L13，2026-07-13 导师带练·「两层教学链」首用：设计简报→tests-first→实现→测绿）]；ADR-0001 阶段① commit `dc22f87`。
+- L13 待续：`auth refresh` 轮换（正好消费本步铸的 `OWNER_TOKEN_EXPIRED`→`REFRESH_TOKEN`）→ Chain 3 + `agent assume` + 迁移 V011（机娘登场）。
+
 ## 0.1.0-SNAPSHOT - L12 CLI 与浏览器设备配对（OAuth 设备授权流 · 待提交）
 
 日期：2026-07-11

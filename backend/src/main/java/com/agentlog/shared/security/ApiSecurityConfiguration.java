@@ -2,6 +2,7 @@ package com.agentlog.shared.security;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
@@ -27,6 +28,7 @@ import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
 public class ApiSecurityConfiguration {
 
     @Bean
+    @Order(2)   // Chain 1（兜底·无 securityMatcher）：必须排在带 matcher 的 Chain 2(@Order 1, /cli/**) 之后。
     public SecurityFilterChain apiSecurityFilterChain(HttpSecurity http) throws Exception {
         // CSRF token 仓库：放进【JS 可读】的 XSRF-TOKEN Cookie（不设 HttpOnly），
         // 前端读出后回传到 X-XSRF-TOKEN Header，服务端比对（double-submit 防护）。

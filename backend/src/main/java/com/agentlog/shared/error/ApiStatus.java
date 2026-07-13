@@ -39,6 +39,10 @@ public enum ApiStatus {
     PAIRING_NOT_FOUND(HttpStatus.NOT_FOUND, "PAIRING_NOT_FOUND", "配对请求不存在"),
     PAIRING_EXPIRED(HttpStatus.GONE, "PAIRING_EXPIRED", "配对码已过期"),
     PAIRING_ALREADY_HANDLED(HttpStatus.CONFLICT, "PAIRING_ALREADY_HANDLED", "配对请求已处理"),
+
+    // —— CLI Bearer 令牌（L13 Chain 2）—— ⚠️错误码冻结面，待接入 Pack 登记 DRIFT
+    OWNER_TOKEN_EXPIRED(HttpStatus.UNAUTHORIZED, "OWNER_TOKEN_EXPIRED", "令牌已过期，请刷新"),
+    OWNER_TOKEN_INVALID(HttpStatus.UNAUTHORIZED, "OWNER_TOKEN_INVALID", "令牌无效，请重新配对"),
     ;
 
     private final HttpStatus status;
