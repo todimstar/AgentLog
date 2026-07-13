@@ -43,6 +43,10 @@ public enum ApiStatus {
     // —— CLI Bearer 令牌（L13 Chain 2）—— ⚠️错误码冻结面，待接入 Pack 登记 DRIFT
     OWNER_TOKEN_EXPIRED(HttpStatus.UNAUTHORIZED, "OWNER_TOKEN_EXPIRED", "令牌已过期，请刷新"),
     OWNER_TOKEN_INVALID(HttpStatus.UNAUTHORIZED, "OWNER_TOKEN_INVALID", "令牌无效，请重新配对"),
+
+    // —— refresh 轮换（L13 Chain 2 · ADR-0002）—— ⚠️错误码冻结面，待接入 Pack 登记 DRIFT
+    REFRESH_TOKEN_EXPIRED(HttpStatus.UNAUTHORIZED, "REFRESH_TOKEN_EXPIRED", "刷新令牌已过期，请重新配对"),
+    REFRESH_TOKEN_INVALID(HttpStatus.UNAUTHORIZED, "REFRESH_TOKEN_INVALID", "刷新令牌无效，请重新配对"),
     ;
 
     private final HttpStatus status;

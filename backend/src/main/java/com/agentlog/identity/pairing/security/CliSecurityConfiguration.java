@@ -30,8 +30,9 @@ public class CliSecurityConfiguration {
                 .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(authorize -> authorize
-                        // 换令牌不能要令牌：配对两端点匿名（CLI 尚无 token）。
-                        .requestMatchers("/api/v1/cli/device-pairings", "/api/v1/cli/device-pairings/token")
+                        // 换令牌不能要令牌：配对 + refresh 端点匿名（CLI 尚无/已过期 access token）。
+                        .requestMatchers("/api/v1/cli/device-pairings", "/api/v1/cli/device-pairings/token",
+                                "/api/v1/cli/auth/refresh")
                         .permitAll()
                         // 其余 /cli/** 一律需 owner 令牌。
                         .anyRequest().authenticated())

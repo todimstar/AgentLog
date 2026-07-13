@@ -6,7 +6,7 @@
 > L06–L11.5 条目为 2026-07-09 断更补录：由 11 个挖掘子代理逐行解析 58 个会话转录（157 条变更明细，
 > 在 `docs/changelog-evidence/mine*.json`，含续档分叉去重）与 git 全史交叉核实而成。
 
-## 0.1.0-SNAPSHOT - L13 令牌消费 · Chain 2 CLI Bearer 认证链（进行中 · 待提交）
+## 0.1.0-SNAPSHOT - L13 令牌消费 · Chain 2 Bearer 认证链 + refresh 轮换（进行中 · 待提交）
 
 日期：2026-07-13
 
@@ -15,17 +15,20 @@
 - **Chain 2 · CLI Bearer 认证链**（`identity/pairing/security/**`）：`OwnerBearerAuthenticationFilter`（OncePerRequestFilter：读 `Authorization: Bearer` → `TokenService.digest` **复用铸币算法** → 查 `owner_access_session` → ACTIVE+未过期 → 认证）+ `CliSecurityConfiguration`（`@Order(1)` SecurityFilterChain，`securityMatcher=/api/v1/cli/**`，STATELESS + csrf disable，配对两端点仍 permitAll）+ `OwnerPrincipal`(record `{ownerUserId,installationId}`) + `OwnerTokenAuthenticationException` + `ProblemDetailAuthenticationEntryPoint`（filter 层错误也出统一 ProblemDetail 信封，与 GlobalExceptionHandler 一致）。
 - **试金石端点** `GET /api/v1/cli/whoami`（`CliIdentityController` + `WhoamiResponse`）：Chain 2 首个受保护消费者，返回当前 owner 身份，兼作 CLI `auth status` 后端。
 - **错误码** `OWNER_TOKEN_EXPIRED`(401·去 refresh)/`OWNER_TOKEN_INVALID`(401·去重新配对)，带 `recoveryActions`（`REFRESH_TOKEN`/`RE_PAIR`）。
+- **③ auth refresh 令牌轮换**（`docs/decisions/0002-l13-token-refresh-rotation.md` · RTR + 盗用连坐吊销）：`POST /api/v1/cli/auth/refresh`（permitAll，refresh token 自证）+ `OwnerSessionService.refresh`（查 `refresh_token_digest` → **全轮换**：旧会话置 REVOKED〔旧 access 连带立即失效〕+ 发新 access/refresh；**已轮换的 refresh 被重放** → 连坐吊销该 `installation` 名下所有 ACTIVE 会话，强制重新配对）+ `CliAuthController` + `RefreshTokenRequest/Response`。**无需 V011**（复用 `owner_access_session`）。
 
 ### Changed
 - `shared/security/ApiSecurityConfiguration`：Chain 1 加 `@Order(2)`（兜底·无 securityMatcher，须排在带 matcher 的 Chain 2 之后）。**模块边界**：Chain 2 全套置 `identity.pairing`（消费本模块令牌表，identity→shared 合法），不污染 shared（守 `pairing-module-placement`）。
+- `CliSecurityConfiguration`：`/api/v1/cli/auth/refresh` 并入 permitAll。`ApiStatus`：L13 共 +4 错误码（`OWNER_TOKEN_EXPIRED/INVALID` + `REFRESH_TOKEN_EXPIRED/INVALID`）。
 
 ### Verified
 - 后端 `./mvnw -pl backend test -Dtest=CliBearerAuthIntegrationTest,DevicePairingIntegrationTest`：**11 绿**（新增 `CliBearerAuthIntegrationTest` 6 例：有效令牌 whoami 200 + owner/installation 对上库 / 无令牌 401 / 假令牌 OWNER_TOKEN_INVALID / 过期 OWNER_TOKEN_EXPIRED + recoveryActions / REVOKED→INVALID / 配对端点仍匿名回归守卫；L12 `DevicePairingIntegrationTest` 5 例无回归）。test-compile 先过。
+- （③ refresh 补充）`... -Dtest=CliTokenRefreshIntegrationTest,CliBearerAuthIntegrationTest,DevicePairingIntegrationTest`：**15 绿**（新增 `CliTokenRefreshIntegrationTest` 4 例：轮换换新 + 旧 access 立即失效 / 假 refresh REFRESH_TOKEN_INVALID / refresh 过期 REFRESH_TOKEN_EXPIRED / **重放已轮换 refresh → 连坐吊销全家**）。
 
 ### Notes / 出处
 - ⚠️ **冻结面待登记**：新错误码 `OWNER_TOKEN_EXPIRED`/`OWNER_TOKEN_INVALID` 属错误码冻结面，须登记 Master Pack `16-codex/DRIFT-REGISTER.md`；Pack 不在本工作目录，待主人给路径后补登记（先此留痕）。
 - 施工 [会话 261bebf4（L13，2026-07-13 导师带练·「两层教学链」首用：设计简报→tests-first→实现→测绿）]；ADR-0001 阶段① commit `dc22f87`。
-- L13 待续：`auth refresh` 轮换（正好消费本步铸的 `OWNER_TOKEN_EXPIRED`→`REFRESH_TOKEN`）→ Chain 3 + `agent assume` + 迁移 V011（机娘登场）。
+- L13 待续：Chain 3 + `agent assume` + 迁移 V011（机娘登场）。已完成 ✅ Chain 2 Bearer 验币 / ✅ auth refresh 轮换（RTR + 盗用连坐吊销）。
 
 ## 0.1.0-SNAPSHOT - L12 CLI 与浏览器设备配对（OAuth 设备授权流 · 待提交）
 
