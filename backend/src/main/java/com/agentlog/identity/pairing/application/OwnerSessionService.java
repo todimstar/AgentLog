@@ -22,8 +22,14 @@ import org.springframework.stereotype.Service;
  * Owner 会话生命周期：refresh 令牌轮换（RTR + 盗用连坐吊销）。ADR-0002。
  *
  * 不用 @Transactional：盗用连坐吊销那条 UPDATE 必须在抛异常前落库（若包在会回滚的事务里，
- *   吊销会被一起回滚，连坐就失效了）。轮换的"旧置 REVOKED + 插新"是两条自提交语句——
- *   极端中断只会退化为"须重新配对"（fail-safe），可接受。
+ *   吊销会被一起回滚，连坐就失效了）。轮换的"旧置 REVOKED + 插新"是两条自提交语句（autoCommit）。
+ *
+ * 连坐吊销的顺序刻意「先 owner 后 agent」（见 revokeAllActiveForInstallation）：owner 令牌是能
+ *   再 assume 出新机娘令牌的「根」，先废掉它可堵住攻击者继续铸新令牌。极端中断（进程崩/连接断/
+ *   锁超时恰卡在两条 UPDATE 之间）下并非完美原子——会留一个短暂不一致窗口：owner 会话已吊、
+ *   该设备名下的机娘会话可能尚未吊，那些机娘令牌最长再存活到自身过期（agentActingTtl，默认 1h）。
+ *   之所以可接受：① 窗口有上界（≤1h，到机娘令牌自然过期）；② owner 已废，攻击者无法再 assume 新机娘；
+ *   ③ 触发概率极低。这是选「非事务连坐」换「连坐必落库」的权衡代价，不是完全 fail-safe。
  */
 @Service
 public class OwnerSessionService {

@@ -55,10 +55,12 @@ public class AgentBearerAuthenticationFilter extends OncePerRequestFilter {
         AgentActingSessionDO session = sessionMapper.selectOne(new LambdaQueryWrapper<AgentActingSessionDO>()
                 .eq(AgentActingSessionDO::getAccessTokenDigest, tokenService.digest(rawToken)));
 
+
         if (session == null || !AgentSessionStatus.ACTIVE.getCode().equals(session.getStatus())) {
             reject(request, response, ApiStatus.AGENT_TOKEN_INVALID);
             return;
         }
+        //过期
         if (session.getExpiresAt() == null || !session.getExpiresAt().isAfter(Instant.now())) {
             reject(request, response, ApiStatus.AGENT_TOKEN_EXPIRED);
             return;
