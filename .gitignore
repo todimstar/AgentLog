@@ -20,6 +20,9 @@ backend/src/main/resources/application-local.yml
 backend/src/magic-L11.5/06-assets/parts/
 backend/src/magic-L12/06-assets/parts/
 backend/src/magic-L12/07-assets/parts/
+backend/src/magic-L13/06-assets/parts/
+# L13 视频拼接中间原料（骨架/引擎片段，最终产物是 06-*.html，不入库）
+backend/src/magic-L13/.build-video/
 
 # maven-shade-plugin 副产物（CLI 打包生成，不入库）
 cli/dependency-reduced-pom.xml

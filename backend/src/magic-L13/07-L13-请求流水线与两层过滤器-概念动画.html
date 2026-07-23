@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>L13 补课 · 请求流水线与两层过滤器（喂饭级 · 零基础）</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;background:#0d1117;color:#e6edf3;min-height:100vh;font-size:15px;line-height:1.7}
+  .wrap{max-width:1100px;margin:0 auto;padding:0 20px 80px}
+  header{position:sticky;top:0;z-index:20;background:#161b22ee;backdrop-filter:blur(8px);border-bottom:1px solid #30363d;padding:14px 20px;margin-bottom:8px}
+  header h1{font-size:18px}
+  header .sub{font-size:12.5px;color:#7d8590;margin-top:3px}
+  nav{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+  nav a{font-size:12px;padding:3px 10px;border-radius:12px;background:#21262d;border:1px solid #30363d;color:#adbac7;text-decoration:none}
+  nav a:hover{color:#fff;border-color:#1f6feb}
+  section{background:#161b22;border:1px solid #30363d;border-radius:12px;padding:22px 26px;margin-top:22px}
+  section h2{font-size:19px;color:#79c0ff;margin-bottom:6px;display:flex;align-items:center;gap:8px}
+  section h2 .n{font-size:12px;background:#1f6feb;color:#fff;border-radius:8px;padding:2px 9px}
+  section .lead{color:#8b949e;font-size:14px;margin-bottom:16px}
+  h3{font-size:15.5px;color:#f0b429;margin:20px 0 8px}
+  p{margin:9px 0}
+  b{color:#f0b429}
+  code{background:#0d1117;padding:1px 6px;border-radius:4px;font-family:"SF Mono",Consolas,monospace;font-size:13px;color:#79c0ff;border:1px solid #21262d}
+  .analogy{background:#132a3e;border-left:4px solid #1f6feb;padding:12px 16px;border-radius:0 8px 8px 0;margin:14px 0}
+  .analogy .tag{font-size:11px;color:#79c0ff;font-weight:700;text-transform:uppercase;letter-spacing:.5px}
+  .warn{background:#3d1f1f;border-left:4px solid #f85149;padding:12px 16px;border-radius:0 8px 8px 0;margin:14px 0}
+  .warn .tag{font-size:11px;color:#ff7b72;font-weight:700}
+  .ok{background:#132a1f;border-left:4px solid #3fb950;padding:12px 16px;border-radius:0 8px 8px 0;margin:14px 0}
+  .ok .tag{font-size:11px;color:#3fb950;font-weight:700}
+  /* 概念卡 */
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px;margin:16px 0}
+  .card{background:#0d1117;border:1px solid #30363d;border-radius:10px;padding:14px 16px;cursor:pointer;transition:all .2s}
+  .card:hover{border-color:#1f6feb;transform:translateY(-2px)}
+  .card .ic{font-size:26px}
+  .card .t{font-size:15px;font-weight:700;color:#79c0ff;margin:6px 0 4px}
+  .card .d{font-size:12.5px;color:#8b949e;line-height:1.55}
+  .card .more{font-size:11.5px;color:#3fb950;margin-top:8px;display:none}
+  .card.open .more{display:block}
+  .card.open{border-color:#3fb950}
+  /* 流水线动画 */
+  .pipe{background:#0d1117;border:1px solid #30363d;border-radius:10px;padding:20px;margin:16px 0}
+  .pipe-track{display:flex;align-items:stretch;gap:0;overflow-x:auto;padding:10px 0}
+  .stage{flex:1;min-width:118px;position:relative;text-align:center}
+  .stage .box{border:2px solid #30363d;border-radius:10px;padding:12px 8px;background:#161b22;transition:all .35s;height:100%}
+  .stage.active .box{border-color:#3fb950;background:#132a1f;box-shadow:0 0 0 3px rgba(63,185,80,.2)}
+  .stage.passed .box{border-color:#238636;opacity:.55}
+  .stage .ic{font-size:22px}
+  .stage .nm{font-size:12.5px;font-weight:700;margin-top:4px;color:#e6edf3}
+  .stage .sub{font-size:10.5px;color:#7d8590;margin-top:2px;line-height:1.3}
+  .stage .arrow{position:absolute;right:-7px;top:50%;transform:translateY(-50%);color:#484f58;font-size:16px;z-index:2}
+  .stage.active .arrow{color:#3fb950}
+  .layer-tag{font-size:10px;padding:1px 6px;border-radius:6px;margin-top:6px;display:inline-block}
+  .layer-c{background:#3d2f0f;color:#f0b429;border:1px solid #9e6a03}
+  .layer-s{background:#0f2d3d;color:#56d4dd;border:1px solid #1f6feb}
+  .layer-a{background:#2d0f2d;color:#db61db;border:1px solid #8957e5}
+  .pipe-ctl{display:flex;align-items:center;gap:12px;margin-top:16px;flex-wrap:wrap}
+  .btn{background:#238636;color:#fff;border:none;border-radius:8px;padding:8px 18px;font-size:14px;cursor:pointer;font-weight:600}
+  .btn:hover{background:#2ea043}
+  .btn.ghost{background:#21262d;border:1px solid #30363d;color:#adbac7}
+  .btn:disabled{opacity:.4;cursor:not-allowed}
+  .pipe-say{flex:1;min-width:260px;font-size:13.5px;color:#c9d1d9;background:#161b22;border:1px solid #30363d;border-radius:8px;padding:10px 14px;min-height:44px}
+  .pipe-say b{color:#3fb950}
+  /* 表格 */
+  table{width:100%;border-collapse:collapse;margin:14px 0;font-size:13px}
+  th,td{border:1px solid #30363d;padding:8px 11px;text-align:left;vertical-align:top}
+  th{background:#21262d;color:#79c0ff}
+  td b{color:#f0b429}
+  .vs-c{color:#f0b429}.vs-s{color:#56d4dd}
+  /* 双层示意 */
+  .twolayer{background:#0d1117;border:1px solid #30363d;border-radius:10px;padding:18px;margin:16px 0}
+  .l-outer{border:2px dashed #9e6a03;border-radius:10px;padding:14px;background:#3d2f0f22}
+  .l-outer>.lbl{font-size:12px;color:#f0b429;font-weight:700;margin-bottom:10px}
+  .l-inner{border:2px dashed #1f6feb;border-radius:10px;padding:14px;background:#0f2d3d22;margin-top:12px}
+  .l-inner>.lbl{font-size:12px;color:#56d4dd;font-weight:700;margin-bottom:10px}
+  .frow{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0}
+  .fbox{font-size:11.5px;padding:5px 10px;border-radius:8px;background:#161b22;border:1px solid #30363d;color:#adbac7}
+  .fbox.bad{border-color:#f85149;color:#ff7b72;background:#3d1f1f}
+  .fbox.good{border-color:#3fb950;color:#3fb950}
+  .chain-row{display:flex;align-items:center;gap:8px;margin:6px 0;font-size:12.5px}
+  .chain-row .o{font-family:monospace;background:#21262d;padding:2px 7px;border-radius:6px;color:#f0b429;flex-shrink:0}
+  .chain-row .m{font-family:monospace;color:#79c0ff;flex-shrink:0}
+  .footer-note{text-align:center;color:#484f58;font-size:12px;margin-top:30px}
+  .kbd{font-family:monospace;background:#21262d;border:1px solid #30363d;border-radius:5px;padding:1px 6px;font-size:12px;color:#adbac7}
+</style>
+</head>
+<body>
+<header>
+  <h1>🍚 L13 补课 · 请求进来到底经过了什么？</h1>
+  <div class="sub">喂饭级 · 假设你没系统学过 Spring Boot —— Tomcat / Servlet / Filter / 两层过滤器 / 三条安全链，一次讲透</div>
+  <nav>
+    <a href="#concepts">① 四个名词</a>
+    <a href="#pipeline">② 请求流水线（点「下一步」）</a>
+    <a href="#twolayer">③ 两层过滤器</a>
+    <a href="#bug">④ @Component 双注册坑</a>
+    <a href="#compare">⑤ 对比旧项目</a>
+    <a href="#essence">⑥ 三条链的本质</a>
+  </nav>
+</header>
+<div class="wrap">
+
+<!-- ① 概念 -->
+<section id="concepts">
+  <h2><span class="n">①</span> 先认识四个名词（点卡片展开）</h2>
+  <div class="lead">这四个词你可能都听过但没串起来。它们是一条流水线上的四个工位，从外到内排好队。</div>
+  <div class="cards">
+    <div class="card" onclick="this.classList.toggle('open')">
+      <div class="ic">🏭</div>
+      <div class="t">Tomcat</div>
+      <div class="d">一个「Web 服务器」软件。你的 Spring Boot 打成 jar，里面就内嵌了一个 Tomcat。</div>
+      <div class="more">它负责监听 8080 端口、接住每一个 HTTP 请求，然后把请求往里递。你可以把它想成<b>写字楼的大门和前台</b>——所有人先进这道门。它是整条流水线<b>最外层</b>。</div>
+    </div>
+    <div class="card" onclick="this.classList.toggle('open')">
+      <div class="ic">📮</div>
+      <div class="t">Servlet</div>
+      <div class="d">Java 规定的「处理 HTTP 请求的标准零件」。一个 Servlet = 一个能接请求、给响应的处理器。</div>
+      <div class="more">Tomcat 收到请求后，最终要交给某个 Servlet 处理。Spring MVC 全靠<b>一个</b>特殊的 Servlet 叫 <code>DispatcherServlet</code>（调度员）总揽。所以「Servlet」是规范，「DispatcherServlet」是 Spring 派来站这个岗的人。</div>
+    </div>
+    <div class="card" onclick="this.classList.toggle('open')">
+      <div class="ic">🚦</div>
+      <div class="t">Filter（过滤器）</div>
+      <div class="d">在请求「到达 Servlet 之前」拦一道的关卡。可以放行、可以拦截、可以改请求。</div>
+      <div class="more">Filter 是 Tomcat（Servlet 规范）提供的机制，<b>排在 Servlet 前面</b>。一个请求可以连穿过好几个 Filter，像过安检的多道闸机。<b>关键：Filter 比 Servlet 早执行。</b>我们的登录验证（JWT / Bearer 令牌校验）就写在 Filter 里——先验身份，再放进去见 Controller。</div>
+    </div>
+    <div class="card" onclick="this.classList.toggle('open')">
+      <div class="ic">🎯</div>
+      <div class="t">DispatcherServlet</div>
+      <div class="d">Spring MVC 的总调度员，是一个（也是唯一主力）Servlet。</div>
+      <div class="more">它站在所有 Filter 后面。请求穿过全部 Filter 后到它这，它再看 URL 决定派给哪个 <code>@RestController</code> 的哪个方法。<b>你写的 Controller 在它后面。</b>所以 Controller 是流水线<b>最里层</b>。<code>@RestControllerAdvice</code>（全局异常处理器）也只在它这一层管事——这就是为什么 Filter 里抛的异常它够不着。</div>
+    </div>
+  </div>
+  <div class="analogy">
+    <div class="tag">一句话记住顺序</div>
+    <b>大门(Tomcat) → 一道道安检闸机(Filter) → 调度台(DispatcherServlet) → 具体办事窗口(Controller)</b>。
+    越往里越具体。登录校验在「安检闸机」这层，所以它比「办事窗口」先执行——你没通过安检，根本走不到窗口。
+  </div>
+</section>
+
+<!-- ② 流水线动画 -->
+<section id="pipeline">
+  <h2><span class="n">②</span> 一个请求的完整旅程（点「下一步」逐格看）</h2>
+  <div class="lead">拿一个真实请求 <code>GET /api/v1/cli/whoami</code>（带 owner 令牌）走一遍。看它怎么从大门一路走到 Controller。</div>
+  <div class="pipe">
+    <div class="pipe-track" id="track">
+      <div class="stage" data-i="0">
+        <div class="box"><div class="ic">🌐</div><div class="nm">CLI 发请求</div><div class="sub">带 Bearer 令牌</div></div>
+        <div class="arrow">▶</div>
+      </div>
+      <div class="stage" data-i="1">
+        <div class="box"><div class="ic">🏭</div><div class="nm">Tomcat</div><div class="sub">接住请求</div><span class="layer-tag layer-c">容器层</span></div>
+        <div class="arrow">▶</div>
+      </div>
+      <div class="stage" data-i="2">
+        <div class="box"><div class="ic">🚦</div><div class="nm">容器级 Filter 链</div><div class="sub">编码/CORS/…</div><span class="layer-tag layer-c">容器层</span></div>
+        <div class="arrow">▶</div>
+      </div>
+      <div class="stage" data-i="3">
+        <div class="box"><div class="ic">🛡️</div><div class="nm">FilterChainProxy</div><div class="sub">Security 总入口</div><span class="layer-tag layer-s">Security</span></div>
+        <div class="arrow">▶</div>
+      </div>
+      <div class="stage" data-i="4">
+        <div class="box"><div class="ic">🔀</div><div class="nm">选链</div><div class="sub">按 URL 挑一条</div><span class="layer-tag layer-s">Security</span></div>
+        <div class="arrow">▶</div>
+      </div>
+      <div class="stage" data-i="5">
+        <div class="box"><div class="ic">🔑</div><div class="nm">Chain 2 验币 Filter</div><div class="sub">查库认令牌</div><span class="layer-tag layer-s">Security</span></div>
+        <div class="arrow">▶</div>
+      </div>
+      <div class="stage" data-i="6">
+        <div class="box"><div class="ic">🎯</div><div class="nm">DispatcherServlet</div><div class="sub">调度</div></div>
+        <div class="arrow">▶</div>
+      </div>
+      <div class="stage" data-i="7">
+        <div class="box"><div class="ic">📋</div><div class="nm">Controller</div><div class="sub">whoami 方法</div></div>
+      </div>
+    </div>
+    <div class="pipe-ctl">
+      <button class="btn" id="next">下一步 ▶</button>
+      <button class="btn ghost" id="reset">↺ 重来</button>
+      <div class="pipe-say" id="say">点「下一步」开始。我们跟着这个请求走，看它每一步发生了什么。</div>
+    </div>
+  </div>
+  <div class="analogy">
+    <div class="tag">看懂这张图你就懂了 90%</div>
+    注意那三个「Security」标签的工位（FilterChainProxy、选链、验币 Filter）—— <b>它们整体其实都还只是「容器级 Filter 链」里的一个 Filter</b>。也就是说：Spring Security 本身，是挂在 Tomcat 上的<b>一个大 Filter</b>，这个大 Filter 内部又自己开了一层小过滤器链。<b>这就是「两层过滤器」的由来</b>，下一节专讲。
+  </div>
+</section>
+
+<!-- ③ 两层 -->
+<section id="twolayer">
+  <h2><span class="n">③</span> 为什么会有「两层」过滤器？</h2>
+  <div class="lead">这是全篇最关键的一节。搞懂这个，双注册坑就自然通了。</div>
+  <p>刚才流水线里，<code>FilterChainProxy</code> 是 Spring Security 注册到 Tomcat 上的<b>一个</b>普通 Filter。但它很特殊：它内部<b>又管了一堆自己的过滤器链</b>（就是我们的 Chain 1/2/3）。于是过滤器其实分两层住：</p>
+  <div class="twolayer">
+    <div class="l-outer">
+      <div class="lbl">🏭 第一层：容器级 Filter 链（住在 Tomcat 里 · 对所有 URL 生效）</div>
+      <div class="frow">
+        <span class="fbox">CharacterEncodingFilter（改编码）</span>
+        <span class="fbox">CorsFilter（跨域）</span>
+        <span class="fbox good">FilterChainProxy（Spring Security 的入口 ← 就是它！）</span>
+      </div>
+      <p style="font-size:12.5px;color:#8b949e;margin:8px 0 0">这一层不认 <code>securityMatcher</code>、不认 <code>@Order(0/1/2)</code>。谁住进来，就对<b>所有 URL</b> 无差别执行。</p>
+      <div class="l-inner">
+        <div class="lbl">🛡️ 第二层：FilterChainProxy 内部（Spring Security 自己的多条链）</div>
+        <div class="chain-row"><span class="o">@Order(0)</span><span class="m">/agent/**</span> → Chain 3 的 AgentBearerFilter</div>
+        <div class="chain-row"><span class="o">@Order(1)</span><span class="m">/cli/**</span> → Chain 2 的 OwnerBearerFilter</div>
+        <div class="chain-row"><span class="o">@Order(2)</span><span class="m">兜底</span> → Chain 1 的 Session + CSRF</div>
+        <p style="font-size:12.5px;color:#8b949e;margin:8px 0 0"><b>只有这一层</b>才认 <code>securityMatcher</code> + <code>@Order</code>。请求进来，按 Order 从小到大问「这个 URL 归你吗」，<b>第一个说「归我」的链独占接管</b>，其余的链看都看不到这个请求。</p>
+      </div>
+    </div>
+  </div>
+  <div class="ok">
+    <div class="tag">核心心智模型</div>
+    <b>securityMatcher 和 @Order 只在第二层（Security 内部）起作用。</b> 它们决定「Security 内部选哪条链」，但对第一层（容器级）那些 Filter <b>完全无效</b>。记住这句话，下一节的 bug 就是它的直接推论。
+  </div>
+</section>
+
+<!-- ④ bug -->
+<section id="bug">
+  <h2><span class="n">④</span> 那个坑：<code>@Component</code> 为什么会被「注册两次」？</h2>
+  <div class="lead">你问：Spring 发什么癫？—— 它没发癫，是一个「贴心的约定」用错了地方。</div>
+  <p>Spring Boot 有一条约定：<b>只要容器里有一个 <code>Filter</code> 类型的 Bean，就自动把它注册到第一层（容器级 Filter 链）</b>。这对「全局日志 Filter」「全局 CORS Filter」是贴心——你不用手动挂。</p>
+  <p>但我们的验币过滤器 <code>OncePerRequestFilter</code> 本身<b>就是一种 Filter</b>。一旦给它标了 <code>@Component</code>，它变成 Bean，就触发了这条约定：</p>
+  <div class="twolayer">
+    <div class="frow" style="flex-direction:column;gap:10px">
+      <span class="fbox good" style="align-self:flex-start">✅ 第 ① 次：你在 Config 里 <code>addFilterBefore(filter, ...)</code> 手动加进「这一条」Security 链 —— 作用域正确，只管自己的 URL 段。</span>
+      <span class="fbox bad" style="align-self:flex-start">❌ 第 ② 次：Boot 看到它是 Filter Bean，<b>自动</b>把它注册进第一层容器级链 —— 对<b>所有 URL</b> 生效！这次是灾难。</span>
+    </div>
+  </div>
+  <h3>事故是怎么发生的（就是你 Postman 里 /cli/whoami 被 401 的原因）</h3>
+  <div class="pipe" style="padding:16px 20px">
+    <div style="font-size:13.5px;line-height:1.9">
+      1. Chain 3 的 <code>AgentBearerFilter</code> 标了 <code>@Component</code> → 被塞进<b>第一层全局</b>。<br>
+      2. 一个 <code>/cli/whoami</code> + owner 令牌的请求进来，<b>还没走到 FilterChainProxy</b>，就先被第一层那个全局 agent filter 抓住。<br>
+      3. 全局 agent filter 只会查 <code>agent_acting_session</code> 表 → 拿 owner 令牌去查机娘表 → <b>查无</b> → 直接 401。<br>
+      4. owner 令牌<b>根本没机会</b>走到它该走的 Chain 2。
+    </div>
+  </div>
+  <div class="warn">
+    <div class="tag">为什么 @Order(0) 救不了</div>
+    <code>@Order</code> 只排第二层链之间的顺序。可事故发生在<b>第一层</b>——请求还没进第二层就被拦了。<code>@Order</code> 对第一层那个全局 filter 毫无约束力。
+  </div>
+  <div class="ok">
+    <div class="tag">修法（你也答对了）</div>
+    过滤器<b>别标 <code>@Component</code></b>，在各自 Config 里用 <code>new</code> 构造，依赖走 <code>@Bean</code> 方法参数注入。这样它压根不是 Bean，Boot 无从自动注册，作用域死死锁在本链。<br>
+    （另一种修法：保留 <code>@Component</code> 但用 <code>FilterRegistrationBean.setEnabled(false)</code> 显式关掉第一层自动注册。对「只属一条链」的过滤器，<code>new</code> 更直白。）
+  </div>
+</section>
+
+<!-- ⑤ 对比 -->
+<section id="compare">
+  <h2><span class="n">⑤</span> 那为什么你旧项目 JWT 用 <code>@Component</code> 就没事？</h2>
+  <div class="lead">好问题。答案是：<b>旧项目「没事」是因为它只有一条链，「全局」和「这一条」重合了。</b></div>
+  <p>你旧项目 <code>SecurityConfig</code> 里只有<b>一条</b> <code>SecurityFilterChain</code>（没有 <code>@Order</code>、没有 <code>securityMatcher</code>，兜底所有 URL）。所以：</p>
+  <table>
+    <tr><th>维度</th><th class="vs-c">旧项目（单链）</th><th class="vs-s">本项目 L13（三链）</th></tr>
+    <tr><td>SecurityFilterChain 数量</td><td class="vs-c">1 条（兜底所有 URL）</td><td class="vs-s">3 条（各管 /agent、/cli、其余）</td></tr>
+    <tr><td>JWT filter 作用域「应该」是</td><td class="vs-c">所有 URL（本来就该全局）</td><td class="vs-s">只该管自己那一段 URL</td></tr>
+    <tr><td>@Component 双注册了吗</td><td class="vs-c">也双注册了！</td><td class="vs-s">也双注册了</td></tr>
+    <tr><td>为什么旧项目没暴露</td><td class="vs-c"><b>双注册的「全局」= 单链的「所有 URL」= 作用域完全重合，看不出区别</b></td><td class="vs-s"><b>全局 filter 越界拦了别的链的 URL，冲突爆发</b></td></tr>
+    <tr><td>filter 无效令牌时的动作</td><td class="vs-c">放行，交下游处理（更宽容）</td><td class="vs-s">直接 reject 401（更严格，一拦就死）</td></tr>
+  </table>
+  <div class="analogy">
+    <div class="tag">类比</div>
+    旧项目像一个只有一个房间的房子——你把「管家」设成「管全屋」，没毛病，因为全屋就一个房间。本项目是三室一厅——你把「厨房专用管家」设成了「管全屋」，他跑去卧室、客厅乱管，就出事了。<b>不是管家的错，是你不该把「专用」的设成「全局」的。</b>
+  </div>
+  <p style="font-size:13px;color:#8b949e">补充你另一个疑问：旧项目其实也被双注册了，只是它 filter 内部有 <code>getAuthentication() == null</code> 的判断 + <code>OncePerRequestFilter</code> 自带的「同请求只跑一次」去重，双重执行被悄悄化解了。所以「没报错」不等于「没双注册」，只是问题被藏住了。</p>
+</section>
+
+<!-- ⑥ 本质 -->
+<section id="essence">
+  <h2><span class="n">⑥</span> 收尾：三条安全链的本质（面试可直接讲）</h2>
+  <div class="lead">把上面全串起来，你现在能回答「你们的鉴权流程」这类面试题了。</div>
+  <table>
+    <tr><th>链</th><th>管辖 URL</th><th>认证方式</th><th>代表谁</th><th>有无状态</th></tr>
+    <tr><td><b>Chain 1</b> @Order(2)</td><td>其余（兜底）</td><td>Session Cookie + CSRF</td><td>浏览器里的你</td><td>有状态</td></tr>
+    <tr><td><b>Chain 2</b> @Order(1)</td><td>/api/v1/cli/**</td><td>Bearer OwnerAccessToken</td><td>你本人（CLI）</td><td>无状态</td></tr>
+    <tr><td><b>Chain 3</b> @Order(0)</td><td>/api/v1/agent/**</td><td>Bearer AgentActingToken</td><td>被你代入的机娘</td><td>无状态</td></tr>
+  </table>
+  <div class="ok">
+    <div class="tag">面试自述（30 秒版）</div>
+    我们后端按 URL 前缀分了三条 Spring Security 过滤器链：浏览器走 Session，CLI 走 owner 令牌，Agent 走机娘令牌。选哪条<b>只看 URL、在碰令牌之前就定了</b>，靠 <code>securityMatcher</code> + <code>@Order</code> 排序。踩过一个坑：验币过滤器如果标 <code>@Component</code>，Spring Boot 会把它<b>额外注册到容器级 Filter 链全局生效</b>，越界拦了别的链的请求——修法是不做 Bean、在各自 Config 里 <code>new</code> 进本链。这也解释了为什么单链的旧项目用 <code>@Component</code> 没事：全局和单链作用域重合，问题被掩盖了。
+  </div>
+  <div class="analogy">
+    <div class="tag">三个你现在能秒答的追问</div>
+    <b>Q：Filter 和 Controller 谁先执行？</b> A：Filter，它在 DispatcherServlet 之前。<br>
+    <b>Q：为什么 Filter 抛的异常全局异常处理器接不住？</b> A：因为 <code>@RestControllerAdvice</code> 只管 DispatcherServlet 之后（Controller 层），Filter 在它之前，够不着——所以我们另造了 <code>AuthenticationEntryPoint</code> 出错。<br>
+    <b>Q：Spring Security 到底是什么？</b> A：本质是挂在 Tomcat 上的一个大 Filter（FilterChainProxy），内部再管自己的多条链。
+  </div>
+</section>
+
+<div class="footer-note">L13 补课页 · 请求流水线与两层过滤器 · 配套讲义 <span class="kbd">00-L13讲义.md</span> 第 5 节踩坑实录</div>
+</div>
+
+<script>
+// 流水线逐步动画
+const SAY = [
+  "① <b>CLI 发出请求</b> GET /api/v1/cli/whoami，请求头里带 <b>Authorization: Bearer owner令牌</b>。它从你电脑出发，飞向服务器的 8080 端口。",
+  "② <b>Tomcat 接住了它</b>。Tomcat 是内嵌在你 jar 里的 Web 服务器，是整条流水线最外的大门。它收到请求，准备往里递。<b>【第一层：容器级】</b>",
+  "③ 请求先穿过 <b>容器级 Filter 链</b>：改字符编码、处理跨域等通用 Filter。这些对所有 URL 都生效。<b>坑就藏在这层</b>——标了 @Component 的验币 filter 会被塞到这里全局生效。",
+  "④ 走到 <b>FilterChainProxy</b>——它其实也只是容器级链里的<b>一个 Filter</b>，但它是 Spring Security 的总入口。从这里开始进入<b>第二层</b>。<b>【第二层：Security 内部】</b>",
+  "⑤ <b>选链！</b> FilterChainProxy 按 @Order 从小到大问每条链：这个 /cli/ 的 URL 归你吗？Chain 3(/agent) 说不归 → Chain 2(/cli) 说<b>归我！</b> 独占接管。<b>只看 URL，不看令牌。</b>",
+  "⑥ 进入 <b>Chain 2 的 OwnerBearerFilter 验币</b>：读 Bearer 令牌 → 用 digest 算摘要 → 查 owner_access_session 表 → ACTIVE 且未过期 → 造 OwnerPrincipal 塞进安全上下文。<b>认证通过！</b>",
+  "⑦ 穿过全部 Filter，到达 <b>DispatcherServlet</b>（调度员）。它看 URL，决定把请求派给哪个 Controller 的哪个方法。",
+  "⑧ 终点 <b>Controller 的 whoami() 方法</b>执行，从安全上下文取出 OwnerPrincipal，返回 owner 身份。<b>请求旅程完成！</b> 全程：大门→安检→调度→窗口。"
+];
+let step = -1;
+const stages = [...document.querySelectorAll('.stage')];
+const sayBox = document.getElementById('say');
+const btnNext = document.getElementById('next');
+const btnReset = document.getElementById('reset');
+function render(){
+  stages.forEach((s,i)=>{
+    s.classList.toggle('active', i===step);
+    s.classList.toggle('passed', i<step);
+  });
+  if(step>=0){ sayBox.innerHTML = SAY[step]; }
+  btnNext.textContent = step>=SAY.length-1 ? '✓ 已到终点' : '下一步 ▶';
+  btnNext.disabled = step>=SAY.length-1;
+}
+btnNext.onclick=()=>{ if(step<SAY.length-1){step++;render(); const el=stages[step]; el&&el.scrollIntoView({inline:'center',behavior:'smooth',block:'nearest'});} };
+btnReset.onclick=()=>{ step=-1; stages.forEach(s=>s.classList.remove('active','passed')); sayBox.innerHTML="点「下一步」开始。我们跟着这个请求走，看它每一步发生了什么。"; btnNext.disabled=false; btnNext.textContent='下一步 ▶'; };
+render();
+</script>
+</body>
+</html>

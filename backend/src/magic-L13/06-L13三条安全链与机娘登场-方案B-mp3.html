@@ -1,0 +1,727 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>L13 令牌消费 · 三条安全链与机娘登场 · 方案B（edge-tts 预生成 mp3 · 真进度条）</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;background:#0d1117;color:#e6edf3;height:100vh;display:flex;flex-direction:column;overflow:hidden;font-size:14px}
+  header{padding:9px 16px;background:#161b22;border-bottom:1px solid #30363d;display:flex;align-items:center;gap:14px;flex-shrink:0}
+  header h1{font-size:15px}
+  .legend{display:flex;gap:6px;flex-wrap:wrap;margin-left:6px}
+  .lg{font-size:11px;padding:2px 8px;border-radius:10px;background:#21262d;border:1px solid #30363d;color:#8b949e}
+  .lg.on{color:#fff}
+  .spacer{flex:1}
+  #voice{font-size:11px;color:#7d8590}
+  .main{flex:1;display:flex;min-height:0}
+  .left{flex:1.35;display:flex;flex-direction:column;min-width:0;border-right:1px solid #30363d}
+  .tree{background:#0d1117;border-bottom:1px solid #30363d;max-height:30%;overflow:auto;padding:8px 0}
+  .tree .th{font-size:11px;color:#7d8590;padding:2px 14px 6px;text-transform:uppercase;letter-spacing:.5px}
+  .node{font-family:"SF Mono",Consolas,monospace;font-size:12.5px;padding:2px 14px;white-space:nowrap;color:#adbac7;cursor:pointer}
+  .node.dir{cursor:default;color:#7d8590}
+  .node .ic{opacity:.7;margin-right:5px}
+  .node.file.on{background:#132a3e;color:#79c0ff;border-left:3px solid #1f6feb;padding-left:11px}
+  .breadcrumb{font-family:monospace;font-size:11.5px;color:#7d8590;padding:6px 16px;background:#0d1117;border-bottom:1px solid #21262d;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .breadcrumb b{color:#f0b429}
+  .code{flex:1;overflow:auto;background:#0d1117;padding:10px 0;transition:box-shadow .3s}
+  .code.glow{box-shadow:inset 0 0 0 2px #3fb950}
+  pre.code-pre{font-family:"SF Mono",Consolas,"Cascadia Code",monospace;font-size:13px;line-height:1.6}
+  .line{display:flex;padding:0 16px;white-space:pre;transition:background .25s,opacity .25s;border-left:3px solid transparent}
+  .line .ln{color:#484f58;width:38px;text-align:right;margin-right:14px;user-select:none;flex-shrink:0}
+  .line.hot{background:#1f2d1f;border-left-color:#3fb950;animation:pulse .8s ease 1}
+  .line.hot .ln{color:#3fb950;font-weight:700}
+  .line.dim{opacity:.30}
+  @keyframes pulse{0%{background:#2e4a2e}100%{background:#1f2d1f}}
+  /* IDEA Darcula 风语法高亮 */
+  .tk-kw{color:#cc7832;font-weight:600}
+  .tk-str{color:#6a8759}
+  .tk-cm{color:#7a7a73;font-style:italic}
+  .tk-ann{color:#bbb529}
+  .tk-num{color:#6897bb}
+  .tk-call{color:#ffc66d}
+  .tk-type{color:#a9b7c6}
+  .right{flex:1;display:flex;flex-direction:column;min-width:320px}
+  .flow{flex:0 0 auto;max-height:46%;overflow:auto;background:#161b22;padding:12px 14px;border-bottom:1px solid #30363d}
+  .flow .th{font-size:11px;color:#7d8590;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px}
+  .lane{display:flex;align-items:center;gap:8px;margin-bottom:9px}
+  .lane-name{font-size:11.5px;width:104px;flex-shrink:0;color:#8b949e;text-align:right;line-height:1.2}
+  .lane.on .lane-name{color:#fff;font-weight:600}
+  .chips{display:flex;gap:6px;flex-wrap:wrap}
+  .chip{font-size:11px;padding:3px 9px;border-radius:12px;background:#21262d;border:1px solid #30363d;color:#8b949e;white-space:nowrap;cursor:pointer}
+  .chip.done{color:#3fb950;border-color:#238636}
+  .chip.on{background:#3fb950;color:#0d1117;border-color:#3fb950;font-weight:700;box-shadow:0 0 0 3px rgba(63,185,80,.25)}
+  .detail{flex:1;overflow:auto;padding:16px 18px;background:#0d1117;transition:box-shadow .3s}
+  .detail.glow{box-shadow:inset 0 0 0 2px #f0b429}
+  .detail .th{font-size:11px;color:#3fb950;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px;font-weight:600}
+  .detail-body{font-size:14.5px;line-height:1.85;color:#c9d1d9}
+  .detail-body b{color:#f0b429}
+  .detail-body code{background:#161b22;padding:1px 5px;border-radius:4px;font-family:monospace;font-size:12.5px;color:#79c0ff}
+  .subtitle{flex-shrink:0;background:#010409;border-top:1px solid #30363d;padding:12px 24px;min-height:64px;display:flex;align-items:center;gap:16px}
+  .focusbadge{flex-shrink:0;font-size:12px;padding:4px 10px;border-radius:12px;background:#161b22;border:1px solid #30363d;color:#8b949e;white-space:nowrap;transition:all .25s}
+  .focusbadge.code{color:#3fb950;border-color:#238636}
+  .focusbadge.detail{color:#f0b429;border-color:#9e6a03}
+  .subtitle .txt{font-size:17px;line-height:1.6;color:#f0f6fc;transition:all .25s}
+  /* 字幕跟随注视区换边：看左侧代码 → [字幕, 徽章] 靠左；看右侧详解 → [徽章, 字幕] 靠右 */
+  .subtitle.focus-code .txt{order:1;text-align:left;margin-right:auto;max-width:58%}
+  .subtitle.focus-code .focusbadge{order:2}
+  .subtitle.focus-detail .focusbadge{order:1}
+  .subtitle.focus-detail .txt{order:2;text-align:right;margin-left:auto;max-width:58%}
+  /* 片尾测验 */
+  .quiz-mask{position:fixed;inset:0;background:rgba(1,4,9,.82);display:none;align-items:center;justify-content:center;z-index:30}
+  .quiz-mask.show{display:flex}
+  .quiz{width:min(860px,92vw);max-height:86vh;overflow:auto;background:#161b22;border:1px solid #30363d;border-radius:12px;padding:22px 26px}
+  .quiz h2{font-size:17px;margin-bottom:4px;color:#f0f6fc}
+  .quiz .sub{font-size:12px;color:#7d8590;margin-bottom:14px}
+  .quiz details{border:1px solid #30363d;border-radius:8px;margin-bottom:10px;background:#0d1117}
+  .quiz summary{cursor:pointer;padding:11px 14px;font-size:14.5px;line-height:1.65;color:#e6edf3;list-style:none}
+  .quiz summary::before{content:'▸ ';color:#3fb950}
+  .quiz details[open] summary::before{content:'▾ '}
+  .quiz .lv{font-size:11px;padding:1px 8px;border-radius:9px;margin-right:8px;border:1px solid}
+  .quiz .lv1{color:#3fb950;border-color:#238636}.quiz .lv2{color:#58a6ff;border-color:#1f6feb}.quiz .lv3{color:#f0b429;border-color:#9e6a03}.quiz .lv4{color:#ff7b72;border-color:#da3633}
+  .quiz .ans{padding:4px 16px 14px;font-size:13.5px;line-height:1.9;color:#c9d1d9;border-top:1px dashed #30363d}
+  .quiz .ans b{color:#f0b429}.quiz .ans code{background:#161b22;padding:1px 5px;border-radius:4px;font-family:monospace;font-size:12px;color:#79c0ff}
+  .quiz .close{margin-top:6px;width:100%}
+  .controls{flex-shrink:0;padding:10px 16px;background:#161b22;border-top:1px solid #30363d}
+  .progress{position:relative;height:14px;border-radius:4px;margin-bottom:10px;background:#21262d;cursor:pointer;overflow:hidden}
+  .progress .fill{position:absolute;left:0;top:0;bottom:0;background:linear-gradient(90deg,#238636,#3fb950);width:0;pointer-events:none}
+  .progress .tick{position:absolute;top:0;bottom:0;width:1px;background:#0d1117;pointer-events:none;opacity:.75}
+  .progress .tick.step{width:2px;background:#010409;opacity:1}
+  .progress:hover{filter:brightness(1.2)}
+  .btns{display:flex;align-items:center;gap:9px}
+  button{background:#21262d;color:#e6edf3;border:1px solid #30363d;border-radius:6px;padding:7px 13px;cursor:pointer;font-size:14px}
+  button:hover{background:#30363d}
+  button.primary{background:#238636;border-color:#2ea043;font-weight:600}
+  button:disabled{opacity:.4;cursor:not-allowed}
+  label{font-size:12px;color:#7d8590;display:flex;align-items:center;gap:5px}
+  input[type=range]{width:110px}
+  .meta{font-size:12px;color:#7d8590}
+  .time{font-family:monospace;font-size:12px;color:#adbac7}
+  .hint{font-size:11px;color:#7d8590;margin-top:8px}
+  .missing{background:#3d1d1d;border:1px solid #f85149;color:#ffa198;padding:8px 12px;border-radius:6px;font-size:12.5px;margin-bottom:8px;display:none}
+  kbd{background:#21262d;border:1px solid #30363d;border-radius:4px;padding:0 5px;font-family:monospace;font-size:11px;color:#adbac7}
+</style>
+</head>
+<body>
+<header>
+  <h1>🎬 L13 令牌消费 · 三条安全链与机娘登场 · 方案B</h1>
+  <div class="legend" id="legend"></div>
+  <div class="spacer"></div>
+  <span id="voice">🎧 预生成 mp3 · 云健（edge-tts）· 两幕（黑板架构 + 代码走查）</span>
+</header>
+
+<div class="main">
+  <div class="left">
+    <div class="tree"><div class="th">📁 涉及文件（行号=真实源文件行号）</div><div id="tree"></div></div>
+    <div class="breadcrumb" id="crumb">— 点击 ▶ 开始 —</div>
+    <div class="code" id="codePanel"><pre class="code-pre" id="code"></pre></div>
+  </div>
+  <div class="right">
+    <div class="flow"><div class="th">🧭 四条线 · 点节点可跳转</div><div id="flow"></div></div>
+    <div class="detail" id="detailPanel"><div class="th">💡 深入详解</div><div class="detail-body" id="detail">方案B（预生成 mp3）：旁白是 edge-tts 离线生成的一整条音频，所以这是<b>真·进度条</b>——任意位置点击秒级跳转、暂停从当前字续播（不回头）、<b>语速实时调</b>（0.6×~2.0×，立即生效不重读）。<b>本课分两幕</b>：第一幕黑板讲架构（问题→设计空间→权衡→决策，不出代码），第二幕真实行号代码走查。字幕/代码高亮由音频时间轴驱动。快捷键：<kbd>空格</kbd> 播放/暂停，<kbd>←</kbd><kbd>→</kbd> 上/下一句，<kbd>Shift+←/→</kbd> 上/下一步。</div></div>
+  </div>
+</div>
+
+<div class="subtitle focus-detail" id="subtitleBar">
+  <span class="focusbadge" id="focusBadge">👀 焦点</span>
+  <span class="txt" id="subtitle">准备好了吗？点 ▶ 开始。本课讲：L12 铸的令牌怎么「花出去」——三条安全链，以及机娘怎么登场。</span>
+</div>
+
+<div class="controls">
+  <div class="missing" id="missing">⚠ 找不到 06-assets/L13-session.mp3 或 timeline.js —— 在仓库根目录运行 <code>.venv-tts/Scripts/python backend/src/magic-L13/06-make-audio.py</code> 生成后刷新本页。</div>
+  <div class="progress" id="progress"><div class="fill" id="fill"></div></div>
+  <div class="btns">
+    <button id="playBtn" class="primary">▶ 开始播放</button>
+    <button id="prevBtn" title="上一句（Shift=上一步）">⏮ 句</button>
+    <button id="nextBtn" title="下一句（Shift=下一步）">句 ⏭</button>
+    <button id="quizBtn" title="片尾测验（听完自动弹出）">📝 测验</button>
+    <span class="time" id="timeLabel">0:00 / 0:00</span>
+    <span class="spacer"></span>
+    <label>语速 <input type="range" id="speed" min="0.6" max="2.0" step="0.1" value="1.0"><span id="speedVal">1.0×</span></label>
+    <span class="meta" id="counter">步 0/0 · 句 0/0</span>
+  </div>
+  <div class="hint">进度条上细线=句边界、粗线=步边界，点任意位置精确跳转；语速立即生效（变速不变调）。第一幕黑板步为示意图（非源码），第二幕代码步为 IDEA 风语法高亮 + 真实源文件行号；字幕自动待在该注视的一侧下方。听完自动弹出 📝 递进测验。</div>
+</div>
+
+<audio id="au" src="06-assets/L13-session.mp3" preload="auto"></audio>
+
+<!-- 片尾测验：由浅入深 5 题，点开看答案。听完音频自动弹出，也可随时点 📝 测验。 -->
+<div class="quiz-mask" id="quizMask">
+  <div class="quiz">
+    <h2>📝 课后测验 · 三条安全链与机娘登场</h2>
+    <div class="sub">由浅入深 5 题。先自己说出答案再点开对照——能讲顺 = 真懂了，卡壳的题回到对应线重听。</div>
+    <details><summary><span class="lv lv1">①基础</span>L12 明明铸出了有效的 owner 令牌，为什么 L13 之前拿它敲 <code>/cli/**</code> 还是 401？</summary>
+      <div class="ans">因为 L05 建的<b>唯一那条安全链只认浏览器的 Session Cookie</b>。CLI 没有 Cookie、没有 Session，它手里只有一枚 Bearer 令牌，而后端<b>根本没有任何一段代码去读它、认它</b>。令牌是真的，可没有「消费端」。L13 第一件事就是造 Chain 2 这条只认 Bearer 的链，把 L12 铸的币花掉 → 对应视频「第一幕·401 悬念」。</div></details>
+    <details><summary><span class="lv lv2">②链路</span>为什么不在一条链里「顺便」也认 Bearer？Spring 又是怎么决定一个请求归哪条链的？</summary>
+      <div class="ans"><b>不能塞一条链</b>：Web 与 Bearer 配置天生矛盾——会话要 <code>IF_REQUIRED</code>(有状态) vs <code>STATELESS</code>；CSRF 要开(Cookie 怕伪造) vs 要关(Bearer 无 CSRF 面)。同一条链没法对不同请求各配一套。<b>选链靠 <code>securityMatcher</code> + <code>@Order</code></b>：Spring 按 Order 从小到大问每条链「这 URL 匹配你吗」，第一个说匹配的独占接管。<b>选哪条链只看 URL、在碰令牌之前就定了</b>——matcher 决定「谁接管」，过滤器决定「接管后怎么认」，两件事别混。</div></details>
+    <details><summary><span class="lv lv3">③原理</span>Chain 2 的过滤器怎么「验币」？为什么不用 Spring 现成的 OAuth2 Resource Server？</summary>
+      <div class="ans"><b>验币 = 铸币反着来</b>：拿客户端传的明文令牌，用 L12 <b>同一个</b> <code>tokenService.digest()</code> 再算一遍 HMAC 摘要，按 <code>access_token_digest</code> 查 <code>owner_access_session</code>；命中且 ACTIVE+未过期 → 造 <code>OwnerPrincipal</code> 入 SecurityContext（<code>OwnerBearerAuthenticationFilter L62-79</code>）。<b>不用 OAuth2 RS</b>：它是为 JWT(自解释) 或 introspection(调授权服务器) 设计的；我们的令牌是 <b>opaque</b> 随机串，有效性只查自己的表比对摘要。自写一个 <code>OncePerRequestFilter</code> 透明可控好教（ADR-0001）。</div></details>
+    <details><summary><span class="lv lv3">④设计</span>什么是 RTR（refresh 令牌轮换）？为什么「重放一枚已轮换的 refresh」要连坐吊销整台设备？</summary>
+      <div class="ans"><b>RTR</b>=每次 refresh 发<b>新 access + 新 refresh</b>，旧会话置 <code>REVOKED</code>（<code>OwnerSessionService L72-91</code>），OAuth BCP 推荐。好处：每枚 refresh 寿命短，且<b>能检测盗用</b>。<b>连坐吊销</b>：一枚已被合法轮换掉（REVOKED）的 refresh 又被拿来用，只有一种解释——<b>它被复制了</b>，攻击者和真 CLI 各持一份，无法分辨谁真。最安全的反应是<b>吊销该 installation 名下所有 ACTIVE 会话</b>（owner+机娘一起废，<code>L60-61</code>），强制重新配对。用旧令牌重放，反而成了发现盗用的信号。</div></details>
+    <details><summary><span class="lv lv4">⑤综合</span>机娘 assume 的命根子是什么？失败为何返回 404 而非 403？本课那个「双重注册」坑教训是什么？</summary>
+      <div class="ans"><b>命根子</b>：只能代入 <code>agent_account.owner_user_id == 当前 owner 令牌的 ownerUserId</code> 且机娘 ACTIVE 的机娘（<code>AgentAssumeService L56</code>）——用根身份换一把窄的机娘令牌，STS AssumeRole 式代入。<b>404 而非 403</b>：连「这个机娘存在」都不泄漏给你（防枚举）。<b>双重注册坑</b>：<code>OncePerRequestFilter</code> 一旦标 <code>@Component</code> 会被注册两次，其中一次<b>对所有 URL 全局生效</b>，导致 agent filter 全局拦截 <code>/cli/**</code> 请求误判 401。<b>教训：只属于某条 SecurityFilterChain 的过滤器别做成 Spring bean</b>——改用 <code>new</code> 构造、限定进本链。</div></details>
+    <button class="close" id="quizClose">关闭，回到视频</button>
+  </div>
+</div>
+
+<script src="06-assets/timeline.js"></script>
+<script>
+// ============ 内容模型（第二幕行号 = 2026-07-13 L13 施工后真实行号，可对照 IDE） ============
+const MODEL = {
+  threads: [
+    { id:"t0", name:"架构·黑板" },
+    { id:"t1", name:"Chain2 验币" },
+    { id:"t2", name:"refresh 轮换" },
+    { id:"t3", name:"Chain3 机娘" }
+  ],
+  fileTree: [
+    { path:"identity/pairing/security/OwnerBearerAuthenticationFilter.java", label:"OwnerBearerAuthenticationFilter" },
+    { path:"identity/pairing/security/CliSecurityConfiguration.java", label:"CliSecurityConfiguration" },
+    { path:"identity/pairing/application/OwnerSessionService.java", label:"OwnerSessionService" },
+    { path:"identity/pairing/application/AgentAssumeService.java", label:"AgentAssumeService" },
+    { path:"db/migration/V011__create_agent_acting_session.sql", label:"V011 迁移" }
+  ],
+  steps: [
+    // ===================== 第一幕 · 黑板：架构思考（file:null，只画图） =====================
+    { thread:"t0", file:null, fileStart:null,
+      structurePath:"401 悬念 ▸ 令牌铸了，却花不出去", flowNode:"401 悬念",
+      codeSnippet:`【悬念】L12 铸的币，为什么花不出去？
+
+  CLI  ──  Authorization: Bearer owner_at_xxxx  ──►  /api/v1/cli/whoami
+                                                          │
+                    唯一一条安全链（L05 建）：只认浏览器 Session Cookie
+                                                          │
+                    CLI 没有 Cookie、没有 Session  ────►  401 未登录
+
+  令牌是真的（库里躺着有效摘要），可【没有一段代码去读它、认它】。
+  L13 第一件事：造一条只认 Bearer 的链，把 L12 铸的币花掉。`,
+      detail:"L12 结束时的尴尬：<code>owner_access_session</code> 表里躺着有效的 <b>OwnerAccessToken</b> 摘要、CLI 攥着明文令牌，但拿它敲任何 <code>/api/v1/cli/**</code> 业务接口——<b>得到 401</b>。因为 L05 建的唯一那条安全链是 <b>Session + CSRF</b>，只认浏览器的 Cookie 会话。CLI 无 Cookie、无 Session，手里只有一枚 Bearer 令牌，而后端<b>没有任何一段代码去读它、认它</b>。这就是本课要填的坑。",
+      sentences:[
+        { t:"上一课我们给 CLI 铸出了令牌，存进了库。这一课先抛一个悬念：CLI 拿着一枚真令牌，去敲业务接口，却被拒了个 401。为什么？", focus:"detail" },
+        { t:"因为到现在为止，整个后端只有一条安全链，它认的是浏览器的 Session Cookie。CLI 没有 Cookie，只有一枚 Bearer 令牌。", lines:[6,8] },
+        { t:"这条链一看你没有 Session，直接判你未登录。令牌是真的，可根本没有一段代码去读它、认它。这就是这一课要填的坑。", lines:[8,10,11] }
+      ] },
+
+    { thread:"t0", file:null, fileStart:null,
+      structurePath:"世界观升级 ▸ 一条链长出三条链", flowNode:"一链→三链",
+      codeSnippet:`【为什么分链？Web 与 Bearer 天生矛盾，同一条链塞不下】
+
+  维度      浏览器(Web)              CLI/机娘(Bearer)
+  会话      IF_REQUIRED 有状态        STATELESS 无状态
+  CSRF      必须开（Cookie 怕伪造）    必须关（Bearer 无 CSRF 面）
+
+【正解：一条后端，按 URL 前缀分成三条 SecurityFilterChain】
+
+  Chain 1  @Order(2)  /web/** 及其余  →  Session + CSRF   ← L05 已有
+  Chain 2  @Order(1)  /cli/**         →  Owner 令牌       ← L13
+  Chain 3  @Order(0)  /agent/**       →  机娘令牌         ← L13
+
+  Spring 按 @Order 从小到大问每条链：这 URL 匹配你的 securityMatcher 吗？
+  第一个说「匹配」的独占接管 —— 选链只看 URL，在碰令牌之前就定了。`,
+      detail:"能不能在一条链里「顺便」也认 Bearer？<b>不行</b>：<code>csrf</code> 要么开要么关、<code>sessionPolicy</code> 要么有状态要么无状态——同一条链没法对不同请求各配一套。硬塞的结果要么 CLI 被 CSRF 拦、要么 Web 丢了 CSRF 保护。正解是<b>多条 SecurityFilterChain 共存</b>，靠 <code>securityMatcher</code>(管哪些 URL) + <code>@Order</code>(谁先被问) 分流。<b>关键心智模型</b>：选哪条链只看 URL、在碰令牌之前就定好了；matcher 决定「谁接管」，过滤器决定「接管后怎么认」——两件事别混。",
+      sentences:[
+        { t:"那能不能在这条链里顺手也认一下 Bearer 令牌？不行。浏览器要有状态、要开 CSRF；令牌要无状态、要关 CSRF。同一条链没法两套都要。", lines:[3,4,5] },
+        { t:"正解是分链：一条后端，按 URL 前缀分给不同的安全链，各自一套配置。左边这张图，从一条链长出三条。", lines:[7,9,10,11] },
+        { t:"Chain 1 管 web 斜杠，走 Session；Chain 2 管 cli 斜杠，认 owner 令牌；Chain 3 管 agent 斜杠，认机娘令牌。", lines:[9,10,11] },
+        { t:"谁接管一个请求，只看 URL、不看令牌，而且在碰令牌之前就定了。Spring 按 Order 从小到大问每条链：这个 URL 匹配你吗？第一个说匹配的独占接管。", lines:[13,14] }
+      ] },
+
+    { thread:"t0", file:null, fileStart:null,
+      structurePath:"身份四层 ▸ 机娘登场（第四层）", flowNode:"四层·机娘",
+      codeSnippet:`【身份四层：令牌层层派生】
+
+  ① client_installation    设备/CLI 注册（长期）            ┐
+  ② device_pairing_request  握手票据（一次性 10min）         ├ L12 备齐
+  ③ owner_access_session    主人令牌（access 1h + refresh 30d）┘
+  ④ agent_acting_session    机娘代理会话（短命 1h·每次运行一把）← L13 新增
+
+【机娘不是新概念 —— 它 V003 就存在了】
+
+  agent_account（V003）：论坛里会发帖、有粉丝、有 persona 的【社交身份】
+       ↑ 一直缺一样东西：运行时认证身份（能被写进帖子，却不能自己登录干活）
+  L13 ④ 就是给这个论坛人格一把【运行时钥匙】。`,
+      detail:"为什么要第三条链？因为本课主角<b>机娘</b>登场了：前两条链的令牌都代表<b>你本人</b>(owner)，第三条代表一个被你<b>代入</b>的机娘身份。这就是<b>身份四层</b>：①设备安装 ②配对票据 ③主人令牌（前三层 L12 备齐）④机娘代理会话（本课新增）。机娘早在 <b>V003</b> 就作为论坛社交身份存在（会发帖、有粉丝、有人格），但一直<b>没有运行时认证身份</b>——能被写进帖子，却不能自己登录干活。L13 ④ 就是给它一把运行时钥匙。",
+      sentences:[
+        { t:"为什么要第三条链？因为这一课的主角登场了：机娘。前两条链的令牌都代表你本人，第三条代表一个被你代入的机娘身份。", focus:"detail" },
+        { t:"这就是四层模型：设备安装、配对票据、主人令牌，最后第四层，机娘代理会话。前三层上一课备齐，第四层这一课才真正出现。", lines:[3,4,5,6] },
+        { t:"机娘其实早就存在，它是论坛里会发帖、有粉丝、有人格的社交身份。这一课给这个社交身份配一把运行时的钥匙，让它能自己登录干活。", lines:[10,11,12] }
+      ] },
+
+    // ===================== 第二幕 · 代码：真实行号走查 =====================
+    { thread:"t1", file:"identity/pairing/security/OwnerBearerAuthenticationFilter.java", fileStart:52,
+      structurePath:"doFilterInternal ▸ Chain 2 验币", flowNode:"验币过滤器",
+      codeSnippet:`    @Override
+    protected void doFilterInternal(@NonNull HttpServletRequest request, @NonNull HttpServletResponse response,
+            @NonNull FilterChain filterChain) throws ServletException, IOException {
+        String header = request.getHeader("Authorization");
+        if (header == null || !header.startsWith(BEARER_PREFIX)) {
+            filterChain.doFilter(request, response);   // 无令牌：交由下游 + entryPoint 出通用 401
+            return;
+        }
+
+        String rawToken = header.substring(BEARER_PREFIX.length()).trim();
+        OwnerAccessSessionDO session = sessionMapper.selectOne(new LambdaQueryWrapper<OwnerAccessSessionDO>()
+                .eq(OwnerAccessSessionDO::getAccessTokenDigest, tokenService.digest(rawToken)));
+
+        // 无命中 / 非 ACTIVE（含 REVOKED）→ 无效，去重新配对。
+        if (session == null || !OwnerSessionStatus.ACTIVE.getCode().equals(session.getStatus())) {
+            reject(request, response, ApiStatus.OWNER_TOKEN_INVALID, List.of("RE_PAIR"));
+            return;
+        }
+        // ACTIVE 但已过期 → 去 refresh 换新（L13 下一步）。
+        if (session.getAccessExpiresAt() == null || !session.getAccessExpiresAt().isAfter(Instant.now())) {
+            reject(request, response, ApiStatus.OWNER_TOKEN_EXPIRED, List.of("REFRESH_TOKEN"));
+            return;
+        }
+
+        OwnerPrincipal principal = new OwnerPrincipal(session.getOwnerUserId(), session.getInstallationId());
+        UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
+                principal, null, List.of(new SimpleGrantedAuthority("ROLE_OWNER")));
+        SecurityContextHolder.getContext().setAuthentication(authentication);
+        filterChain.doFilter(request, response);
+    }`,
+      detail:"验币 = 铸币<b>反着来</b>。<b>L55</b> 读 <code>Authorization</code> 头，没有 <code>Bearer</code> 就放行（交下游 <code>anyRequest().authenticated()</code> 出通用 401）。<b>L62-63</b> 是闭环关键：拿明文令牌用 L12 <b>同一个</b> <code>digest()</code> 算摘要，按 <code>access_token_digest</code> 查会话表——铸/验必须同算法否则对不上。<b>L66</b> 查无或非 ACTIVE → <code>INVALID</code>(去重新配对)；<b>L71</b> 过期 → <code>EXPIRED</code>(去 refresh)，两种失败语义分开。<b>L76-79</b> 验过 → 造 <code>OwnerPrincipal</code> 入 SecurityContext，请求认证通过。",
+      sentences:[
+        { t:"进代码。Chain 2 的核心是这个验币过滤器。五十五行读 Authorization 头，没有 Bearer 就放行，交给下游返通用 401。", lines:[55,56,57] },
+        { t:"六十二、六十三行是闭环的关键：拿客户端传来的明文令牌，用上一课铸币那个同一个 digest 方法算摘要，再拿摘要查 owner 会话表。", lines:[62,63] },
+        { t:"六十六行，查不到或状态不是 ACTIVE，判无效，让你重新配对；七十一行，过期了，判过期，让你去 refresh 换新。两种失败语义分开。", lines:[66,71] },
+        { t:"七十六到七十九行，验过了，造一个 owner 身份塞进安全上下文，这次请求就算认证通过。上一课铸币、这一课验币，钱终于花出去了。", lines:[76,77,78,79] }
+      ] },
+
+    { thread:"t1", file:"identity/pairing/security/CliSecurityConfiguration.java", fileStart:28,
+      structurePath:"cliSecurityFilterChain ▸ Chain 2 装配", flowNode:"链装配",
+      codeSnippet:`    @Bean
+    @Order(1)
+    public SecurityFilterChain cliSecurityFilterChain(HttpSecurity http,
+            TokenService tokenService,
+            OwnerAccessSessionMapper sessionMapper,
+            ProblemDetailAuthenticationEntryPoint entryPoint) throws Exception {
+        OwnerBearerAuthenticationFilter bearerFilter =
+                new OwnerBearerAuthenticationFilter(tokenService, sessionMapper, entryPoint);
+        return http
+                .securityMatcher("/api/v1/cli/**")
+                .csrf(AbstractHttpConfigurer::disable)
+                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .authorizeHttpRequests(authorize -> authorize
+                        // 换令牌不能要令牌：配对 + refresh 端点匿名（CLI 尚无/已过期 access token）。
+                        .requestMatchers("/api/v1/cli/device-pairings", "/api/v1/cli/device-pairings/token",
+                                "/api/v1/cli/auth/refresh")
+                        .permitAll()
+                        // 其余 /cli/** 一律需 owner 令牌。
+                        .anyRequest().authenticated())
+                .exceptionHandling(ex -> ex.authenticationEntryPoint(entryPoint))
+                .addFilterBefore(bearerFilter, UsernamePasswordAuthenticationFilter.class)
+                .build();
+    }`,
+      detail:"这条链怎么装配？<b>L29</b> <code>@Order(1)</code>(比兜底 Chain 1 的 2 更先被问)，<b>L37</b> <code>securityMatcher</code> 只管 <code>/cli/**</code>。<b>L38-39</b> 跟 Chain 1 处处相反：<code>csrf.disable()</code> + <code>STATELESS</code>——Bearer 不走 Cookie，无 CSRF 面也不需要会话。<b>L42-44</b> 留三个匿名端点：配对两个 + refresh 一个（换令牌的过程本身不能要令牌，鸡蛋问题）。<b>L34</b> 过滤器是 <code>new</code> 出来的、不是注入 Bean（藏着一个坑，下面专讲）；<b>L48</b> 把它插进本链的认证位。",
+      sentences:[
+        { t:"这条链怎么装配？二十九行 Order 一，三十七行 securityMatcher 只管 cli 斜杠。", lines:[29,37] },
+        { t:"三十八、三十九行跟 Chain 1 处处相反：关掉 CSRF、设成无状态。因为 Bearer 令牌不走 Cookie，没有 CSRF 面，也不需要会话。", lines:[38,39] },
+        { t:"四十二到四十四行留了三个匿名端点：配对两个、加 refresh 一个。道理是换令牌的过程本身不能要令牌，这是个先有鸡蛋的问题。", lines:[42,43,44] },
+        { t:"注意三十四行，过滤器是 new 出来的，不是注入的 Bean。这里藏着一个坑，等下专门讲。四十八行把它插进这条链的认证位。", lines:[34,48] }
+      ] },
+
+    { thread:"t2", file:"identity/pairing/application/OwnerSessionService.java", fileStart:51,
+      structurePath:"refresh ▸ RTR 全轮换 + 盗用连坐", flowNode:"refresh 轮换",
+      codeSnippet:`    public RefreshTokenResponse refresh(String rawRefreshToken) {
+        Instant now = clock.instant();
+        OwnerAccessSessionDO session = sessionMapper.selectOne(new LambdaQueryWrapper<OwnerAccessSessionDO>()
+                .eq(OwnerAccessSessionDO::getRefreshTokenDigest, tokenService.digest(rawRefreshToken)));
+
+        if (session == null) {
+            throw invalid();
+        }
+        // 已轮换/吊销的 refresh 被重放 → 疑似盗用 → 连坐吊销该 installation 名下所有 ACTIVE 会话。
+        if (!OwnerSessionStatus.ACTIVE.getCode().equals(session.getStatus())) {
+            revokeAllActiveForInstallation(session.getInstallationId(), now);
+            throw invalid();
+        }
+        // refresh 本身过期（30d 到了）→ 去重新配对。
+        if (session.getRefreshExpiresAt() == null || !session.getRefreshExpiresAt().isAfter(now)) {
+            throw new ApiException(ApiStatus.REFRESH_TOKEN_EXPIRED.getStatus(),
+                    ApiStatus.REFRESH_TOKEN_EXPIRED.getCode(), ApiStatus.REFRESH_TOKEN_EXPIRED.getMessage(),
+                    true, List.of("RE_PAIR"));
+        }
+
+        // 轮换：旧会话 REVOKED（连带旧 access 立即失效），新会话 ACTIVE。
+        session.setStatus(OwnerSessionStatus.REVOKED.getCode());
+        session.setUpdatedAt(now);
+        sessionMapper.updateById(session);
+
+        String accessToken = tokenService.generateRawToken("owner_at_");
+        String refreshToken = tokenService.generateRawToken("owner_rt_");
+        Instant accessExp = now.plus(tokenProps.getOwnerAccessTtl());
+        Instant refreshExp = now.plus(tokenProps.getOwnerRefreshTtl());
+
+        OwnerAccessSessionDO rotated = new OwnerAccessSessionDO();
+        rotated.setInstallationId(session.getInstallationId());
+        rotated.setOwnerUserId(session.getOwnerUserId());
+        rotated.setAccessTokenDigest(tokenService.digest(accessToken));
+        rotated.setRefreshTokenDigest(tokenService.digest(refreshToken));
+        rotated.setStatus(OwnerSessionStatus.ACTIVE.getCode());
+        rotated.setAccessExpiresAt(accessExp);
+        rotated.setRefreshExpiresAt(refreshExp);
+        rotated.setCreatedAt(now);
+        rotated.setUpdatedAt(now);
+        sessionMapper.insert(rotated);
+
+        return new RefreshTokenResponse(accessToken, refreshToken, accessExp);
+    }`,
+      detail:"access 只活 1 小时，过期用 30 天的 <b>refresh</b> 换新。本课选 <b>RTR 全轮换</b>：每次刷新发<b>新 access + 新 refresh</b>，旧会话作废（OAuth BCP 推荐）。<b>L72-74</b> 旧会话置 <code>REVOKED</code>(旧 access 连带立即失效)，<b>L81</b> 往下插一条全新会话。最精彩的是 <b>L60</b> 分支：一枚已被轮换掉(REVOKED)、本该作废的 refresh 又冒出来用——说明它被复制、泄漏了。<b>L61</b> 反应决绝：<code>revokeAllActiveForInstallation</code> 连坐吊销这台设备名下所有会话，逼你重新配对。<b>用旧令牌的重放，反而成了发现盗用的信号。</b>",
+      sentences:[
+        { t:"令牌只活一小时，过期怎么办？总不能每小时让你重新扫码。拿那枚三十天的 refresh 令牌来换一套新的。看 refresh 方法。", lines:[51] },
+        { t:"这一课选的是全轮换：每次刷新，不只发新的 access，连 refresh 也一起换新，把旧会话作废。这是 OAuth 安全最佳实践。", focus:"detail" },
+        { t:"七十二到七十四行就是轮换：旧会话置成 REVOKED，旧的 access 因此连带立即失效；八十一行往下插一条全新的会话。", lines:[72,73,74,81] },
+        { t:"最精彩的是六十行这个分支：如果一枚已经被轮换掉、本该作废的 refresh 又冒出来用，说明它被复制了、泄漏了。", lines:[60] },
+        { t:"六十一行的反应很决绝：连坐吊销这台设备名下所有会话，逼你重新配对。用旧令牌的重放，反而成了系统发现盗用的信号。", lines:[61] }
+      ] },
+
+    { thread:"t3", file:"identity/pairing/application/AgentAssumeService.java", fileStart:45,
+      structurePath:"assume ▸ 机娘身份代入（STS 式）", flowNode:"assume 代入",
+      codeSnippet:`    public AssumeAgentResponse assume(Long agentAccountId, OwnerPrincipal owner, AssumeAgentRequest request) {
+        Instant now = clock.instant();
+
+        // 安全不变量：机娘必须存在、属于当前 owner、且 ACTIVE，否则统一 404（不泄漏他人机娘）。
+        List<Map<String, Object>> rows = jdbcTemplate.queryForList(
+                "SELECT owner_user_id, status FROM agent_account WHERE id = ?", agentAccountId);
+        if (rows.isEmpty()) {
+            throw new ApiException(ApiStatus.AGENT_NOT_FOUND);
+        }
+        Long agentOwnerId = ((Number) rows.get(0).get("owner_user_id")).longValue();
+        String agentStatus = (String) rows.get(0).get("status");
+        if (!agentOwnerId.equals(owner.ownerUserId()) || !"ACTIVE".equals(agentStatus)) {
+            throw new ApiException(ApiStatus.AGENT_NOT_FOUND);
+        }
+
+        // 铸 AgentActingToken（每次运行一把新令牌）。
+        String actingToken = tokenService.generateRawToken("agent_at_");
+        Instant expiresAt = now.plus(tokenProps.getAgentActingTtl());
+
+        AgentActingSessionDO session = new AgentActingSessionDO();
+        session.setAgentAccountId(agentAccountId);
+        session.setInstallationId(owner.installationId());
+        session.setOwnerUserId(owner.ownerUserId());
+        session.setSourceTool(request.sourceTool());
+        session.setClientRunId(request.clientRunId());
+        session.setAccessTokenDigest(tokenService.digest(actingToken));
+        session.setStatus(AgentSessionStatus.ACTIVE.getCode());
+        session.setExpiresAt(expiresAt);
+        session.setCreatedAt(now);
+        session.setUpdatedAt(now);
+        sessionMapper.insert(session);
+
+        return new AssumeAgentResponse(actingToken, agentAccountId, expiresAt);
+    }`,
+      detail:"机娘怎么登场？owner 用自己的令牌，<b>代入</b>自己名下的一个机娘，换一把窄的机娘令牌——STS AssumeRole 式权限代入/降级。<b>L49-50</b> 用 <code>JdbcTemplate</code> 轻量查出机娘的主人和状态(<code>agent_account</code> 属别的 forum 模块、尚无 Java 领域层，这里只读校验不越界建依赖)。<b>L56</b> 是整个代入的<b>命根子</b>：只能代入属于你自己、且 ACTIVE 的机娘，否则一律 <code>AGENT_NOT_FOUND</code>。<b>为什么 404 不 403</b>？连别人机娘的存在性都不该泄漏(防枚举)。<b>L61</b> 往下铸令牌、按 <code>agent+tool+run</code> 记一条会话，每次运行独立一把。",
+      sentences:[
+        { t:"机娘怎么登场？owner 用自己的令牌，代入自己名下的一个机娘，换一把窄的机娘令牌。看 assume 方法。", lines:[45] },
+        { t:"四十九、五十行查出这个机娘的主人和状态。五十六行是整个代入的命根子：只能代入属于你自己、且在启用状态的机娘，否则一律返回 404。", lines:[49,50,56] },
+        { t:"为什么是 404 不是 403？因为连别人机娘的存在性都不该泄漏给你。这是一个很细的安全考量。", focus:"detail" },
+        { t:"六十一行往下铸一把机娘令牌，按 agent、source_tool、client_run_id 记一条会话。每一次运行都是独立的一把，互不干扰。", lines:[61] }
+      ] },
+
+    { thread:"t3", file:"db/migration/V011__create_agent_acting_session.sql", fileStart:13,
+      structurePath:"agent_acting_session ▸ 第四层落表", flowNode:"V011 建表",
+      codeSnippet:`CREATE TABLE agent_acting_session (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  agent_account_id BIGINT NOT NULL,                -- 代入哪个机娘人格（FK agent_account）
+  installation_id BIGINT NOT NULL,                 -- 在哪台设备上运行（FK client_installation）
+  owner_user_id BIGINT NOT NULL,                   -- 机娘的主人（冗余存，快速鉴权/审计）
+  source_tool VARCHAR(64) NOT NULL,                -- 哪个工具/CLI/skill 在跑（claude-code / cursor…）
+  client_run_id VARCHAR(64) NOT NULL,              -- 哪一次运行（「每次运行独立」隔离的最细粒度）
+  access_token_digest BINARY(32) NOT NULL,         -- AgentActingToken 摘要（默认 1h·短命无 refresh）
+  status VARCHAR(32) NOT NULL DEFAULT 'ACTIVE',    -- ACTIVE / REVOKED（设备吊销时连坐）
+  expires_at DATETIME(3) NOT NULL,
+  created_at DATETIME(3) NOT NULL,
+  updated_at DATETIME(3) NOT NULL,
+  UNIQUE KEY uk_agent_acting_digest (access_token_digest),
+  KEY idx_agent_acting_isolation (agent_account_id, source_tool, client_run_id),  -- 隔离键（agent+tool+run）
+  KEY idx_agent_acting_installation (installation_id, status),                     -- 设备吊销连坐扫描
+  CONSTRAINT fk_agent_acting_agent FOREIGN KEY (agent_account_id) REFERENCES agent_account(id),
+  CONSTRAINT fk_agent_acting_installation FOREIGN KEY (installation_id) REFERENCES client_installation(id),
+  CONSTRAINT fk_agent_acting_owner FOREIGN KEY (owner_user_id) REFERENCES user_account(id)
+);`,
+      detail:"<b>V011</b> 建的这张 <code>agent_acting_session</code> 就是四层模型的<b>第四层</b>。<b>L26</b> 的隔离键是设计精华：<code>agent_account_id + source_tool + client_run_id</code> 三者组合——这就回答了「多机娘怎么隔离」：细到<b>每一次运行</b>，日志能精确到「哪个机娘、用哪个工具、哪一次跑」，吊销也能精确到单次运行。<b>L28-30</b> 三个外键把机娘会话钉死在真实的机娘、设备、主人上。迁移编号 <b>V011</b> 是接着 V010 顺延的(V009 已被 email-login 占用)——<b>禁止照抄赶工蓝图编号，否则 Flyway 撞车</b>。",
+      sentences:[
+        { t:"落到表结构。V011 建的这张 agent_acting_session，就是四层模型的第四层。", lines:[13] },
+        { t:"二十六行的隔离键是设计的精华：agent 加工具加运行 id 三者组合。这就回答了你多机娘怎么隔离的问题——细到每一次运行。", lines:[26] },
+        { t:"二十八到三十行三个外键，把机娘会话钉死在真实的机娘、设备、主人上。迁移编号 V011，是接着 V010 顺延的，不是照抄蓝图，否则会撞车。", lines:[28,29,30] }
+      ] },
+
+    { thread:"t3", file:null, fileStart:null,
+      structurePath:"⚠️ 踩坑实录 ▸ 过滤器双重注册", flowNode:"双重注册坑",
+      codeSnippet:`【症状】加完 Chain 3 后，全绿的 Chain 2 测试突然红了：
+    带【有效 owner 令牌】访问 /cli/** 应得 200 的用例 → 全变 401
+    （纯负向用例：无令牌/假令牌，反而正常）
+
+【根因】OncePerRequestFilter 一旦标 @Component，会被注册两次：
+    ① 你 addFilterBefore 进指定 SecurityFilterChain   ← 对，限本链
+    ② Spring Boot 自动注册进【主 servlet 过滤器链】    ← 错，对所有 URL 全局生效
+
+    于是 Chain 3 的 agent filter【全局生效】：
+    /cli/whoami 带 owner 令牌 → 被全局 agent filter 抢先拦
+       → 拿 owner 令牌去查 agent_acting_session（查无）→ 401
+
+【修法】Bearer 过滤器不标 @Component，改在各自 chain config 里 new 构造。
+【教训】只属于某条 SecurityFilterChain 的过滤器，别做成 Spring bean。`,
+      detail:"这是本课施工时<b>真实撞上</b>的 bug，最值钱的一课。<b>症状</b>：加完 Chain 3，凡「带有效 owner 令牌访问 <code>/cli/**</code> 应得 200」的用例全变 401，纯负向用例反而正常。<b>根因</b>：<code>OncePerRequestFilter</code> 标了 <code>@Component</code> 会被注册两次，其中一次<b>对所有 URL 全局生效</b>；于是 agent filter 全局抢先拦截 <code>/cli/**</code> 请求，拿 owner 令牌去查机娘表(查无)直接 401。<b>为什么②③没暴露、④才炸</b>：②③只有一个全局 filter 蒙混过关，④加了第二个才互相踩。<b>修法+教训</b>：链专用过滤器别做成 bean，改 <code>new</code> 构造、作用域锁死本链。",
+      sentences:[
+        { t:"回头讲那个坑，这是这一课最真实的一课。加完第三条链，测试突然红了：带 owner 令牌的 cli 请求，被判了 401。", lines:[1,2] },
+        { t:"根因是 Spring Boot 的一个陷阱：一个过滤器如果既继承 OncePerRequestFilter、又标了 Component，它会被注册两次，其中一次是全局对所有 URL 生效。", lines:[5,6,7] },
+        { t:"于是机娘过滤器全局拦截了 cli 请求，拿 owner 令牌去查机娘表，查不到就 401。修法就是去掉 Component、改用 new 构造，把作用域死死锁在自己那条链里。", lines:[9,10,11,14,15] }
+      ] },
+
+    // ===================== 收尾 · 小抄 + 面试 =====================
+    { thread:"t0", file:null, fileStart:null,
+      structurePath:"总结 ▸ 一张小抄 + 面试答法", flowNode:"小抄+面试",
+      codeSnippet:`【三条安全链 + 机娘 · 一张小抄】
+
+三条链（按 URL 分，选链只看 URL 不看令牌）：
+    web 斜杠   → Session + CSRF     （浏览器里的你）
+    cli 斜杠   → owner 令牌          （CLI 上的人类主人）
+    agent 斜杠 → 机娘令牌            （被 assume 代入的机娘）
+
+两个安全招法：
+    refresh 全轮换（RTR）+ 盗用连坐吊销   —— 旧令牌重放 = 泄漏信号
+    assume 只能代入【自己名下】的机娘     —— 失败 404 不泄漏存在性
+
+一个工程教训：
+    链专用的过滤器别设成 @Component（否则全局注册，跨链误判 401）
+
+面试：「怎么给 CLI / AI 智能体做认证」
+    → 多条安全链 + 不透明令牌 + assume 式权限代入`,
+      detail:"<b>最小单元</b>：三条链按 URL 分流(web/cli/agent) + 两个安全招法(RTR 全轮换加盗用连坐、assume 只能代入自己名下机娘) + 一个工程教训(链专用过滤器别做 <code>@Component</code>)。<b>面试</b>：被问「怎么给命令行工具和 AI 智能体做认证」，答 <b>多条安全链 + opaque 令牌 + assume 式权限代入</b>，讲清「选链只看 URL、在碰令牌前就定了」和「重放已轮换令牌 = 盗用信号」——比背概念扎实得多。下一课：机娘用 AgentActingToken 真正发帖(把 Chain 3 接到 forum 写路径)。",
+      sentences:[
+        { t:"收尾，一张小抄。三条链按 URL 分：web 走 Session、cli 认 owner 令牌、agent 认机娘令牌，选链只看 URL 不看令牌。", lines:[3,4,5,6] },
+        { t:"两个安全招法记牢：refresh 全轮换加盗用连坐、assume 只能代入自己名下的机娘。还有一个工程教训：链专用的过滤器别设成 Component。", lines:[9,10,11,13,14] },
+        { t:"面试被问怎么给命令行工具和 AI 智能体做认证，就答多条安全链加不透明令牌，讲清 assume 式的权限代入——这比背概念扎实得多。", lines:[17,18] }
+      ] }
+  ]
+};
+
+// ============ 播放器引擎 v5（真音频驱动）============
+// 时间源 = <audio> 的 currentTime；进度条=真时间轴，任意点击精确 seek；暂停从当前【字】续播；
+// playbackRate 实时变速不变调。字幕/高亮同步：timeline.js 给出每句 [start,end]，timeupdate 里定位当前句。
+const $ = id => document.getElementById(id);
+const au = $('au');
+const TL = window.AUDIO_TIMELINE || null;
+
+const FLAT = [];
+MODEL.steps.forEach((s, si) => s.sentences.forEach((sn, pi) => FLAT.push({ si, pi, sn })));
+const TOTAL = FLAT.length;
+
+let cur = -1, renderedStep = -1;
+
+if (!TL || TL.length !== TOTAL) { $('missing').style.display = 'block'; }
+const DURATION = TL ? TL[TL.length - 1][1] : 0;
+
+$('legend').innerHTML = MODEL.threads.map(t => `<span class="lg" data-t="${t.id}">${t.name}</span>`).join('');
+
+function buildTree() {
+  const root = {};
+  MODEL.fileTree.forEach(f => {
+    const parts = f.path.split('/');
+    let curNode = root;
+    parts.forEach((p, i) => {
+      const isFile = i === parts.length - 1;
+      curNode[p] = curNode[p] || { __file: isFile ? f : null, __children: {} };
+      curNode = curNode[p].__children;
+    });
+  });
+  const out = [];
+  (function walk(node, depth) {
+    Object.keys(node).forEach(name => {
+      const n = node[name];
+      const isFile = n.__file;
+      out.push(`<div class="node ${isFile ? 'file' : 'dir'}" ${isFile ? `data-file="${isFile.path}"` : ''} style="padding-left:${14 + depth * 16}px"><span class="ic">${isFile ? '📄' : '📁'}</span>${name}</div>`);
+      if (!isFile) walk(n.__children, depth + 1);
+    });
+  })(root, 0);
+  $('tree').innerHTML = out.join('');
+  [...document.querySelectorAll('.node.file')].forEach(node => {
+    node.onclick = () => {
+      const i = MODEL.steps.findIndex(s => s.file === node.dataset.file);
+      if (i >= 0) seekToSentence(firstSentenceOfStep(i));
+    };
+  });
+}
+buildTree();
+
+function buildFlow() {
+  const byThread = {};
+  MODEL.steps.forEach((s, i) => { (byThread[s.thread] = byThread[s.thread] || []).push({ ...s, i }); });
+  $('flow').innerHTML = MODEL.threads.map(t => {
+    const chips = (byThread[t.id] || []).map(s => `<span class="chip" data-i="${s.i}">${s.flowNode}</span>`).join('');
+    return `<div class="lane" data-t="${t.id}"><span class="lane-name">${t.name}</span><span class="chips">${chips || '<span class="chip" style="opacity:.4;cursor:default">—</span>'}</span></div>`;
+  }).join('');
+  [...document.querySelectorAll('.chip[data-i]')].forEach(c => { c.onclick = () => seekToSentence(firstSentenceOfStep(+c.dataset.i)); });
+}
+buildFlow();
+
+function firstSentenceOfStep(si) { return FLAT.findIndex(f => f.si === si); }
+
+// —— 真时间轴进度条：句边界细线 / 步边界粗线；点任意处精确 seek ——
+if (TL) {
+  FLAT.forEach((f, k) => {
+    if (k === 0) return;
+    const tick = document.createElement('div');
+    tick.className = 'tick' + (f.pi === 0 ? ' step' : '');
+    tick.style.left = (TL[k][0] / DURATION * 100) + '%';
+    $('progress').appendChild(tick);
+  });
+  $('progress').onclick = e => {
+    const r = $('progress').getBoundingClientRect();
+    au.currentTime = Math.max(0, Math.min(DURATION - .05, (e.clientX - r.left) / r.width * DURATION));
+    if (au.paused) au.play();
+  };
+}
+
+function fmt(sec) { const m = Math.floor(sec / 60), s = Math.floor(sec % 60); return m + ':' + String(s).padStart(2, '0'); }
+
+// —— IDEA Darcula 风语法高亮（单趟正则，防止对已注入的 span 二次着色） ——
+function esc(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+const JAVA_RE = /("[^"]*")|(@[A-Za-z]\w*)|\b(public|private|protected|static|final|class|record|enum|interface|void|new|return|if|else|try|catch|throw|throws|extends|implements|import|package|this|null|true|false|switch|case|default|for|while|boolean|int|long|double|float)\b|\b(\d[\d_]*L?)\b|\.([a-z]\w*)(?=\s*\()/g;
+function hlJava(raw) {
+  const t = raw.trimStart();
+  if (/^(\/\/|\/\*|\*)/.test(t)) return '<span class="tk-cm">' + esc(raw) + '</span>';   // 整行注释/javadoc
+  let rest = raw, tail = '';
+  const ci = rest.indexOf('//');
+  if (ci >= 0 && ((rest.slice(0, ci).match(/"/g) || []).length % 2 === 0)) {            // 行内注释（避开字符串里的 //）
+    tail = '<span class="tk-cm">' + esc(rest.slice(ci)) + '</span>'; rest = rest.slice(0, ci);
+  }
+  let out = '', last = 0, m;
+  JAVA_RE.lastIndex = 0;
+  while ((m = JAVA_RE.exec(rest))) {
+    out += esc(rest.slice(last, m.index));
+    if (m[1]) out += '<span class="tk-str">' + esc(m[1]) + '</span>';
+    else if (m[2]) out += '<span class="tk-ann">' + esc(m[2]) + '</span>';
+    else if (m[3]) out += '<span class="tk-kw">' + m[3] + '</span>';
+    else if (m[4]) out += '<span class="tk-num">' + m[4] + '</span>';
+    else if (m[5]) out += '.<span class="tk-call">' + m[5] + '</span>';
+    last = JAVA_RE.lastIndex;
+  }
+  return out + esc(rest.slice(last)) + tail;
+}
+function hlText(raw) {   // 示意图 / SQL：只把 // 或 -- 注释染灰，其余保持原样
+  let ci = raw.indexOf('//');
+  if (ci < 0) ci = raw.indexOf('--');
+  if (ci < 0) return esc(raw);
+  return esc(raw.slice(0, ci)) + '<span class="tk-cm">' + esc(raw.slice(ci)) + '</span>';
+}
+
+function renderCode(step) {
+  $('code').innerHTML = '';
+  const base = step.fileStart;
+  const isJava = step.file && step.file.endsWith('.java');
+  step.codeSnippet.split('\n').forEach((ln, i) => {
+    const div = document.createElement('div');
+    div.className = 'line';
+    div.dataset.abs = base != null ? (base + i) : (i + 1);
+    const num = document.createElement('span'); num.className = 'ln';
+    num.textContent = base != null ? (base + i) : '·';
+    const tx = document.createElement('span'); tx.innerHTML = isJava ? hlJava(ln) : hlText(ln);
+    div.appendChild(num); div.appendChild(tx); $('code').appendChild(div);
+  });
+}
+function renderStep(si) {
+  renderedStep = si;
+  const s = MODEL.steps[si];
+  [...document.querySelectorAll('.node.file')].forEach(n => n.classList.toggle('on', n.dataset.file === s.file));
+  const onNode = document.querySelector('.node.file.on'); if (onNode) onNode.scrollIntoView({ block: 'nearest' });
+  const lineCount = s.codeSnippet.split('\n').length;
+  $('crumb').innerHTML = s.file
+    ? `📄 ${s.file} &nbsp;›&nbsp; <b>${s.structurePath}</b> &nbsp;·&nbsp; L${s.fileStart}–L${s.fileStart + lineCount - 1}（真实行号，可对照 IDE）`
+    : `⚙ ${s.structurePath} &nbsp;·&nbsp; <b>示意图（非项目源码）</b>`;
+  renderCode(s);
+  [...document.querySelectorAll('.chip[data-i]')].forEach(c => { const ci = +c.dataset.i; c.classList.toggle('on', ci === si); c.classList.toggle('done', ci < si); });
+  [...document.querySelectorAll('.lane')].forEach(l => l.classList.toggle('on', l.dataset.t === s.thread));
+  [...document.querySelectorAll('.lg')].forEach(l => l.classList.toggle('on', l.dataset.t === s.thread));
+  const onChip = document.querySelector('.chip.on'); if (onChip) onChip.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  $('detail').innerHTML = s.detail;
+}
+
+function showSentence(k) {
+  cur = k;
+  const { si, pi, sn } = FLAT[k];
+  if (si !== renderedStep) renderStep(si);
+  const step = MODEL.steps[si];
+
+  const hiset = new Set(sn.lines || []);
+  let first = null;
+  [...document.querySelectorAll('#code .line')].forEach(div => {
+    const abs = +div.dataset.abs;
+    div.classList.remove('hot', 'dim');
+    if (hiset.size) {
+      if (hiset.has(abs)) { div.classList.add('hot'); if (!first) first = div; }
+      else div.classList.add('dim');
+    }
+  });
+  if (first) first.scrollIntoView({ block: 'center', behavior: 'smooth' });
+
+  const focus = sn.focus || (hiset.size ? 'code' : 'detail');
+  $('codePanel').classList.toggle('glow', focus === 'code');
+  $('detailPanel').classList.toggle('glow', focus === 'detail');
+  // 字幕换边：字幕文本始终待在"该注视的面板"下方（左代码/右详解）
+  $('subtitleBar').className = 'subtitle ' + (focus === 'code' ? 'focus-code' : 'focus-detail');
+  const badge = $('focusBadge');
+  if (focus === 'code') {
+    badge.className = 'focusbadge code';
+    badge.textContent = step.fileStart != null && hiset.size
+      ? `👈 看左侧代码 L${Math.min(...hiset)}${hiset.size > 1 ? '–L' + Math.max(...hiset) : ''}`
+      : '👈 看左侧';
+  } else {
+    badge.className = 'focusbadge detail';
+    badge.textContent = '👉 看右侧详解';
+  }
+
+  $('subtitle').textContent = sn.t;
+  $('counter').textContent = `步 ${si + 1}/${MODEL.steps.length} · 句 ${k + 1}/${TOTAL}`;
+  $('prevBtn').disabled = k === 0; $('nextBtn').disabled = k === TOTAL - 1;
+}
+
+// —— 音频时间 → 当前句（timeupdate 每 ~250ms 一次，线性找足够快） ——
+function sentenceAt(t) {
+  for (let k = TOTAL - 1; k >= 0; k--) if (t >= TL[k][0] - 0.05) return k;
+  return 0;
+}
+au.addEventListener('timeupdate', () => {
+  if (!TL) return;
+  $('fill').style.width = (au.currentTime / DURATION * 100) + '%';
+  $('timeLabel').textContent = fmt(au.currentTime) + ' / ' + fmt(DURATION);
+  const k = sentenceAt(au.currentTime);
+  if (k !== cur) showSentence(k);
+});
+au.addEventListener('play', () => { $('playBtn').textContent = '⏸ 暂停'; $('playBtn').classList.remove('primary'); });
+au.addEventListener('pause', () => { $('playBtn').textContent = au.ended ? '↺ 重播' : '▶ 继续'; $('playBtn').classList.add('primary'); });
+au.addEventListener('ended', () => { $('playBtn').textContent = '↺ 重播'; $('playBtn').classList.add('primary'); $('quizMask').classList.add('show'); });
+au.addEventListener('error', () => { $('missing').style.display = 'block'; });
+au.addEventListener('loadedmetadata', () => { $('timeLabel').textContent = '0:00 / ' + fmt(DURATION || au.duration); });
+
+function seekToSentence(k) {
+  if (!TL || k < 0) return;
+  au.currentTime = TL[k][0] + 0.01;
+  showSentence(k);
+  if (au.paused) au.play();
+}
+$('playBtn').onclick = () => {
+  if (!TL) return;
+  if (au.paused) { if (au.ended) au.currentTime = 0; au.play(); } else au.pause();
+};
+$('prevBtn').onclick = e => { seekToSentence(e.shiftKey ? firstSentenceOfStep(Math.max(0, FLAT[Math.max(cur, 0)].si - 1)) : Math.max(0, cur - 1)); };
+$('nextBtn').onclick = e => { seekToSentence(e.shiftKey ? firstSentenceOfStep(Math.min(MODEL.steps.length - 1, FLAT[Math.max(cur, 0)].si + 1)) : Math.min(TOTAL - 1, cur + 1)); };
+$('speed').oninput = () => {           // 真·实时变速：音频变速不变调，立即生效
+  au.playbackRate = parseFloat($('speed').value);
+  $('speedVal').textContent = parseFloat($('speed').value).toFixed(1) + '×';
+};
+$('quizBtn').onclick = () => $('quizMask').classList.add('show');
+$('quizClose').onclick = () => $('quizMask').classList.remove('show');
+$('quizMask').onclick = e => { if (e.target === $('quizMask')) $('quizMask').classList.remove('show'); };
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT') return;
+  if (e.code === 'Space') { e.preventDefault(); $('playBtn').click(); }
+  else if (e.code === 'ArrowRight') { e.preventDefault(); seekToSentence(e.shiftKey ? firstSentenceOfStep(Math.min(MODEL.steps.length - 1, FLAT[Math.max(cur, 0)].si + 1)) : Math.min(TOTAL - 1, cur + 1)); }
+  else if (e.code === 'ArrowLeft') { e.preventDefault(); seekToSentence(e.shiftKey ? firstSentenceOfStep(Math.max(0, FLAT[Math.max(cur, 0)].si - 1)) : Math.max(0, cur - 1)); }
+});
+</script>
+</body>
+</html>

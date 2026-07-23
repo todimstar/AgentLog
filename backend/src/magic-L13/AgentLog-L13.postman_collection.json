@@ -1,0 +1,495 @@
+{
+  "info": {
+    "name": "AgentLog-L13 · 令牌消费·三条认证链",
+    "description": "L13 验收：Chain 2（CLI Bearer·owner 令牌）+ auth refresh（RTR 轮换 + 盗用连坐）+ Chain 3（机娘 assume·AgentActingToken）。\n\n串联顺序：\n  ① 先跑 L12 配对流拿到 owner 令牌（本集合内置精简版：发起→登录→取CSRF→确认→换令牌，脚本自动存 ownerAccessToken/ownerRefreshToken）；\n  ② Chain 2：拿 owner 令牌调 /cli/whoami；\n  ③ refresh：轮换换新 + 旧令牌失效 + 重放连坐；\n  ④ 机娘：库里已预置星梦(id=1)/Queen(id=2) 挂 Alice(owner_user_id=1) 名下 → assume 换机娘令牌 → Chain 3 /agent/whoami。\n\n请求内置测试脚本会把 token 自动存进集合变量，多数请求逐个点【Send】即可串起来。\n\n⚠️ 前置：\n  1) 后端 8080 已重启（加载 V011 迁移 + application-local.yml 里的 agentlog.token.pepper）；MySQL(3307)/Redis 在跑。\n  2) ④机娘部分需要库里有一条属于你的 agent_account（见该 folder 的说明用 SQL 建，并把 id 填进 agentAccountId 变量）。",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080" },
+    { "key": "email", "value": "l13owner@example.com" },
+    { "key": "password", "value": "password123" },
+    { "key": "username", "value": "l13owner" },
+    { "key": "verCode", "value": "000000" },
+    { "key": "csrfToken", "value": "" },
+    { "key": "deviceCode", "value": "" },
+    { "key": "userCode", "value": "" },
+    { "key": "ownerAccessToken", "value": "" },
+    { "key": "ownerRefreshToken", "value": "" },
+    { "key": "oldAccessToken", "value": "" },
+    { "key": "oldRefreshToken", "value": "" },
+    { "key": "agentAccountId", "value": "1" },
+    { "key": "agentActingToken", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "① 取得 owner 令牌（L12 配对流·精简）",
+      "item": [
+        {
+          "name": "1. Create Pairing — 发起配对（匿名）",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                  "const b = pm.response.json();",
+                  "pm.collectionVariables.set('deviceCode', b.deviceCode);",
+                  "pm.collectionVariables.set('userCode', b.userCode);",
+                  "console.log('userCode =', b.userCode);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "body": { "mode": "raw", "raw": "{\n  \"installationCode\": \"postman-l13-inst\",\n  \"deviceName\": \"postman-l13-device\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/v1/cli/device-pairings", "host": ["{{baseUrl}}"], "path": ["api","v1","cli","device-pairings"] },
+            "description": "发起配对，脚本存 deviceCode/userCode。"
+          }
+        },
+        {
+          "name": "2. Login — 登录（种 Session Cookie）",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/v1/web/auth/login", "host": ["{{baseUrl}}"], "path": ["api","v1","web","auth","login"] },
+            "description": "已有账号直接登录。没有的话先用 L12 集合的 send-code/register，或任一已注册账号（改集合变量 email/password）。"
+          }
+        },
+        {
+          "name": "3. Get CSRF — 取 CSRF token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('csrfToken', pm.response.json().token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/v1/web/csrf", "host": ["{{baseUrl}}"], "path": ["api","v1","web","csrf"] },
+            "description": "取 CSRF token 供确认端点用。"
+          }
+        },
+        {
+          "name": "4. Confirm — 浏览器批准（登录+CSRF）",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('204 No Content', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-XSRF-TOKEN", "value": "{{csrfToken}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"userCode\": \"{{userCode}}\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/v1/web/device-pairings/confirm", "host": ["{{baseUrl}}"], "path": ["api","v1","web","device-pairings","confirm"] },
+            "description": "批准配对。currentUserId 从 Session 派生。"
+          }
+        },
+        {
+          "name": "5. Poll Token — 换 owner 令牌（存变量）",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test('APPROVED + 双令牌', () => {",
+                  "  pm.expect(b.status).to.eql('APPROVED');",
+                  "  pm.expect(b.ownerAccessToken).to.be.a('string');",
+                  "  pm.expect(b.ownerRefreshToken).to.be.a('string');",
+                  "});",
+                  "pm.collectionVariables.set('ownerAccessToken', b.ownerAccessToken);",
+                  "pm.collectionVariables.set('ownerRefreshToken', b.ownerRefreshToken);",
+                  "console.log('owner 令牌已存入集合变量，供 Chain 2 / refresh 用');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "body": { "mode": "raw", "raw": "{\n  \"deviceCode\": \"{{deviceCode}}\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/v1/cli/device-pairings/token", "host": ["{{baseUrl}}"], "path": ["api","v1","cli","device-pairings","token"] },
+            "description": "换令牌，脚本把 ownerAccessToken/ownerRefreshToken 存进集合变量。"
+          }
+        }
+      ]
+    },
+    {
+      "name": "② Chain 2 · CLI Bearer 验币",
+      "item": [
+        {
+          "name": "whoami — 有效 owner 令牌 → 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test('返回 owner 身份', () => {",
+                  "  pm.expect(b.ownerUserId).to.be.a('number');",
+                  "  pm.expect(b.installationId).to.be.a('number');",
+                  "});",
+                  "console.log('Chain 2 通过：owner =', b.ownerUserId, 'installation =', b.installationId);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [ { "key": "Authorization", "value": "Bearer {{ownerAccessToken}}" } ],
+            "url": { "raw": "{{baseUrl}}/api/v1/cli/whoami", "host": ["{{baseUrl}}"], "path": ["api","v1","cli","whoami"] },
+            "description": "试金石端点：Chain 2 首个受保护消费者。拿①存的 owner 令牌当 Bearer → 200 + owner/installation。"
+          }
+        },
+        {
+          "name": "whoami — 无令牌 → 401 AUTH_REQUIRED",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('401 Unauthorized', () => pm.response.to.have.status(401));",
+                  "pm.test('code = AUTH_REQUIRED', () => pm.expect(pm.response.json().code).to.eql('AUTH_REQUIRED'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/v1/cli/whoami", "host": ["{{baseUrl}}"], "path": ["api","v1","cli","whoami"] },
+            "description": "不带 Authorization → 通用 401 AUTH_REQUIRED + recoveryActions=[PAIR_DEVICE]。"
+          }
+        },
+        {
+          "name": "whoami — 假令牌 → 401 OWNER_TOKEN_INVALID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('401 Unauthorized', () => pm.response.to.have.status(401));",
+                  "pm.test('code = OWNER_TOKEN_INVALID', () => pm.expect(pm.response.json().code).to.eql('OWNER_TOKEN_INVALID'));",
+                  "pm.test('recoveryActions 含 RE_PAIR', () => pm.expect(pm.response.json().recoveryActions).to.include('RE_PAIR'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [ { "key": "Authorization", "value": "Bearer owner_at_totally_bogus" } ],
+            "url": { "raw": "{{baseUrl}}/api/v1/cli/whoami", "host": ["{{baseUrl}}"], "path": ["api","v1","cli","whoami"] },
+            "description": "digest 无命中 → OWNER_TOKEN_INVALID + recoveryActions=[RE_PAIR]。"
+          }
+        }
+      ]
+    },
+    {
+      "name": "③ auth refresh · RTR 轮换 + 盗用连坐",
+      "item": [
+        {
+          "name": "0. 备份旧令牌（先跑一次，记住旧 token）",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set('oldAccessToken', pm.collectionVariables.get('ownerAccessToken'));",
+                  "pm.collectionVariables.set('oldRefreshToken', pm.collectionVariables.get('ownerRefreshToken'));",
+                  "console.log('已备份旧 access/refresh，供轮换后验证旧令牌失效/重放连坐');"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('（占位）旧令牌已备份', () => pm.expect(pm.collectionVariables.get('oldRefreshToken')).to.be.a('string'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/v1/system/ping", "host": ["{{baseUrl}}"], "path": ["api","v1","system","ping"] },
+            "description": "纯备份步骤：pre-request 脚本把当前 owner 令牌复制到 old* 变量。请求本身打 ping（无副作用）。跑完再跑下一条 refresh。"
+          }
+        },
+        {
+          "name": "1. refresh — 轮换换新（存新令牌）",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test('返回新 access/refresh', () => {",
+                  "  pm.expect(b.ownerAccessToken).to.be.a('string');",
+                  "  pm.expect(b.ownerRefreshToken).to.be.a('string');",
+                  "});",
+                  "pm.test('新 access 与旧不同（确实轮换了）', () => pm.expect(b.ownerAccessToken).to.not.eql(pm.collectionVariables.get('oldAccessToken')));",
+                  "pm.collectionVariables.set('ownerAccessToken', b.ownerAccessToken);",
+                  "pm.collectionVariables.set('ownerRefreshToken', b.ownerRefreshToken);",
+                  "console.log('已轮换：新令牌覆盖集合变量，旧令牌应立即失效');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "body": { "mode": "raw", "raw": "{\n  \"refreshToken\": \"{{oldRefreshToken}}\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/v1/cli/auth/refresh", "host": ["{{baseUrl}}"], "path": ["api","v1","cli","auth","refresh"] },
+            "description": "拿旧 refresh 轮换。permitAll（access 过期也能调）。返回新 access+refresh，旧会话置 REVOKED。"
+          }
+        },
+        {
+          "name": "2. 旧 access → 401（轮换后立即失效）",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('401 Unauthorized', () => pm.response.to.have.status(401));",
+                  "pm.test('code = OWNER_TOKEN_INVALID（会话已 REVOKED）', () => pm.expect(pm.response.json().code).to.eql('OWNER_TOKEN_INVALID'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [ { "key": "Authorization", "value": "Bearer {{oldAccessToken}}" } ],
+            "url": { "raw": "{{baseUrl}}/api/v1/cli/whoami", "host": ["{{baseUrl}}"], "path": ["api","v1","cli","whoami"] },
+            "description": "RTR 的杀手性质：旧 access 不是等它自己过期，而是挂靠的会话被轮换置 REVOKED → 立即失效。"
+          }
+        },
+        {
+          "name": "3. 新 access → 200（新令牌可用）",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [ { "key": "Authorization", "value": "Bearer {{ownerAccessToken}}" } ],
+            "url": { "raw": "{{baseUrl}}/api/v1/cli/whoami", "host": ["{{baseUrl}}"], "path": ["api","v1","cli","whoami"] },
+            "description": "轮换后的新 access 正常工作。"
+          }
+        },
+        {
+          "name": "4. 旧 refresh 重放 → 401 + 连坐吊销全家",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('401 Unauthorized', () => pm.response.to.have.status(401));",
+                  "pm.test('code = REFRESH_TOKEN_INVALID', () => pm.expect(pm.response.json().code).to.eql('REFRESH_TOKEN_INVALID'));",
+                  "console.log('盗用检测：已轮换的 refresh 被重放 → 连坐吊销该设备名下所有会话（含刚才的新令牌）');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "body": { "mode": "raw", "raw": "{\n  \"refreshToken\": \"{{oldRefreshToken}}\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/v1/cli/auth/refresh", "host": ["{{baseUrl}}"], "path": ["api","v1","cli","auth","refresh"] },
+            "description": "已经轮换掉（REVOKED）的旧 refresh 又被拿来用 = 世界上有两份拷贝 = 疑似盗用。响应：连坐吊销该 installation 名下所有 ACTIVE 会话（owner + 机娘一起死），强制重新配对。"
+          }
+        },
+        {
+          "name": "5. 连坐验证：新 access 也 → 401",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('401 Unauthorized（连坐后新令牌也失效）', () => pm.response.to.have.status(401));",
+                  "console.log('连坐生效：重放导致整台设备令牌全部作废，须重新配对');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [ { "key": "Authorization", "value": "Bearer {{ownerAccessToken}}" } ],
+            "url": { "raw": "{{baseUrl}}/api/v1/cli/whoami", "host": ["{{baseUrl}}"], "path": ["api","v1","cli","whoami"] },
+            "description": "重放连坐后，刚才还能用的新 access 也一起被吊销。验证盗用连坐的杀伤范围=整台设备。\n\n⚠️ 跑完这步后 owner 令牌已全废，要继续④机娘部分请回①重新配对拿新 owner 令牌。"
+          }
+        }
+      ]
+    },
+    {
+      "name": "④ Chain 3 · 机娘 assume（先重新配对拿干净 owner 令牌）",
+      "item": [
+        {
+          "name": "0. 说明：确认库里有属于你的 agent_account（已预置星梦/Queen）",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/v1/system/ping", "host": ["{{baseUrl}}"], "path": ["api","v1","system","ping"] },
+            "description": "【重要·先读这里】机娘 assume 需要库里有一条属于你的 agent_account。\n\n★ 本机已预置两个测试机娘（挂在 owner_user_id=1 即 Alice 名下，状态 ACTIVE）：\n    ┌────┬──────────────┬────────┐\n    │ id │ nickname     │ status │\n    ├────┼──────────────┼────────┤\n    │ 1  │ 星梦          │ ACTIVE │  ← 集合变量 agentAccountId 默认就是 1\n    │ 2  │ Queen        │ ACTIVE │\n    └────┴──────────────┴────────┘\n\n★ 前提：你①配对流用的账号必须是 owner_user_id=1（Alice）。否则 assume 会 404（只能代入自己名下的机娘）。\n  用②whoami 打印的 ownerUserId 核对：若不是 1，改集合变量 agentAccountId 指向属于你的机娘，\n  或用下面 SQL 给你的 ownerUserId 建一个。\n\n★ 若库里没有（换了新库），用 MySQL 客户端执行：\n    docker exec infra-mysql-1 mysql -uagentlog -pagentlog agentlog -e \\\n      \"INSERT INTO agent_account(owner_user_id, nickname, status, contribution_count, received_like_count, follower_count, version, created_at, updated_at) \\\n       VALUES (<你的ownerUserId>, '星梦', 'ACTIVE', 0,0,0,0, NOW(3), NOW(3));\"\n  然后 SELECT id FROM agent_account; 把 id 填进集合变量 agentAccountId。\n\n⚠️ 若③已把 owner 令牌连坐吊销，请先回①重新配对拿一枚干净的 ownerAccessToken 再继续。\n\n（本步打 ping 无副作用，仅作说明载体。）"
+          }
+        },
+        {
+          "name": "1. assume — 代入自己的机娘（存机娘令牌）",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test('返回机娘令牌', () => {",
+                  "  pm.expect(b.agentActingToken).to.be.a('string');",
+                  "  pm.expect(b.agentAccountId).to.be.a('number');",
+                  "});",
+                  "pm.collectionVariables.set('agentActingToken', b.agentActingToken);",
+                  "console.log('已代入机娘，AgentActingToken 存入集合变量');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{ownerAccessToken}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"sourceTool\": \"postman\",\n  \"clientRunId\": \"run-001\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/v1/cli/agents/{{agentAccountId}}/assume", "host": ["{{baseUrl}}"], "path": ["api","v1","cli","agents","{{agentAccountId}}","assume"] },
+            "description": "Chain 2 保护（owner 令牌）。owner 用自己的令牌换一把代表机娘的 AgentActingToken。每次运行（sourceTool+clientRunId）一把。"
+          }
+        },
+        {
+          "name": "2. agent/whoami — 机娘令牌 → 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test('返回机娘身份', () => {",
+                  "  pm.expect(b.agentAccountId).to.be.a('number');",
+                  "  pm.expect(b.sourceTool).to.eql('postman');",
+                  "  pm.expect(b.clientRunId).to.eql('run-001');",
+                  "});",
+                  "console.log('Chain 3 通过：机娘身份 =', JSON.stringify(b));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [ { "key": "Authorization", "value": "Bearer {{agentActingToken}}" } ],
+            "url": { "raw": "{{baseUrl}}/api/v1/agent/whoami", "host": ["{{baseUrl}}"], "path": ["api","v1","agent","whoami"] },
+            "description": "试金石：Chain 3 首个受保护消费者。拿机娘令牌 → 200 + 机娘身份（agentAccountId/sourceTool/clientRunId）。"
+          }
+        },
+        {
+          "name": "3. 机娘令牌调 /cli/** → 401（链隔离）",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('401 Unauthorized（机娘令牌进不了 owner 链）', () => pm.response.to.have.status(401));",
+                  "console.log('链隔离验证：机娘令牌查 agent_acting_session 有效，但 Chain 2 查的是 owner_access_session → 查无 → 401');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [ { "key": "Authorization", "value": "Bearer {{agentActingToken}}" } ],
+            "url": { "raw": "{{baseUrl}}/api/v1/cli/whoami", "host": ["{{baseUrl}}"], "path": ["api","v1","cli","whoami"] },
+            "description": "机娘令牌拿去敲 owner 链的 /cli/whoami：Chain 2 的 filter 用它查 owner_access_session 查无 → OWNER_TOKEN_INVALID。证明两条链的令牌互不通用（各查各的表）。"
+          }
+        },
+        {
+          "name": "4. assume 别人的机娘 → 404（归属校验）",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('404 Not Found', () => pm.response.to.have.status(404));",
+                  "pm.test('code = AGENT_NOT_FOUND', () => pm.expect(pm.response.json().code).to.eql('AGENT_NOT_FOUND'));",
+                  "console.log('归属校验：代入不属于你的机娘 → 404（连存在性都不泄漏）');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{ownerAccessToken}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"sourceTool\": \"postman\",\n  \"clientRunId\": \"run-evil\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/v1/cli/agents/999999/assume", "host": ["{{baseUrl}}"], "path": ["api","v1","cli","agents","999999","assume"] },
+            "description": "代入一个不存在/不属于你的 agentAccountId（999999）→ 404 AGENT_NOT_FOUND。assume 的安全命根子：只能代入自己名下的机娘。"
+          }
+        }
+      ]
+    }
+  ]
+}
