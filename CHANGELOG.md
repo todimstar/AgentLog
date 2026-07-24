@@ -6,6 +6,52 @@
 > L06–L11.5 条目为 2026-07-09 断更补录：由 11 个挖掘子代理逐行解析 58 个会话转录（157 条变更明细，
 > 在 `docs/changelog-evidence/mine*.json`，含续档分叉去重）与 git 全史交叉核实而成。
 
+## 0.1.0-SNAPSHOT - L13.5 考古式修复：补做从未落地的 L10 + 契约对账 + 前端/CLI 补齐（待提交）
+
+日期：2026-07-24
+
+> **本条起因**：L13 验收后推进前端时，发现「机娘管理 web 页」在契约里标 `x-agentlog-phase: L10`——顺藤摸瓜用 git 取证，
+> 挖出 **L10 整课从未在主线 `L07-restart` 做过**（只存在于赶工分支 `lessons/L07-onward`），而 CHANGELOG 却记成「已完成」。
+> 这是一次"考古式修复"：先取证定性，再从当前代码现状重做 L10（不无脑 cherry-pick 赶工版），并把连带的契约漂移/前端缺口一并补齐。
+> 详见教学交付 `backend/src/magic-L13.5/`（讲义 + 考古全景概念动画）。
+
+### ⚠️ 两个「记账错误」发现（本条最重要的教训）
+- **L10 空洞**：git `merge-base` 判定，`30cdeb1 feat(l10)後端` / `da7cbcf feat(l10)前端` **均非 HEAD 祖先**，只在 `lessons/L07-onward`。主线从 `b992303`(L06) 重启后 L07-L09 重做了、**L10 被跳过**，而 CHANGELOG 的 L10 条目错把几个 fix 小提交（`3fd4167`/`1e88cfa`/`2947b8d`/`94e0e5c`）当成「L10 已完成」的证据。**教训**：CHANGELOG 引 commit 作完成证据时须核 commit 是否真在当前分支祖先链。
+- **测试数字污染**：此前多轮口头报「102 测」是被 `target/surefire-reports/` 里的 **stale 报告**污染——混进了 `collaboration.*`/`content.*`/`moderation`/`notification` 等 **L14-L24 未来课**的赶工分支残留报告（源码在主线不存在）。`mvn clean` 后真实数字是 **58 测**。**教训**：报测试数用 `mvn clean` 或数 surefire 文件，不累加历史输出。
+
+### Added
+- **L10 后端整课补做**（identity 模块，从当前代码现状重写、非 cherry-pick 赶工版）：
+  - **`AgentAccountDO` + `AgentAccountMapper`**（机娘账号领域层首次落地；15 字段对齐 V003 建表）+ **`AgentStatus` 枚举**（ACTIVE/DISABLED/DELETED，做法A 常量字典，仿 `UserStatus`）。
+  - **`AgentService`**：创建 / 墓碑删除（`status=DELETED`+`deleted_at`，非物删）/ 列主人机娘 / 公开主页查询 / **`findOwnedActiveAgentOrThrow`**（供 assume 复用的归属校验，收敛「只能代入自己名下 ACTIVE 机娘」不变量）。
+  - **`OwnerAgentController`**（`/api/v1/owner/agents` · web Session）：`POST` 建 / `DELETE` 墓碑删 / `GET` 列表；**`PublicProfileController`**（`/api/v1/public/{users,agents}/{id}` · 匿名）：公开主页，返 `UserProfileView`（不含 email）/ `AgentView`。
+  - **架构决策**：`agent_account` 归属 **identity**（它是 principal、`user_account` 的兄弟；社交计数是 forum 维护的派生列，identity 只读渲染）。据此 **assume 顺势升级**：`AgentAssumeService` 从裸 `JdbcTemplate` 查 agent_account **改调 `AgentService` 领域层**，消除 Q2 的裸 `"ACTIVE"` 字面量债（identity.pairing→identity 为模块内调用，不踩 ModularityTest）。
+- **agents list 端点**（本次新增冻结面）：`GET /api/v1/cli/agents`（Chain 2·Bearer owner）+ `GET /api/v1/owner/agents`（Chain 1·Session）——**同一「按 owner 列机娘」查询、两个入口各走各链**（URL 前缀分流的正向应用，不共用端点以免混认证方式）。
+- **L10/L11 前端**（方案三+四）：
+  - `AuthorAvatarStack.vue`（L10 交付·纯组件，身份双轨：机娘头像紫色描边，可点进主页）；`PostLogCard` 内联头像组抽走改用它（L11 组件化的一环）。
+  - `ProfilePage.vue`（L10 交付·Mock 设计系统，用户/机娘公开主页共骨架，机娘多人格卡+owner 归属），路由 `/profile/:kind(user|agent)/:id`。
+  - 机娘管理并进 `SettingsPage`（方案四·Element Plus，建/列/墓碑删，昵称可点进主页）。
+- **L13 CLI 三命令**（course_schedule 承诺的 L13 CLI 交付，此前只有 auth login/status）：`AgentCommand`（`agents list` + `agent assume`）+ `AuthCommand.refresh`（RTR 换新）；`ApiClient` 加带 Bearer 的 GET/POST；`CredentialStore` 加 `getRefreshToken`/`saveActingToken`。**验收标准**：stdout 机器可读 JSON、**绝不打印 token**。
+- **L13.5 教学交付**：`backend/src/magic-L13.5/00-L13.5讲义.md`（考古过程 + agent_account 归属决策 + 契约对账 + 前端三方案 + 两记账教训）+ `03-L13.5-考古式修复全景-概念动画.html`（破案时间线交互）。
+- **面试故事 ×2**（`INTERVIEW-STORIES.md` 故事 13-14）：四表多重 token 认证体系选型（简历主打）+ 一长/一短 token 的 JWT vs 有状态推导。
+
+### Changed
+- **契约对账**（活契约 `docs/api/agentlog-openapi.yaml`，以已验证后端为准，重新 `npm run api:generate`）：
+  - **assume 端点漂移校正**：`POST /cli/agent-acting-sessions`（body 传 agentId，返 `CreateActingSessionResponse`）→ 实际 `POST /cli/agents/{id}/assume`（路径传参，返 `AssumeAgentResponse`），返回码 201→200。删旧 schema `CreateActingSession{Request,Response}`，加 `AssumeAgent{Request,Response}`。
+  - **AgentView 补三计数字段**（`contributionCount`/`receivedLikeCount`/`followerCount`，后端有契约缺）。
+  - **补登记 4 端点**：`GET /cli/agents`、`GET /owner/agents`、`GET /public/agents/{id}`、`GET /public/users/{id}` + `UserProfileView` schema + `UserId` 参数。`api:validate` 通过、`vue-tsc` 通过。
+- **CLI 编码修复**：`AgentLogCli.main` 给 picocli `setOut/setErr` 显式绑定 `System.out.charset()`（= 控制台真实编码）。**根因**：picocli 默认 `new PrintWriter(System.out)` 用 `Charset.defaultCharset()`（JDK18+ = `file.encoding` = UTF-8），而 Windows `System.out` 走 `stdout.encoding`(GBK)，两者错位 → usage 帮助文本乱码 `鏈哄鐩稿叧`。绑定后 picocli 与自写 println 走同一编码路径，cmd/PowerShell 均正常。CLI 提示符 `✓`/`✗`（GBK 无码位显示成 `?`）改纯 ASCII `[OK]`/`[FAIL]`。
+- **Postman**：`AgentLog-L13.postman_collection.json` 加 folder ⑤（机娘 CRUD + 公开主页 6 端点，含「同数据两条链」「公开主页不泄漏 email」对比验收）。
+
+### Verified
+- 后端 `./mvnw clean -pl backend test`：**58 绿**（15 测试类·0 失败 0 错误·clean 排除 stale 污染）。含新增 `OwnerAgentIntegrationTest` **5 例**（建/列/墓碑删 / 删他人 403 / 公开机娘主页匿名可读 / 公开用户主页隐藏 email / 不存在 404）+ assume 升级后 `AgentAssumeIntegrationTest` 6 例无回归。`ModularityTest` 2 绿（新 L10 类无跨模块 import）。
+- 前端 `npm run type-check` + `npm run build`：0 类型错、build 成功。**主人已浏览器验收**（机娘管理/公开主页/头像组）。
+- CLI `./mvnw -pl cli package` + `CliStoreTest` 4 绿。**主人已 cmd/PowerShell 验收** `auth status`/`agents list`/`agent assume`/`auth refresh`（含编码修复后 usage 帮助正常）+ Postman 验收 agent 系列接口达预期。
+
+### Notes / 出处
+- ⚠️ **冻结面待登记 `16-codex/DRIFT-REGISTER.md`**（并入 L13 那批一起，待主人给 Pack 路径）：① 本次新增 2 端点 `GET /cli/agents`、`GET /owner/agents`（契约原只有 owner create/delete，漏列表）；② assume 端点路径漂移 `/cli/agent-acting-sessions`→`/cli/agents/{id}/assume`（蓝图 vs 实装）；③ `AgentView` 增 3 计数字段；④ 公开主页 2 端点 + `UserProfileView` 属自设计（契约原无公开主页）。
+- **UTF-8 注入教训**（已记本机记忆）：早前用 `docker exec mysql -e "中文"` 注入星梦致双重编码乱码 `æ˜Ÿæ¢¦`；已用二进制字面量 `X'E6989FE6A2A6'` 修正 id=1。往 MySQL 注中文一律 `--default-character-set=utf8mb4` 或用 `X'...'` 绕字符集。
+- 施工与验收 [会话 261bebf4 续（L13.5，2026-07-24 考古式修复·前端并轨）]。`docs/blog/` codex 博客产物按主人明确「不提交」，本次已由主人删除。
+
 ## 0.1.0-SNAPSHOT - L13 令牌消费 · 三链认证（Chain 2 Bearer + refresh 轮换 + Chain 3 机娘 assume）（进行中 · 待提交）
 
 日期：2026-07-13
@@ -34,9 +80,21 @@
 - 后端 `./mvnw -pl backend test -Dtest=CliBearerAuthIntegrationTest,DevicePairingIntegrationTest`：**11 绿**（新增 `CliBearerAuthIntegrationTest` 6 例：有效令牌 whoami 200 + owner/installation 对上库 / 无令牌 401 / 假令牌 OWNER_TOKEN_INVALID / 过期 OWNER_TOKEN_EXPIRED + recoveryActions / REVOKED→INVALID / 配对端点仍匿名回归守卫；L12 `DevicePairingIntegrationTest` 5 例无回归）。test-compile 先过。
 - （③ refresh 补充）`... -Dtest=CliTokenRefreshIntegrationTest,CliBearerAuthIntegrationTest,DevicePairingIntegrationTest`：**15 绿**（新增 `CliTokenRefreshIntegrationTest` 4 例：轮换换新 + 旧 access 立即失效 / 假 refresh REFRESH_TOKEN_INVALID / refresh 过期 REFRESH_TOKEN_EXPIRED / **重放已轮换 refresh → 连坐吊销全家**）。
 - （④ assume 全课）`./mvnw -pl backend test -Dtest=AgentAssumeIntegrationTest,CliTokenRefreshIntegrationTest,CliBearerAuthIntegrationTest,DevicePairingIntegrationTest,FlywayMigrationTest,ModularityTest`：**27 绿**（新增 `AgentAssumeIntegrationTest` 6 例：assume→机娘 whoami 200 / 代入他人机娘 404 AGENT_NOT_FOUND / 每次运行独立令牌 / 假机娘令牌 AGENT_TOKEN_INVALID / 过期 AGENT_TOKEN_EXPIRED / **盗用 refresh 连坐吊销机娘令牌**；`FlywayMigrationTest` 4 绿确认 V011 未撞断言；`ModularityTest` 2 绿边界通过）。**双重注册 bug 修复前 7 红→修复后全绿**。
+- （全量回归）`./mvnw -pl backend test`：**53 绿**（backend 模块全量，含 L00–L12 既有测试 + L13 三链）。
+
+### 主人审查带练（2026-07-21 · 18 问逐条核实后的改进）
+- **Q2 状态码抽常量**：`AgentAssumeService` 校验 agent_account 状态的裸明文 `"ACTIVE"` 抽成文件头常量 `AGENT_ACCOUNT_STATUS_ACTIVE`（守主人「状态码不裸写」规矩；agent_account 属 forum 模块尚无 Java 领域层，注释标「待 forum 抽 AgentAccountStatus 枚举后替换」的临时措施）。
+- **Q14 连坐注释修正**：`OwnerSessionService` 类注释从「极端中断只退化为须重新配对（fail-safe）」修正为诚实标注——连坐吊销「先 owner 后 agent」顺序刻意（owner 是能再 assume 的根，先废堵住继续铸令牌）；极端中断（进程崩/连接断/锁超时卡在两条 UPDATE 之间）并非完美原子，会留 ≤1h 不一致窗口（机娘令牌至多存活到自身过期），是「非事务连坐」换「连坐必落库」的可接受代价。**代码顺序不改（现状 owner 先吊即正确），仅修注释。**
+- **Q1 recoveryActions 登记契约**：活契约 `docs/api/agentlog-openapi.yaml` 的 `ProblemDetail.recoveryActions` 补 `enum` 四常量（`PAIR_DEVICE`/`RE_PAIR`/`REFRESH_TOKEN`/`RE_ASSUME`，与代码逐一核对一致）+ 语义说明；`recoverable`/`code` 补 description。此前只声明了类型未登记常量值——属**契约漂移补登记**（自定义自愈动作字典，非 OAuth/HTTP 标准）。`api:validate` 通过。
+- **Q7 测试机娘 + Postman 修真**：查证开发库 `agent_account` 表为空 → 建两个测试机娘（星梦 id=1 / Queen id=2，挂 demo 用户 owner_user_id=1）；Postman 集合 `④` 的「建 agent_account」从假 ping 占位改成预置机娘表格 + 可复制 `docker exec` SQL，顶部描述同步对齐。集合 JSON 合法。
+- **讲义补深（不拆课·课内做深 Chain 3）**：`00-L13讲义.md` 新增 §4.5「Chain 3 深讲：Chain 2 的镜像与差异」（assume 语义/镜像过滤器取舍/每次运行一把令牌）、§6.5「四表设计与巧思」（四表关系图 + 每表面试可讲点 + 从接口讲到表的自述）；§5 踩坑实录链接概念动画页；§7 验收清单更新为 53 测 + 交付物现状。
+- **概念动画页 ×2（新样式·时间线/可点图元，非代码走查风）**：`07-L13-请求流水线与两层过滤器-概念动画.html`（喂饭级：Tomcat/Servlet/Filter 是什么 → 请求逐段流动 → 容器级 vs Security 层两层过滤器 → 双重注册成因 → 与旧 JWT 单链项目对比 → 三链本质）；`08-L13-四表设计与巧思-概念动画.html`（配对→铸 owner 令牌→assume→铸 agent 令牌时间线 + 可点表元看巧思）。
+- **面试故事 ×4**（`INTERVIEW-STORIES.md` 故事 9–12）：过滤器双重注册（两层过滤器 + 旧项目对比）🔴 / RTR 令牌轮换（比基础双 token 多的盗用检测）/ 为什么不加 @Transactional（连坐落库 + ≤1h 窗口权衡）/ 自写验证 vs Spring OAuth2（关键不在有无状态，在有无独立授权服务器）。
+- **本机记忆 ×3**：`l13-filter-two-layers`（两层过滤器真相）、`l13-recovery-actions-contract`（自愈动作字典自定义·待登记）、`interview-story-in-changelog`（每课加「💼面试故事」的新约定）。
 
 ### Notes / 出处
 - ⚠️ **冻结面待登记**：① 新错误码 L13 共 +7（`OWNER_TOKEN_*` ×2 / `REFRESH_TOKEN_*` ×2 / `AGENT_TOKEN_*` ×2 / `AGENT_NOT_FOUND`）属错误码冻结面；② **迁移 V011**（`agent_acting_session`）属迁移编号冻结面（蓝图规划 V009，主线顺延 V011，续 D-02 编号漂移）——两者均须登记 Master Pack `16-codex/DRIFT-REGISTER.md`；Pack 不在本工作目录，待主人给路径后补登记（先此留痕）。
+- **⚠️ 跨模块只读投影脆弱点（字面量对齐枚举·全项目通病）**：forum 模块对 `user_account` 自建读投影（`PostFeedMapper.selectAuthorsByUserIds` 直查物理表 → `AuthorLookupRow` → `AuthorView`），刻意**不 import identity 的 `UserStatus` 枚举**以保模块间零 Java 依赖，代价是用字面量常量对齐：`FeedService.AUTHOR_STATUS_ACTIVE = "ACTIVE"`（[FeedService.java:24-27]）须与 identity `UserStatus.ACTIVE` 手动保持一致。**隐患**：identity 若改枚举值，forum 侧**不会编译报错**，只会静默错判「作者全变已注销」。同类脆弱点已在 L13 出现第 2 处——`AgentAssumeService.AGENT_ACCOUNT_STATUS_ACTIVE = "ACTIVE"` 对齐 forum 尚未抽出的 `AgentAccountStatus`（Q2 已标临时措施）。**性质**：解耦（模块边界干净 + 批量读免 N+1）换编译期保护缺失，属「契约对不上」隐患在 SQL 直查边界的变体。**缓解方向（待议·未改）**：① 状态字面量收敛到 shared 常量并双向核对测试守护；② 未来抽 identity/forum 只读 Facade 时统一枚举来源。此条属跨模块契约脆弱点，一并待登记 `16-codex/DRIFT-REGISTER.md`（先此留痕）。
 - **⚠️ 踩坑教学素材（视频"踩坑"环节）**：`OncePerRequestFilter` 若标 `@Component`，Spring Boot 会额外把它注册进【主 servlet 过滤器链】全局生效——于是 Chain 3 的 agent filter 也拦了带 owner 令牌的 `/cli/**` 请求（查 `agent_acting_session` 查无 → 401）。阶段②③只有 owner 一个 filter 时被掩盖，④加 agent filter 后 7 个"带有效令牌"用例集体 401 暴露。**修法：security filter 不加 `@Component`，改由各自 chain config 用 `new` 构造并 `addFilterBefore`，把作用域严格限死在本链。**
 - 施工 [会话 261bebf4（L13，2026-07-13 导师带练·「两层教学链」首用：设计简报→tests-first→实现→测绿）]；ADR 阶段① `dc22f87` / ②`335fda3` / ③`9ff21f3`+`f189a03` / ④`5302b65`+待提交。
 - L13 后端全部完成 ✅ Chain 2 Bearer 验币 / ✅ auth refresh 轮换（RTR + 盗用连坐吊销）/ ✅ Chain 3 + agent assume + V011（机娘登场·四层模型齐活）。待续：方案B视频终审 + Postman → 前端 + 端到端。

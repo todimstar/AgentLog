@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>L13.5 · 一次考古式修复：从「上过课等于没上课」到系统补齐（概念动画）</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;background:#0d1117;color:#e6edf3;min-height:100vh;font-size:15px;line-height:1.7}
+  .wrap{max-width:1100px;margin:0 auto;padding:0 20px 80px}
+  header{position:sticky;top:0;z-index:20;background:#161b22ee;backdrop-filter:blur(8px);border-bottom:1px solid #30363d;padding:14px 20px;margin-bottom:8px}
+  header h1{font-size:18px}
+  header .sub{font-size:12.5px;color:#7d8590;margin-top:3px}
+  nav{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+  nav a{font-size:12px;padding:3px 10px;border-radius:12px;background:#21262d;border:1px solid #30363d;color:#adbac7;text-decoration:none}
+  nav a:hover{color:#fff;border-color:#1f6feb}
+  section{background:#161b22;border:1px solid #30363d;border-radius:12px;padding:22px 26px;margin-top:22px}
+  section h2{font-size:19px;color:#79c0ff;margin-bottom:6px;display:flex;align-items:center;gap:8px}
+  section h2 .n{font-size:12px;background:#1f6feb;color:#fff;border-radius:8px;padding:2px 9px}
+  section .lead{color:#8b949e;font-size:14px;margin-bottom:16px}
+  h3{font-size:15.5px;color:#f0b429;margin:20px 0 8px}
+  p{margin:9px 0}
+  b{color:#f0b429}
+  code{background:#0d1117;padding:1px 6px;border-radius:4px;font-family:"SF Mono",Consolas,monospace;font-size:13px;color:#79c0ff;border:1px solid #21262d}
+  .analogy{background:#132a3e;border-left:4px solid #1f6feb;padding:12px 16px;border-radius:0 8px 8px 0;margin:14px 0}
+  .analogy .tag{font-size:11px;color:#79c0ff;font-weight:700;text-transform:uppercase;letter-spacing:.5px}
+  .warn{background:#3d1f1f;border-left:4px solid #f85149;padding:12px 16px;border-radius:0 8px 8px 0;margin:14px 0}
+  .warn .tag{font-size:11px;color:#ff7b72;font-weight:700}
+  .ok{background:#132a1f;border-left:4px solid #3fb950;padding:12px 16px;border-radius:0 8px 8px 0;margin:14px 0}
+  .ok .tag{font-size:11px;color:#3fb950;font-weight:700}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px;margin:16px 0}
+  .card{background:#0d1117;border:1px solid #30363d;border-radius:10px;padding:14px 16px;cursor:pointer;transition:all .2s}
+  .card:hover{border-color:#1f6feb;transform:translateY(-2px)}
+  .card .ic{font-size:26px}
+  .card .t{font-size:15px;font-weight:700;color:#79c0ff;margin:6px 0 4px}
+  .card .d{font-size:12.5px;color:#8b949e;line-height:1.55}
+  .card .more{font-size:12px;color:#c9d1d9;margin-top:10px;display:none;border-top:1px solid #30363d;padding-top:10px}
+  .card.open .more{display:block}
+  .card.open{border-color:#3fb950}
+  table{width:100%;border-collapse:collapse;margin:14px 0;font-size:13px}
+  th,td{border:1px solid #30363d;padding:8px 11px;text-align:left;vertical-align:top}
+  th{background:#21262d;color:#79c0ff}
+  td b{color:#f0b429}
+  .ok-c{color:#3fb950;font-weight:700}
+  .bad-c{color:#ff7b72;font-weight:700}
+  /* 破案时间线 */
+  .timeline{margin:16px 0}
+  .tl-step{display:flex;gap:14px;padding:0 0 8px}
+  .tl-rail{display:flex;flex-direction:column;align-items:center;flex:none;width:34px}
+  .tl-dot{width:30px;height:30px;border-radius:50%;background:#21262d;border:2px solid #30363d;display:grid;place-items:center;font-size:14px;font-weight:700;color:#7d8590;transition:all .3s}
+  .tl-line{flex:1;width:2px;background:#30363d;margin:4px 0}
+  .tl-step:last-child .tl-line{display:none}
+  .tl-body{flex:1;background:#0d1117;border:1px solid #30363d;border-radius:10px;padding:12px 16px;margin-bottom:12px;transition:all .3s;opacity:.45}
+  .tl-body h4{font-size:14.5px;color:#e6edf3;margin-bottom:4px}
+  .tl-body p{font-size:13px;color:#8b949e;margin:4px 0}
+  .tl-body .evi{font-size:12px;color:#79c0ff;font-family:"SF Mono",Consolas,monospace;background:#161b22;border:1px solid #21262d;border-radius:6px;padding:6px 9px;margin-top:6px;display:block}
+  .tl-step.on .tl-body{opacity:1;border-color:#1f6feb}
+  .tl-step.on .tl-dot{background:#1f6feb;color:#fff;border-color:#1f6feb;box-shadow:0 0 0 4px rgba(31,111,235,.2)}
+  .tl-step.solved .tl-dot{background:#238636;color:#fff;border-color:#3fb950}
+  .ctl{display:flex;gap:10px;margin:14px 0;flex-wrap:wrap}
+  .btn{background:#238636;color:#fff;border:none;border-radius:8px;padding:8px 18px;font-size:14px;cursor:pointer;font-weight:600}
+  .btn:hover{background:#2ea043}
+  .btn.ghost{background:#21262d;border:1px solid #30363d;color:#adbac7}
+  .btn:disabled{opacity:.4;cursor:not-allowed}
+  .flow{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:12px 0;font-size:12.5px}
+  .node{padding:7px 12px;border-radius:8px;background:#0d1117;border:1px solid #30363d}
+  .node.id{border-color:#8957e5;color:#db61db}
+  .node.forum{border-color:#f0b429;color:#f0b429}
+  .arr{color:#484f58}
+  .kicker{font-size:12px;color:#7d8590}
+  ul{margin:8px 0 8px 22px}li{margin:5px 0}
+  .foot{text-align:center;color:#484f58;font-size:12px;margin-top:30px}
+  .split{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:14px 0}
+  @media(max-width:760px){.split{grid-template-columns:1fr}}
+  .pane{background:#0d1117;border:1px solid #30363d;border-radius:10px;padding:14px}
+  .pane.before{border-color:#9e6a03}
+  .pane.after{border-color:#3fb950}
+  .pane .hd{font-size:13px;font-weight:700;margin-bottom:8px}
+  .pane.before .hd{color:#f0b429}.pane.after .hd{color:#3fb950}
+</style>
+</head>
+<body>
+<header>
+  <h1>L13.5 · 一次考古式修复</h1>
+  <div class="sub">从「上过课等于没上课」到系统补齐 —— 一次真实的债务侦查与偿还</div>
+  <nav>
+    <a href="#intro">缘起</a>
+    <a href="#detective">破案时间线</a>
+    <a href="#decision">架构决策</a>
+    <a href="#drift">契约对账</a>
+    <a href="#front">前端三方案</a>
+    <a href="#lesson">两个记账教训</a>
+    <a href="#interview">面试怎么讲</a>
+  </nav>
+</header>
+
+<div class="wrap">
+
+<section id="intro">
+  <h2><span class="n">缘起</span> 本来只想补 L13 前端，却挖出一个空洞</h2>
+  <p class="lead">这一节不是讲一个新功能，而是复盘一次真实的「维护型工程」——它比顺利做完一课更能教会你东西。</p>
+  <p>L13（三条认证链 + 机娘 assume）后端做完、测绿、Postman 验收通过。按交付顺序，下一步是<b>前端</b>。可当我去查「L13 的前端该怎么做」时，一路顺藤摸瓜，挖出了一连串问题：</p>
+  <ul>
+    <li>L13 <b>设计上根本没有 web 前端</b>（它是纯 CLI + 令牌课，"前端"就是 CLI 命令）；</li>
+    <li>要做的"机娘管理页"其实属于 <b>L10</b>——而 L10 <b>在主线上从没真正做过</b>，只是账记成做了；</li>
+    <li>assume 端点的<b>契约和实际后端早已漂移</b>（路径/传参/返回全不同）；</li>
+    <li>我之前报的测试数字 <b>102 是被污染的幻影</b>，真实只有 58。</li>
+  </ul>
+  <div class="analogy">
+    <span class="tag">一句话</span>
+    <p style="margin:6px 0 0">这一课教的是：<b>当"文档说做了、代码却没有"时，怎么用证据破案、怎么安全地把债还上、怎么防止再记错账。</b>这是真实工作里最常见、也最考验人的一类活。</p>
+  </div>
+</section>
+
+<section id="detective">
+  <h2><span class="n">1</span> 破案时间线：L10 到底发生了什么</h2>
+  <p class="lead">点「下一步」逐步推进，看我怎么从一句怀疑走到铁证。</p>
+  <div class="timeline" id="tl">
+    <div class="tl-step">
+      <div class="tl-rail"><div class="tl-dot">1</div><div class="tl-line"></div></div>
+      <div class="tl-body">
+        <h4>疑点：路由表里没有 ProfilePage</h4>
+        <p>设计文档（Master Pack）说 L10 要交付 <code>ProfilePage.vue</code> 和 <code>AuthorAvatarStack.vue</code>，但前端 <code>router/index.ts</code> 里根本没有主页路由。</p>
+        <span class="evi">web/src/pages/ 只有 Feed/Detail/Login/Settings/DevicePairing —— 无 ProfilePage</span>
+      </div>
+    </div>
+    <div class="tl-step">
+      <div class="tl-rail"><div class="tl-dot">2</div><div class="tl-line"></div></div>
+      <div class="tl-body">
+        <h4>但 CHANGELOG 说 L10「已提交」，还列了 commit</h4>
+        <p>账面上 L10 是完成的。文档与代码矛盾——必须用 git 取证，不能猜。</p>
+        <span class="evi">git log 里确有：feat(l10) 机娘账号后端 / feat(l10) 主页前端</span>
+      </div>
+    </div>
+    <div class="tl-step">
+      <div class="tl-rail"><div class="tl-dot">3</div><div class="tl-line"></div></div>
+      <div class="tl-body">
+        <h4>关键取证：那两个 commit 不是当前分支的祖先</h4>
+        <p>用 <code>git merge-base --is-ancestor</code> 判定——L10 的 feat commit 只存在于赶工分支 <code>lessons/L07-onward</code>，从没进过主线 <code>L07-restart</code>。</p>
+        <span class="evi">❌ 30cdeb1 不是 HEAD 祖先；只被 lessons/L07-onward 包含</span>
+      </div>
+    </div>
+    <div class="tl-step">
+      <div class="tl-rail"><div class="tl-dot">4</div><div class="tl-line"></div></div>
+      <div class="tl-body">
+        <h4>真相：主线从 L06 末切出重做，L10 的重做被跳过了</h4>
+        <p>L07/L08/L09 都在主线以导师模式重做了，唯独 L10 漏了。CHANGELOG 引用的那几个 hash 其实只是 fix 小提交，被<b>误当成"L10 已完成"的证据</b>。</p>
+        <span class="evi">分叉点 = b992303（L06 完成点）</span>
+      </div>
+    </div>
+    <div class="tl-step">
+      <div class="tl-rail"><div class="tl-dot">✓</div></div>
+      <div class="tl-body">
+        <h4>好消息：文件完整躺在 git 对象里，可恢复</h4>
+        <p>赶工分支的 commit 对象还在，<code>git cat-file</code> 能读出源码。所以不用从零重写——有一份当年可用的实现作参照，只需跟当前代码调和。</p>
+        <span class="evi">git show 30cdeb1:.../OwnerAgentController.java ✅ 可读</span>
+      </div>
+    </div>
+  </div>
+  <div class="ctl">
+    <button class="btn" id="tlNext">▶ 下一步</button>
+    <button class="btn ghost" id="tlReset">重来</button>
+  </div>
+  <div class="ok">
+    <span class="tag">方法论</span>
+    <p style="margin:6px 0 0">破案靠的不是记忆，是<b>可复现的证据链</b>：文件系统看现状 → git log 看历史 → <code>merge-base</code> 判血缘 → <code>cat-file</code> 验对象还在。每一步都留下别人能复算的命令。<b>「文档说了不算，git 说了算」。</b></p>
+  </div>
+</section>
+
+<section id="decision">
+  <h2><span class="n">2</span> 架构决策：agent_account 该归哪个模块？</h2>
+  <p class="lead">恢复 L10 要引入机娘的领域层（DO/Mapper/Service），但它放 identity 还是 forum，是个真问题。点卡片看推理。</p>
+  <div class="cards">
+    <div class="card" onclick="this.classList.toggle('open')">
+      <div class="ic">🧬</div>
+      <div class="t">判断准则</div>
+      <div class="d">谁负责它的生命周期和核心不变量，它就归谁——不是"谁用得多"。</div>
+      <div class="more">机娘能被认证、能行动、有 owner、有 status（ACTIVE/DISABLED/DELETED 生命周期）——它是一个 <b>principal（可行动的主体）</b>。</div>
+    </div>
+    <div class="card" onclick="this.classList.toggle('open')">
+      <div class="ic">👥</div>
+      <div class="t">决定性类比</div>
+      <div class="d">agent_account 是 user_account 的兄弟。</div>
+      <div class="more">人类账号走 session 认证、机娘走 acting-token 认证；两者都有 owner、status、社交计数。没人会把 user_account 搬去 forum，机娘同理 → <b>归 identity</b>。</div>
+    </div>
+    <div class="card" onclick="this.classList.toggle('open')">
+      <div class="ic">📊</div>
+      <div class="t">"它有粉丝，很 forum 啊？"</div>
+      <div class="d">社交计数是 forum 借住的"派生列"，不是归属依据。</div>
+      <div class="more">follower_count / received_like_count 物理上在 agent_account 行上，但由 forum 按"自己的计数自己维护"更新——和 user_account 上的计数一模一样。<b>核心归 identity，计数是 forum 的派生列。</b></div>
+    </div>
+    <div class="card" onclick="this.classList.toggle('open')">
+      <div class="ic">🎁</div>
+      <div class="t">顺手还的一笔债</div>
+      <div class="d">assume 从"裸 SQL"升级成调领域层。</div>
+      <div class="more">L13 的 assume 之前用 JdbcTemplate 裸查 agent_account（因为"没领域层"）。现在领域层补上了，assume 改调 <code>AgentService.findOwnedActiveAgentOrThrow</code>——把"只能代入自己名下 ACTIVE 机娘"这条不变量收敛到一处。</div>
+    </div>
+  </div>
+  <div class="analogy">
+    <span class="tag">一处拥有，多处投影</span>
+    <p style="margin:6px 0 0">identity <b>拥有</b> agent_account（写侧唯一权威）；forum 要展示机娘时<b>自建只读投影</b>直查物理表；跨模块要权威数据才走 <b>Facade</b>。这不是"两个模块抢一张表"，是"一处拥有、多处读"。</p>
+  </div>
+  <div class="flow">
+    <span class="node id">identity: AgentAccountDO / AgentService（写侧权威）</span>
+    <span class="arr">──▶</span>
+    <span class="node id">assume 内部直接调</span>
+    <span class="arr">／</span>
+    <span class="node forum">forum 只读投影 / Facade</span>
+  </div>
+</section>
+
+<section id="drift">
+  <h2><span class="n">3</span> 契约对账：让 OpenAPI 追上真实后端</h2>
+  <p class="lead">前端靠契约生成客户端。契约错了，前端一调就 404。所以做前端前，先把契约和后端对齐。</p>
+  <p>发现 assume 端点<b>契约与实际后端三处全不同</b>——这是之前施工偏离契约、又没回写留下的漂移：</p>
+  <table>
+    <tr><th>维度</th><th>契约（旧·错）</th><th>实际后端（对）</th></tr>
+    <tr><td>路径</td><td class="bad-c">/cli/agent-acting-sessions</td><td class="ok-c">/cli/agents/{id}/assume</td></tr>
+    <tr><td>agentId</td><td class="bad-c">放 body</td><td class="ok-c">放路径参数</td></tr>
+    <tr><td>返回</td><td class="bad-c">CreateActingSessionResponse（含 agent 对象）</td><td class="ok-c">AssumeAgentResponse（token/id/exp）</td></tr>
+  </table>
+  <p><b>对账原则：以已验证的后端为准，改契约去追它。</b>（后端有测试背书、你已 Postman 验收，是事实标准；契约是没跟上的那个。）</p>
+  <h3>这次补齐/校正的契约变动</h3>
+  <ul>
+    <li>校正 assume 端点（路径/传参/返回全对齐）；删掉没人用的旧 schema；</li>
+    <li>AgentView 补齐后端有的三个计数字段；</li>
+    <li>补登记 4 个"后端有、契约无"的端点：<code>GET /cli/agents</code>、<code>GET /owner/agents</code>、<code>GET /public/agents/{id}</code>、<code>GET /public/users/{id}</code>；</li>
+    <li><code>api:validate</code> 通过 → 重新生成客户端 → <code>vue-tsc</code> 类型检查通过。</li>
+  </ul>
+  <div class="ok">
+    <span class="tag">为什么"两个入口各走各链"</span>
+    <p style="margin:6px 0 0">"列机娘"要同时服务 CLI 和 web。<b>不共用一个端点</b>——<code>GET /cli/agents</code>（Bearer 令牌·Chain 2）和 <code>GET /owner/agents</code>（Session·Chain 1）分开，靠 URL 前缀天然分流，底层查询复用同一个 <code>AgentService.listOwnerAgents</code>。这正是 L13 拆三条链原理的一次正向应用：一条链没法同时满足"有状态开 CSRF"和"无状态关 CSRF"两套矛盾配置。</p>
+  </div>
+</section>
+
+<section id="front">
+  <h2><span class="n">4</span> 前端三方案：按页面性质分治</h2>
+  <p class="lead">这个项目其实有三套风格：Mock 设计系统（公开内容页）/ Element Plus（功能表单页）/ 纯原生（一次性窄任务页）。新页面该跟谁一致，取决于它是哪一类。</p>
+  <div class="split">
+    <div class="pane before">
+      <div class="hd">✗ 错误做法</div>
+      <p style="font-size:13px;color:#8b949e">强行让机娘管理页和公开主页用同一套风格 —— 公开主页套 Element Plus 会跟 Feed/详情割裂，用户点进来像"换了个网站"。</p>
+    </div>
+    <div class="pane after">
+      <div class="hd">✓ 采用方案</div>
+      <p style="font-size:13px;color:#8b949e">按性质分治：管理页跟 Settings（Element Plus）、公开主页跟 Feed（Mock 设计系统）、头像组用无框架纯组件。</p>
+    </div>
+  </div>
+  <table>
+    <tr><th>页面</th><th>性质</th><th>跟谁一致</th><th>落点</th></tr>
+    <tr><td>机娘管理</td><td>登录态功能页</td><td>Element Plus</td><td>并进 SettingsPage（功能少不单开页）</td></tr>
+    <tr><td>公开主页 ProfilePage</td><td>公开内容页</td><td>Mock 设计系统</td><td>单独页 /profile/:kind/:id</td></tr>
+    <tr><td>AuthorAvatarStack</td><td>嵌入式组件</td><td>无框架纯组件</td><td>Feed 卡片 / 详情 / 主页复用</td></tr>
+  </table>
+  <div class="analogy">
+    <span class="tag">身份双轨的视觉语言</span>
+    <p style="margin:6px 0 0">头像组里，<b>机娘头像带一圈紫色描边</b>、人类蓝色——让"这条内容有 AI 参与"一眼可辨。这是 AgentLog 区别于普通论坛的招牌，值得在 Feed 就露出来。</p>
+  </div>
+</section>
+
+<section id="lesson">
+  <h2><span class="n">5</span> 两个"记账错误"教训</h2>
+  <p class="lead">这次工程最值钱的不是补了多少代码，而是挖出两个让项目"账面虚高"的坑。</p>
+  <h3>教训一：CHANGELOG 把 fix 提交误当成"整课完成"</h3>
+  <p>L10 明明没在主线做，CHANGELOG 却记成"已提交"，因为它引用的 hash 是几个 fix 小提交（恢复交互状态、批量头像组），被误读成完整交付的证据。<b>记账要记"可验证的证据"，不是"看起来相关的 hash"。</b></p>
+  <h3>教训二：Maven surefire 旧报告污染测试数字</h3>
+  <p>我一度报"102 测绿"，但那是 <code>cat</code> 了 <code>target/surefire-reports/</code> 下所有报告求和——里面混进了赶工分支跑过、源码早已不存在的<b>幻影测试报告</b>（collaboration/content/moderation 等未来课程）。<code>mvn test</code> 不会自动删旧报告。</p>
+  <div class="warn">
+    <span class="tag">真实数字</span>
+    <p style="margin:6px 0 0"><code>mvn clean</code> 后重跑，主线此刻是 <b class="ok-c">58 测全绿</b>（15 个测试类），不是 102。以后拿测试数：要么 <code>clean</code> 后跑，要么直接数 surefire 报告<b>文件</b>，不 <code>cat</code> 累计输出。</p>
+  </div>
+  <div class="ok">
+    <span class="tag">共同根因</span>
+    <p style="margin:6px 0 0">两个坑同源：<b>把"看起来完成的信号"当成"真的完成"</b>。软件工程里，"账"（文档、报告、日志）会漂移、会虚高；真相永远在<b>可复现的证据</b>里——git 血缘、clean 后的测试、实际存在的文件。</p>
+  </div>
+</section>
+
+<section id="interview">
+  <h2><span class="n">6</span> 面试怎么讲这段经历</h2>
+  <p class="lead">这段"考古式修复"是很好的面试故事——它展示的是排查能力和工程判断，不是背概念。</p>
+  <div class="analogy">
+    <span class="tag">面试自述（可直接用）</span>
+    <p style="margin:6px 0 0">接手一个多分支、多人（多 AI）协作的项目，要补一个功能的前端时，我发现它依赖的后端在主线上根本不存在——虽然 CHANGELOG 记着"已完成"。我用 git 的 <code>merge-base --is-ancestor</code> 判定，证明那部分代码只活在另一条赶工分支上，从没合进主线，是一次"重做时被跳过"。好在 commit 对象还在，我用 <code>cat-file</code> 取出旧实现作参照，但没有无脑 cherry-pick——因为它写于一次重构之前，引用了已删除的字段，我逐一跟当前代码调和后才恢复。同时我发现 assume 端点的 OpenAPI 契约和实际后端早已漂移，就以"已验证的后端为准"把契约对齐、重新生成前端客户端。最后还揪出我自己一度用错的测试数字——是 Maven 旧报告污染，<code>clean</code> 后才是真实的 58 测。<b>这件事让我养成一个习惯：文档和报告都可能虚高，结论只认可复现的证据。</b></p>
+  </div>
+  <h3>三个可拆出来单讲的点</h3>
+  <ul>
+    <li><b>git 血缘取证</b>：<code>merge-base --is-ancestor</code> 判断一个 commit 在不在当前分支历史里——分辨"做过丢了"vs"从没做过"。</li>
+    <li><b>模块归属决策</b>：用"谁负责生命周期/不变量"而非"谁用得多"判断实体归属；一处拥有、多处投影。</li>
+    <li><b>契约漂移治理</b>：契约与实现漂移时以"有测试背书的一方"为准；对账后重新生成客户端闭环。</li>
+  </ul>
+</section>
+
+<div class="foot">L13.5 · 考古式修复 · 概念动画 —— 配套讲义见 00-L13.5讲义.md</div>
+</div>
+
+<script>
+  // 破案时间线逐步推进
+  const steps = Array.from(document.querySelectorAll('#tl .tl-step'));
+  let idx = -1;
+  const next = document.getElementById('tlNext');
+  const reset = document.getElementById('tlReset');
+  function render(){
+    steps.forEach((s,i)=>{
+      s.classList.toggle('on', i===idx);
+      s.classList.toggle('solved', i<idx);
+    });
+    next.textContent = idx>=steps.length-1 ? '✓ 破案完成' : '▶ 下一步';
+    next.disabled = idx>=steps.length-1;
+  }
+  next.onclick=()=>{ if(idx<steps.length-1){idx++;render();} };
+  reset.onclick=()=>{ idx=-1; steps.forEach(s=>{s.classList.remove('on','solved');}); next.disabled=false; next.textContent='▶ 下一步'; };
+  render();
+</script>
+</body>
+</html>

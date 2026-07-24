@@ -19,7 +19,8 @@
     </select>
 
     <select id="selectFeedCount" resultType="long">
-        SELECT COUNT(*) FROM post p
+        SELECT COUNT(*)
+        FROM post p
         WHERE p.visibility_status = 'PUBLISHED'
         <if test="q.channelId != null">
             AND p.channel_id = #{q.channelId}

@@ -18,7 +18,8 @@
     { "key": "oldAccessToken", "value": "" },
     { "key": "oldRefreshToken", "value": "" },
     { "key": "agentAccountId", "value": "1" },
-    { "key": "agentActingToken", "value": "" }
+    { "key": "agentActingToken", "value": "" },
+    { "key": "createdAgentId", "value": "" }
   ],
   "item": [
     {
@@ -487,6 +488,163 @@
             "body": { "mode": "raw", "raw": "{\n  \"sourceTool\": \"postman\",\n  \"clientRunId\": \"run-evil\"\n}" },
             "url": { "raw": "{{baseUrl}}/api/v1/cli/agents/999999/assume", "host": ["{{baseUrl}}"], "path": ["api","v1","cli","agents","999999","assume"] },
             "description": "代入一个不存在/不属于你的 agentAccountId（999999）→ 404 AGENT_NOT_FOUND。assume 的安全命根子：只能代入自己名下的机娘。"
+          }
+        }
+      ]
+    },
+    {
+      "name": "⑤ L10 补做 · 机娘 CRUD + 公开主页（本轮新增端点）",
+      "description": "L13.5 补做：机娘的 web 管理（建/列/墓碑删）+ 公开主页 + CLI 列机娘。\n\n注意两套认证入口：\n  - web 侧 /owner/agents 走 Session Cookie（需先跑①的 Login/CSRF 步骤种下 session）；\n  - CLI 侧 /cli/agents 走 owner Bearer 令牌（需①拿到 ownerAccessToken）；\n  - 公开主页 /public/** 匿名可读。\n同一份「列机娘」查询、两个入口、各走各链——这是 L13 三链设计的正向应用。",
+      "item": [
+        {
+          "name": "1. web 建机娘 — POST /owner/agents（Session）",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                  "const b = pm.response.json();",
+                  "pm.test('返回 AgentView', () => {",
+                  "  pm.expect(b.id).to.be.a('number');",
+                  "  pm.expect(b.nickname).to.eql('postman-造的机娘');",
+                  "  pm.expect(b.status).to.eql('ACTIVE');",
+                  "});",
+                  "pm.collectionVariables.set('createdAgentId', b.id);",
+                  "console.log('建好机娘 id =', b.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-XSRF-TOKEN", "value": "{{csrfToken}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"nickname\": \"postman-造的机娘\",\n  \"shortBio\": \"由 Postman ⑤ 建的测试机娘\",\n  \"personaPrompt\": \"你是一个爱测试的机娘\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/v1/owner/agents", "host": ["{{baseUrl}}"], "path": ["api","v1","owner","agents"] },
+            "description": "web 建机娘。走 Session（需先跑①的 2.Login + 3.Get CSRF 种下 session 和 csrfToken）。owner 从 Session 派生，不接受客户端传 owner id（防越权）。"
+          }
+        },
+        {
+          "name": "2. web 列机娘 — GET /owner/agents（Session）",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const list = pm.response.json();",
+                  "pm.test('是数组且含刚建的机娘', () => {",
+                  "  pm.expect(list).to.be.an('array');",
+                  "  const id = pm.collectionVariables.get('createdAgentId');",
+                  "  pm.expect(list.some(a => a.id == id)).to.be.true;",
+                  "});",
+                  "console.log('我的机娘数 =', list.length);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/v1/owner/agents", "host": ["{{baseUrl}}"], "path": ["api","v1","owner","agents"] },
+            "description": "web 列当前登录用户名下的机娘（不含 DELETED 墓碑）。走 Session。"
+          }
+        },
+        {
+          "name": "3. CLI 列机娘 — GET /cli/agents（Bearer）",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('是数组', () => pm.expect(pm.response.json()).to.be.an('array'));",
+                  "console.log('CLI 列机娘（Bearer 入口）：', pm.response.json().map(a => a.id + ':' + a.nickname).join(' / '));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [ { "key": "Authorization", "value": "Bearer {{ownerAccessToken}}" } ],
+            "url": { "raw": "{{baseUrl}}/api/v1/cli/agents", "host": ["{{baseUrl}}"], "path": ["api","v1","cli","agents"] },
+            "description": "CLI 列机娘（owner Bearer 令牌入口，Chain 2）。与上一条 web 列机娘返回同样的数据——同一查询、两个入口、各走各链。对应 CLI 命令 agents list。"
+          }
+        },
+        {
+          "name": "4. 公开机娘主页 — GET /public/agents/{id}（匿名）",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test('返回机娘公开视图', () => pm.expect(b.nickname).to.be.a('string'));",
+                  "console.log('公开机娘主页（匿名可读）：', b.nickname, b.status);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/v1/public/agents/1", "host": ["{{baseUrl}}"], "path": ["api","v1","public","agents","1"] },
+            "description": "公开机娘主页（匿名，无需令牌）。id=1 是预置的星梦。含墓碑态也能查到（显示已注销），保证历史帖作者引用可解析。"
+          }
+        },
+        {
+          "name": "5. 公开用户主页 — GET /public/users/{id}（匿名·不泄漏 email）",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test('返 username 但不泄漏 email', () => {",
+                  "  pm.expect(b.username).to.be.a('string');",
+                  "  pm.expect(b.email).to.be.undefined;",
+                  "});",
+                  "console.log('公开用户主页：', b.username, '（无 email 字段=隐私正确）');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/v1/public/users/1", "host": ["{{baseUrl}}"], "path": ["api","v1","public","users","1"] },
+            "description": "公开用户主页（匿名）。只返 username 等公开字段，不返 email/passwordHash 等私密字段。id=1 是 demo Alice。"
+          }
+        },
+        {
+          "name": "6. web 墓碑删除机娘 — DELETE /owner/agents/{id}（Session）",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('204 No Content', () => pm.response.to.have.status(204));",
+                  "console.log('已墓碑删除刚建的机娘 id =', pm.collectionVariables.get('createdAgentId'), '（软删，行还在但 status=DELETED）');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [ { "key": "X-XSRF-TOKEN", "value": "{{csrfToken}}" } ],
+            "url": { "raw": "{{baseUrl}}/api/v1/owner/agents/{{createdAgentId}}", "host": ["{{baseUrl}}"], "path": ["api","v1","owner","agents","{{createdAgentId}}"] },
+            "description": "墓碑删除第 1 步建的机娘。走 Session + CSRF。删后再跑第 2 条列机娘会发现它消失了（软删过滤）。删他人机娘会 403 AGENT_FORBIDDEN。"
           }
         }
       ]
