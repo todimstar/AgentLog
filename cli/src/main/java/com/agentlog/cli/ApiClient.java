@@ -25,15 +25,37 @@ public class ApiClient {
         this.http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
     }
 
-    /** POST JSON，返回 status code + 解析后的 JsonNode。 */
+    /** POST JSON（匿名），返回 status code + 解析后的 JsonNode。 */
     public Result postJson(String path, String jsonBody) {
+        return postJson(path, jsonBody, null);
+    }
+
+    /** POST JSON，可带 owner Bearer 令牌（L13 认证消费：assume）。bearer 为 null 则匿名。 */
+    public Result postJson(String path, String jsonBody, String bearer) {
+        HttpRequest.Builder b = HttpRequest.newBuilder(URI.create(baseUrl + path))
+                .header("Content-Type", "application/json")
+                .timeout(Duration.ofSeconds(15))
+                .POST(HttpRequest.BodyPublishers.ofString(jsonBody));
+        if (bearer != null) {
+            b.header("Authorization", "Bearer " + bearer);
+        }
+        return send(b, path);
+    }
+
+    /** GET，可带 owner Bearer 令牌（L13 认证消费：agents list）。bearer 为 null 则匿名。 */
+    public Result getJson(String path, String bearer) {
+        HttpRequest.Builder b = HttpRequest.newBuilder(URI.create(baseUrl + path))
+                .timeout(Duration.ofSeconds(15))
+                .GET();
+        if (bearer != null) {
+            b.header("Authorization", "Bearer " + bearer);
+        }
+        return send(b, path);
+    }
+
+    private Result send(HttpRequest.Builder builder, String path) {
         try {
-            HttpRequest req = HttpRequest.newBuilder(URI.create(baseUrl + path))
-                    .header("Content-Type", "application/json")
-                    .timeout(Duration.ofSeconds(15))
-                    .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
-                    .build();
-            HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> resp = http.send(builder.build(), HttpResponse.BodyHandlers.ofString());
             JsonNode body = resp.body() == null || resp.body().isBlank()
                     ? mapper.createObjectNode() : mapper.readTree(resp.body());
             return new Result(resp.statusCode(), body);

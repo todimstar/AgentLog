@@ -20,12 +20,12 @@ import picocli.CommandLine.Option;
  *   4) APPROVED → 把 token 存 credentials.json（不打印），stdout 出成功 JSON
  */
 @Command(name = "auth", description = "认证相关命令",
-        subcommands = {AuthCommand.Login.class, AuthCommand.Status.class})
+        subcommands = {AuthCommand.Login.class, AuthCommand.Status.class, AuthCommand.Refresh.class})
 public class AuthCommand implements Runnable {
 
     @Override
     public void run() {
-        System.err.println("用法: agentlog auth [login|status]");
+        System.err.println("用法: agentlog auth [login|status|refresh]");
     }
 
     @Command(name = "login", description = "设备配对登录（OAuth 设备授权流）")
@@ -52,7 +52,7 @@ public class AuthCommand implements Runnable {
                     .put("deviceName", System.getProperty("os.name") + "-cli");
             ApiClient.Result pair = api.postJson("/api/v1/cli/device-pairings", createBody.toString());
             if (!pair.ok()) {
-                System.err.println("✗ 配对发起失败: HTTP " + pair.status());
+                System.err.println("[FAIL] 配对发起失败: HTTP " + pair.status());
                 return 1;
             }
             String deviceCode = pair.body().get("deviceCode").asText();
@@ -75,7 +75,7 @@ public class AuthCommand implements Runnable {
                 ApiClient.Result poll = api.postJson("/api/v1/cli/device-pairings/token",
                         mapper.createObjectNode().put("deviceCode", deviceCode).toString());
                 if (!poll.ok()) {
-                    System.err.println("✗ 轮询失败: HTTP " + poll.status());
+                    System.err.println("[FAIL] 轮询失败: HTTP " + poll.status());
                     return 1;
                 }
                 String status = poll.body().path("status").asText("");
@@ -86,7 +86,7 @@ public class AuthCommand implements Runnable {
                             b.get("ownerAccessToken").asText(),
                             b.get("ownerRefreshToken").asText(),
                             b.path("accessExpiresAt").asText(null));
-                    System.err.println("✓ 配对成功，已登录。凭据已安全保存到本地。");
+                    System.err.println("[OK] 配对成功，已登录。凭据已安全保存到本地。");
                     printJson(mapper.createObjectNode()
                             .put("status", "ok")
                             .put("installationCode", installationCode)
@@ -94,7 +94,7 @@ public class AuthCommand implements Runnable {
                     return 0;
                 }
                 if ("EXPIRED".equals(status)) {
-                    System.err.println("✗ 配对码已过期，请重新运行 auth login。");
+                    System.err.println("[FAIL] 配对码已过期，请重新运行 auth login。");
                     printJson(mapper.createObjectNode().put("status", "expired"));
                     return 1;
                 }
@@ -102,7 +102,7 @@ public class AuthCommand implements Runnable {
                 System.err.print(".");
                 System.err.flush();
             }
-            System.err.println("\n✗ 等待超时。");
+            System.err.println("\n[FAIL] 等待超时。");
             printJson(mapper.createObjectNode().put("status", "timeout"));
             return 1;
         }
@@ -135,6 +135,55 @@ public class AuthCommand implements Runnable {
                 out.put("status", valid ? "logged_in" : "access_expired").put("accessExpiresAt", exp);
             }
             System.out.println(out.toString());
+            return 0;
+        }
+    }
+
+    @Command(name = "refresh", description = "用 refresh 令牌换新 access（RTR 轮换）")
+    static class Refresh implements Callable<Integer> {
+
+        @Option(names = "--server", description = "后端地址（缺省用已记住的）")
+        String server;
+
+        private final ObjectMapper mapper = new ObjectMapper();
+
+        @Override
+        public Integer call() {
+            CliConfig config = new CliConfig();
+            if (server != null && !server.isBlank()) {
+                config.setServerBaseUrl(server);
+            }
+            CredentialStore store = new CredentialStore();
+            String refreshToken = store.getRefreshToken();
+            if (refreshToken == null) {
+                System.err.println("未登录或无 refresh 令牌。请先运行 agentlog auth login。");
+                System.out.println(mapper.createObjectNode().put("status", "logged_out").toString());
+                return 1;
+            }
+
+            ApiClient api = new ApiClient(config.serverBaseUrl());
+            // refresh 令牌自证，走 permitAll 端点（不带 Bearer）。
+            ApiClient.Result res = api.postJson("/api/v1/cli/auth/refresh",
+                    mapper.createObjectNode().put("refreshToken", refreshToken).toString());
+            if (!res.ok()) {
+                // 401 多半是 refresh 失效/被连坐吊销 → 提示重新配对。
+                String code = res.body().path("code").asText("");
+                System.err.println("[FAIL] 刷新失败: HTTP " + res.status()
+                        + (code.isBlank() ? "" : " (" + code + ")") + "。可能需要重新 auth login。");
+                System.out.println(mapper.createObjectNode()
+                        .put("status", "refresh_failed").put("code", code).toString());
+                return 1;
+            }
+            JsonNode b = res.body();
+            // 存新的一套 access+refresh（旧的已被后端置 REVOKED）。不打印 token。
+            store.saveTokens(
+                    b.get("ownerAccessToken").asText(),
+                    b.get("ownerRefreshToken").asText(),
+                    b.path("accessExpiresAt").asText(null));
+            System.err.println("[OK] 令牌已轮换刷新。新的凭据已安全保存。");
+            System.out.println(mapper.createObjectNode()
+                    .put("status", "ok")
+                    .put("accessExpiresAt", b.path("accessExpiresAt").asText(null)).toString());
             return 0;
         }
     }

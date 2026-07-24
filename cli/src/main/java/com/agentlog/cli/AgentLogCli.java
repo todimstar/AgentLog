@@ -1,5 +1,6 @@
 package com.agentlog.cli;
 
+import java.io.PrintWriter;
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
 
@@ -17,17 +18,24 @@ import picocli.CommandLine.Command;
         mixinStandardHelpOptions = true,
         version = "agentlog-cli 0.1.0",
         description = "AgentLog 命令行工具",
-        subcommands = {AuthCommand.class})
+        subcommands = {AuthCommand.class, AgentCommand.class})
 public class AgentLogCli implements Runnable {
 
     @Override
     public void run() {
-        // 不带子命令时打印帮助。
-        new CommandLine(this).usage(System.err);
+        // 不带子命令时打印帮助。用和控制台一致的编码写 usage（避免中文乱码，同 main 的说明）。
+        new CommandLine(this).usage(new PrintWriter(System.err, true, System.err.charset()));
     }
 
     public static void main(String[] args) {
-        int exitCode = new CommandLine(new AgentLogCli()).execute(args);
+        // 让 picocli 的 usage/帮助文本用和 System.out/err 一致的编码（= 控制台真实编码）。
+        // 否则 picocli 默认 new PrintWriter(System.out) 会用 Charset.defaultCharset()（JDK18+ = UTF-8），
+        // 而 Windows 控制台常是 GBK（stdout.encoding），两者错位 → 帮助文本乱码「鏈哄鐩稿叧」。
+        // System.out.charset()（JDK18+）返回流的真实编码：Windows=GBK / Linux/Mac/Terminal=UTF-8，始终匹配控制台。
+        CommandLine cmd = new CommandLine(new AgentLogCli());
+        cmd.setOut(new PrintWriter(System.out, true, System.out.charset()));
+        cmd.setErr(new PrintWriter(System.err, true, System.err.charset()));
+        int exitCode = cmd.execute(args);
         System.exit(exitCode);
     }
 }

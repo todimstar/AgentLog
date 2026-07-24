@@ -45,8 +45,31 @@ public class CredentialStore {
         return readString("ownerAccessToken");
     }
 
+    /** refresh token（L13 auth refresh 轮换用）。 */
+    public String getRefreshToken() {
+        return readString("ownerRefreshToken");
+    }
+
     public String getAccessExpiresAt() {
         return readString("accessExpiresAt");
+    }
+
+    /**
+     * 保存 assume 换来的机娘 acting token（L13）。短命无 refresh，仅缓存供本次运行使用。
+     * 明文存本地文件、绝不打印（同 owner 令牌的非加密两道墙）。
+     */
+    public void saveActingToken(long agentAccountId, String actingToken, String expiresAt) {
+        try {
+            ObjectNode root = load();
+            ObjectNode acting = mapper.createObjectNode();
+            acting.put("agentAccountId", agentAccountId);
+            acting.put("agentActingToken", actingToken);
+            acting.put("expiresAt", expiresAt);
+            root.set("activeAgent", acting);
+            save(root);
+        } catch (Exception e) {
+            throw new IllegalStateException("保存机娘令牌失败: " + e.getMessage(), e);
+        }
     }
 
     /** access token 是否仍在有效期内（本地判断，不查服务端；无凭据/无过期时间视为无效）。 */
