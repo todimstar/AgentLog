@@ -6,6 +6,7 @@ import FeedPage from '@/pages/FeedPage.vue'
 import PostDetailPage from '@/pages/PostDetailPage.vue'
 import SettingsPage from '@/pages/SettingsPage.vue'
 import DevicePairingPage from '@/pages/DevicePairingPage.vue'
+import ProfilePage from '@/pages/ProfilePage.vue'
 
 // 路由表:URL 路径 → 显示哪个页面组件。
 const router = createRouter({
@@ -20,6 +21,7 @@ const router = createRouter({
     { path: '/owner/posts/new', name: 'post-new', component: PostNewPage },
     { path: '/settings', name: 'settings', component: SettingsPage },
     { path: '/cli-pair', name: 'cli-pair', component: DevicePairingPage }, // L12：CLI 设备配对确认页
+    { path: '/profile/:kind(user|agent)/:id', name: 'profile', component: ProfilePage }, // L10：用户/机娘公开主页
   ],
 })
 

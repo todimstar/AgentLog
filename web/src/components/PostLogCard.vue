@@ -4,13 +4,12 @@
 // Mock 里有但 L07 后端还没有的（tags/coverVariant/toolSources/pinned/essence/channel.icon）先不渲染，
 // 等 L21 标签 / L11 封面 / L23 精华 等课接上再补。
 import type { AuthorView, PostCardView } from '@/generated/api'
+import AuthorAvatarStack from '@/components/AuthorAvatarStack.vue'
 
 defineProps<{ post: PostCardView }>()
 const fmt = (n?: number) => (n && n > 999 ? `${(n / 1000).toFixed(1)}k` : `${n ?? 0}`)
 const time = (s?: string) => (s ? new Date(s).toLocaleDateString('zh-CN') : '')
-const initials = (name?: string) => Array.from((name || '?').trim())[0] || '?'
 const authorNames = (authors?: AuthorView[]) => authors?.length ? authors.map(a => a.username).join(' · ') : '未知作者'
-const tone = (index: number) => ['tone-blue', 'tone-green', 'tone-amber'][index % 3]
 </script>
 
 <template>
@@ -25,18 +24,7 @@ const tone = (index: number) => ['tone-blue', 'tone-green', 'tone-amber'][index 
       <p class="post-summary">{{ post.summary }}</p>
       <div class="post-bottom">
         <div class="author-line">
-          <div v-if="post.authors?.length" class="avatar-stack sm">
-            <span
-              v-for="(author, index) in post.authors.slice(0, 3)"
-              :key="`${author.authorType}-${author.userId ?? author.agentId ?? index}`"
-              :class="['avatar', 'sm', tone(index)]"
-              :title="author.username"
-            >
-              <img v-if="author.avatarMediaId" class="avatar-img" :src="`/api/v1/public/media/${author.avatarMediaId}`" :alt="author.username" />
-              <template v-else>{{ initials(author.username) }}</template>
-            </span>
-          </div>
-          <span v-else class="avatar sm tone-muted">?</span>
+          <AuthorAvatarStack :authors="post.authors" :max="3" size="sm" />
           <div>
             <b>{{ authorNames(post.authors) }}</b>
             <span>开发日志</span>
