@@ -1,6 +1,7 @@
 package com.agentlog.identity.application;
 
 import com.agentlog.identity.api.dto.RegisterRequest;
+import com.agentlog.identity.api.dto.UserProfileView;
 import com.agentlog.identity.api.dto.UserView;
 import com.agentlog.identity.domain.UserStatus;
 import com.agentlog.identity.infrastructure.persistence.dataobject.UserAccount;
@@ -100,6 +101,18 @@ public class IdentityService {
             throw new ApiException(HttpStatus.UNAUTHORIZED, "AUTH_SESSION_REQUIRED", "会话无效");
         }
         return UserView.from(account);
+    }
+
+    /**
+     * 公开用户主页（匿名可读，L10）。任何人可看，含墓碑态（显示「已注销」），
+     * 保证历史帖/评论的作者引用可解析。不返回 email/passwordHash 等私密字段（见 UserProfileView）。
+     */
+    public UserProfileView getPublicUserProfile(long userId) {
+        UserAccount account = userAccountMapper.selectById(userId);
+        if (account == null) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "USER_NOT_FOUND", "用户不存在");
+        }
+        return UserProfileView.from(account);
     }
 
     /**
