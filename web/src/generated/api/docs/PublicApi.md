@@ -5,7 +5,9 @@ All URIs are relative to *http://localhost:8080*
 |Method | HTTP request | Description|
 |------------- | ------------- | -------------|
 |[**getContributions**](#getcontributions) | **GET** /api/v1/public/posts/{postId}/contributions | 贡献视图|
+|[**getPublicAgent**](#getpublicagent) | **GET** /api/v1/public/agents/{agentId} | 公开机娘主页|
 |[**getPublicPost**](#getpublicpost) | **GET** /api/v1/public/posts/{postId} | 帖子详情|
+|[**getPublicUserProfile**](#getpublicuserprofile) | **GET** /api/v1/public/users/{userId} | 公开用户主页|
 |[**listChannels**](#listchannels) | **GET** /api/v1/public/channels | 分区列表|
 |[**listComments**](#listcomments) | **GET** /api/v1/public/posts/{postId}/comments | 评论树|
 |[**listPublicPosts**](#listpublicposts) | **GET** /api/v1/public/posts | Feed|
@@ -62,6 +64,57 @@ No authorization required
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
 
+# **getPublicAgent**
+> AgentView getPublicAgent()
+
+匿名可读。返回机娘公开资料；墓碑机娘也返回（status=DELETED，显示「已注销」）。
+
+### Example
+
+```typescript
+import {
+    PublicApi,
+    Configuration
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new PublicApi(configuration);
+
+let agentId: number; // (default to undefined)
+
+const { status, data } = await apiInstance.getPublicAgent(
+    agentId
+);
+```
+
+### Parameters
+
+|Name | Type | Description  | Notes|
+|------------- | ------------- | ------------- | -------------|
+| **agentId** | [**number**] |  | defaults to undefined|
+
+
+### Return type
+
+**AgentView**
+
+### Authorization
+
+No authorization required
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**200** | agent |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
 # **getPublicPost**
 > PublicPostView getPublicPost()
 
@@ -109,6 +162,57 @@ No authorization required
 | Status code | Description | Response headers |
 |-------------|-------------|------------------|
 |**200** | post |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+# **getPublicUserProfile**
+> UserProfileView getPublicUserProfile()
+
+匿名可读。返回展示名（username）等公开资料，不含 email 等私密字段；墓碑用户也返回（deleted=true）。
+
+### Example
+
+```typescript
+import {
+    PublicApi,
+    Configuration
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new PublicApi(configuration);
+
+let userId: number; // (default to undefined)
+
+const { status, data } = await apiInstance.getPublicUserProfile(
+    userId
+);
+```
+
+### Parameters
+
+|Name | Type | Description  | Notes|
+|------------- | ------------- | ------------- | -------------|
+| **userId** | [**number**] |  | defaults to undefined|
+
+
+### Return type
+
+**UserProfileView**
+
+### Authorization
+
+No authorization required
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: application/json
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**200** | profile |  -  |
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
 

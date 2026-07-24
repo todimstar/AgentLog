@@ -22,9 +22,11 @@ import { DUMMY_BASE_URL, assertParamExists, setApiKeyToObject, setBasicAuthToObj
 // @ts-ignore
 import { BASE_PATH, COLLECTION_FORMATS, type RequestArgs, BaseAPI, RequiredError, operationServerMap } from '../base';
 // @ts-ignore
-import type { CreateActingSessionRequest } from '../models';
+import type { AgentView } from '../models';
 // @ts-ignore
-import type { CreateActingSessionResponse } from '../models';
+import type { AssumeAgentRequest } from '../models';
+// @ts-ignore
+import type { AssumeAgentResponse } from '../models';
 // @ts-ignore
 import type { CreatePairingRequest } from '../models';
 // @ts-ignore
@@ -40,15 +42,19 @@ export const CLIApiAxiosParamCreator = function (configuration?: Configuration) 
     return {
         /**
          * 
-         * @summary Assume 机娘
-         * @param {CreateActingSessionRequest} createActingSessionRequest 
+         * @summary Assume 机娘（代入自己名下机娘，换一把短命 AgentActingToken）
+         * @param {number} agentAccountId 
+         * @param {AssumeAgentRequest} assumeAgentRequest 
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        assumeAgent: async (createActingSessionRequest: CreateActingSessionRequest, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
-            // verify required parameter 'createActingSessionRequest' is not null or undefined
-            assertParamExists('assumeAgent', 'createActingSessionRequest', createActingSessionRequest)
-            const localVarPath = `/api/v1/cli/agent-acting-sessions`;
+        assumeAgent: async (agentAccountId: number, assumeAgentRequest: AssumeAgentRequest, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'agentAccountId' is not null or undefined
+            assertParamExists('assumeAgent', 'agentAccountId', agentAccountId)
+            // verify required parameter 'assumeAgentRequest' is not null or undefined
+            assertParamExists('assumeAgent', 'assumeAgentRequest', assumeAgentRequest)
+            const localVarPath = `/api/v1/cli/agents/{agentAccountId}/assume`
+                .replace('{agentAccountId}', encodeURIComponent(String(agentAccountId)));
             // use dummy base URL string because the URL constructor only accepts absolute URLs.
             const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
             let baseOptions;
@@ -70,7 +76,7 @@ export const CLIApiAxiosParamCreator = function (configuration?: Configuration) 
             setSearchParams(localVarUrlObj, localVarQueryParameter);
             let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
             localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
-            localVarRequestOptions.data = serializeDataIfNeeded(createActingSessionRequest, localVarRequestOptions, configuration)
+            localVarRequestOptions.data = serializeDataIfNeeded(assumeAgentRequest, localVarRequestOptions, configuration)
 
             return {
                 url: toPathString(localVarUrlObj),
@@ -147,6 +153,40 @@ export const CLIApiAxiosParamCreator = function (configuration?: Configuration) 
                 options: localVarRequestOptions,
             };
         },
+        /**
+         * 
+         * @summary 列出当前 owner 名下的机娘（供 agents list / assume 挑选）
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        listCliAgents: async (options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            const localVarPath = `/api/v1/cli/agents`;
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'GET', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication ownerOpaque required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
     }
 };
 
@@ -158,13 +198,14 @@ export const CLIApiFp = function(configuration?: Configuration) {
     return {
         /**
          * 
-         * @summary Assume 机娘
-         * @param {CreateActingSessionRequest} createActingSessionRequest 
+         * @summary Assume 机娘（代入自己名下机娘，换一把短命 AgentActingToken）
+         * @param {number} agentAccountId 
+         * @param {AssumeAgentRequest} assumeAgentRequest 
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        async assumeAgent(createActingSessionRequest: CreateActingSessionRequest, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<CreateActingSessionResponse>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.assumeAgent(createActingSessionRequest, options);
+        async assumeAgent(agentAccountId: number, assumeAgentRequest: AssumeAgentRequest, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<AssumeAgentResponse>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.assumeAgent(agentAccountId, assumeAgentRequest, options);
             const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
             const localVarOperationServerBasePath = operationServerMap['CLIApi.assumeAgent']?.[localVarOperationServerIndex]?.url;
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
@@ -195,6 +236,18 @@ export const CLIApiFp = function(configuration?: Configuration) {
             const localVarOperationServerBasePath = operationServerMap['CLIApi.exchangePairing']?.[localVarOperationServerIndex]?.url;
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
+        /**
+         * 
+         * @summary 列出当前 owner 名下的机娘（供 agents list / assume 挑选）
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async listCliAgents(options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<Array<AgentView>>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.listCliAgents(options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['CLIApi.listCliAgents']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
     }
 };
 
@@ -206,13 +259,14 @@ export const CLIApiFactory = function (configuration?: Configuration, basePath?:
     return {
         /**
          * 
-         * @summary Assume 机娘
-         * @param {CreateActingSessionRequest} createActingSessionRequest 
+         * @summary Assume 机娘（代入自己名下机娘，换一把短命 AgentActingToken）
+         * @param {number} agentAccountId 
+         * @param {AssumeAgentRequest} assumeAgentRequest 
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
-        assumeAgent(createActingSessionRequest: CreateActingSessionRequest, options?: RawAxiosRequestConfig): AxiosPromise<CreateActingSessionResponse> {
-            return localVarFp.assumeAgent(createActingSessionRequest, options).then((request) => request(axios, basePath));
+        assumeAgent(agentAccountId: number, assumeAgentRequest: AssumeAgentRequest, options?: RawAxiosRequestConfig): AxiosPromise<AssumeAgentResponse> {
+            return localVarFp.assumeAgent(agentAccountId, assumeAgentRequest, options).then((request) => request(axios, basePath));
         },
         /**
          * 
@@ -234,6 +288,15 @@ export const CLIApiFactory = function (configuration?: Configuration, basePath?:
         exchangePairing(exchangePairingRequest: ExchangePairingRequest, options?: RawAxiosRequestConfig): AxiosPromise<ExchangePairingResponse> {
             return localVarFp.exchangePairing(exchangePairingRequest, options).then((request) => request(axios, basePath));
         },
+        /**
+         * 
+         * @summary 列出当前 owner 名下的机娘（供 agents list / assume 挑选）
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        listCliAgents(options?: RawAxiosRequestConfig): AxiosPromise<Array<AgentView>> {
+            return localVarFp.listCliAgents(options).then((request) => request(axios, basePath));
+        },
     };
 };
 
@@ -243,13 +306,14 @@ export const CLIApiFactory = function (configuration?: Configuration, basePath?:
 export class CLIApi extends BaseAPI {
     /**
      * 
-     * @summary Assume 机娘
-     * @param {CreateActingSessionRequest} createActingSessionRequest 
+     * @summary Assume 机娘（代入自己名下机娘，换一把短命 AgentActingToken）
+     * @param {number} agentAccountId 
+     * @param {AssumeAgentRequest} assumeAgentRequest 
      * @param {*} [options] Override http request option.
      * @throws {RequiredError}
      */
-    public assumeAgent(createActingSessionRequest: CreateActingSessionRequest, options?: RawAxiosRequestConfig) {
-        return CLIApiFp(this.configuration).assumeAgent(createActingSessionRequest, options).then((request) => request(this.axios, this.basePath));
+    public assumeAgent(agentAccountId: number, assumeAgentRequest: AssumeAgentRequest, options?: RawAxiosRequestConfig) {
+        return CLIApiFp(this.configuration).assumeAgent(agentAccountId, assumeAgentRequest, options).then((request) => request(this.axios, this.basePath));
     }
 
     /**
@@ -272,6 +336,16 @@ export class CLIApi extends BaseAPI {
      */
     public exchangePairing(exchangePairingRequest: ExchangePairingRequest, options?: RawAxiosRequestConfig) {
         return CLIApiFp(this.configuration).exchangePairing(exchangePairingRequest, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * 
+     * @summary 列出当前 owner 名下的机娘（供 agents list / assume 挑选）
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public listCliAgents(options?: RawAxiosRequestConfig) {
+        return CLIApiFp(this.configuration).listCliAgents(options).then((request) => request(this.axios, this.basePath));
     }
 }
 

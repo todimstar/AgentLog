@@ -22,6 +22,8 @@ import { DUMMY_BASE_URL, assertParamExists, setApiKeyToObject, setBasicAuthToObj
 // @ts-ignore
 import { BASE_PATH, COLLECTION_FORMATS, type RequestArgs, BaseAPI, RequiredError, operationServerMap } from '../base';
 // @ts-ignore
+import type { AgentView } from '../models';
+// @ts-ignore
 import type { ChannelView } from '../models';
 // @ts-ignore
 import type { CommentPage } from '../models';
@@ -33,6 +35,8 @@ import type { PostPage } from '../models';
 import type { PublicPostView } from '../models';
 // @ts-ignore
 import type { TagView } from '../models';
+// @ts-ignore
+import type { UserProfileView } from '../models';
 /**
  * PublicApi - axios parameter creator
  */
@@ -73,6 +77,40 @@ export const PublicApiAxiosParamCreator = function (configuration?: Configuratio
             };
         },
         /**
+         * 匿名可读。返回机娘公开资料；墓碑机娘也返回（status=DELETED，显示「已注销」）。
+         * @summary 公开机娘主页
+         * @param {number} agentId 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        getPublicAgent: async (agentId: number, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'agentId' is not null or undefined
+            assertParamExists('getPublicAgent', 'agentId', agentId)
+            const localVarPath = `/api/v1/public/agents/{agentId}`
+                .replace('{agentId}', encodeURIComponent(String(agentId)));
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'GET', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
          * 
          * @summary 帖子详情
          * @param {number} postId 
@@ -84,6 +122,40 @@ export const PublicApiAxiosParamCreator = function (configuration?: Configuratio
             assertParamExists('getPublicPost', 'postId', postId)
             const localVarPath = `/api/v1/public/posts/{postId}`
                 .replace('{postId}', encodeURIComponent(String(postId)));
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'GET', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * 匿名可读。返回展示名（username）等公开资料，不含 email 等私密字段；墓碑用户也返回（deleted=true）。
+         * @summary 公开用户主页
+         * @param {number} userId 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        getPublicUserProfile: async (userId: number, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'userId' is not null or undefined
+            assertParamExists('getPublicUserProfile', 'userId', userId)
+            const localVarPath = `/api/v1/public/users/{userId}`
+                .replace('{userId}', encodeURIComponent(String(userId)));
             // use dummy base URL string because the URL constructor only accepts absolute URLs.
             const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
             let baseOptions;
@@ -311,6 +383,19 @@ export const PublicApiFp = function(configuration?: Configuration) {
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
         /**
+         * 匿名可读。返回机娘公开资料；墓碑机娘也返回（status=DELETED，显示「已注销」）。
+         * @summary 公开机娘主页
+         * @param {number} agentId 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async getPublicAgent(agentId: number, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<AgentView>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.getPublicAgent(agentId, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['PublicApi.getPublicAgent']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
          * 
          * @summary 帖子详情
          * @param {number} postId 
@@ -321,6 +406,19 @@ export const PublicApiFp = function(configuration?: Configuration) {
             const localVarAxiosArgs = await localVarAxiosParamCreator.getPublicPost(postId, options);
             const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
             const localVarOperationServerBasePath = operationServerMap['PublicApi.getPublicPost']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * 匿名可读。返回展示名（username）等公开资料，不含 email 等私密字段；墓碑用户也返回（deleted=true）。
+         * @summary 公开用户主页
+         * @param {number} userId 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async getPublicUserProfile(userId: number, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<UserProfileView>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.getPublicUserProfile(userId, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['PublicApi.getPublicUserProfile']?.[localVarOperationServerIndex]?.url;
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
         /**
@@ -410,6 +508,16 @@ export const PublicApiFactory = function (configuration?: Configuration, basePat
             return localVarFp.getContributions(postId, options).then((request) => request(axios, basePath));
         },
         /**
+         * 匿名可读。返回机娘公开资料；墓碑机娘也返回（status=DELETED，显示「已注销」）。
+         * @summary 公开机娘主页
+         * @param {number} agentId 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        getPublicAgent(agentId: number, options?: RawAxiosRequestConfig): AxiosPromise<AgentView> {
+            return localVarFp.getPublicAgent(agentId, options).then((request) => request(axios, basePath));
+        },
+        /**
          * 
          * @summary 帖子详情
          * @param {number} postId 
@@ -418,6 +526,16 @@ export const PublicApiFactory = function (configuration?: Configuration, basePat
          */
         getPublicPost(postId: number, options?: RawAxiosRequestConfig): AxiosPromise<PublicPostView> {
             return localVarFp.getPublicPost(postId, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * 匿名可读。返回展示名（username）等公开资料，不含 email 等私密字段；墓碑用户也返回（deleted=true）。
+         * @summary 公开用户主页
+         * @param {number} userId 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        getPublicUserProfile(userId: number, options?: RawAxiosRequestConfig): AxiosPromise<UserProfileView> {
+            return localVarFp.getPublicUserProfile(userId, options).then((request) => request(axios, basePath));
         },
         /**
          * 
@@ -490,6 +608,17 @@ export class PublicApi extends BaseAPI {
     }
 
     /**
+     * 匿名可读。返回机娘公开资料；墓碑机娘也返回（status=DELETED，显示「已注销」）。
+     * @summary 公开机娘主页
+     * @param {number} agentId 
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public getPublicAgent(agentId: number, options?: RawAxiosRequestConfig) {
+        return PublicApiFp(this.configuration).getPublicAgent(agentId, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
      * 
      * @summary 帖子详情
      * @param {number} postId 
@@ -498,6 +627,17 @@ export class PublicApi extends BaseAPI {
      */
     public getPublicPost(postId: number, options?: RawAxiosRequestConfig) {
         return PublicApiFp(this.configuration).getPublicPost(postId, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * 匿名可读。返回展示名（username）等公开资料，不含 email 等私密字段；墓碑用户也返回（deleted=true）。
+     * @summary 公开用户主页
+     * @param {number} userId 
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public getPublicUserProfile(userId: number, options?: RawAxiosRequestConfig) {
+        return PublicApiFp(this.configuration).getPublicUserProfile(userId, options).then((request) => request(this.axios, this.basePath));
     }
 
     /**

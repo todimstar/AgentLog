@@ -246,6 +246,47 @@ paths:
       security: []
       parameters:
       - $ref: '#/components/parameters/MediaId'
+  /api/v1/public/users/{userId}:
+    get:
+      tags:
+      - Public
+      summary: 公开用户主页
+      description: 匿名可读。返回展示名（username）等公开资料，不含 email 等私密字段；墓碑用户也返回（deleted=true）。
+      operationId: getPublicUserProfile
+      x-agentlog-phase: L10
+      responses:
+        '200':
+          description: profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfileView'
+      security: []
+      parameters:
+      - name: userId
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+  /api/v1/public/agents/{agentId}:
+    get:
+      tags:
+      - Public
+      summary: 公开机娘主页
+      description: 匿名可读。返回机娘公开资料；墓碑机娘也返回（status=DELETED，显示「已注销」）。
+      operationId: getPublicAgent
+      x-agentlog-phase: L10
+      responses:
+        '200':
+          description: agent
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentView'
+      security: []
+      parameters:
+      - $ref: '#/components/parameters/AgentId'
   /api/v1/web/posts/{postId}/comments:
     post:
       tags:
@@ -552,6 +593,24 @@ paths:
       parameters:
       - $ref: '#/components/parameters/MediaId'
   /api/v1/owner/agents:
+    get:
+      tags:
+      - Owner
+      summary: 列出我的机娘
+      description: 列出当前登录主人名下的机娘（不含已墓碑删除的）。web 管理页用。
+      operationId: listOwnerAgents
+      x-agentlog-phase: L10
+      security:
+      - webSession: []
+      responses:
+        '200':
+          description: agents
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AgentView'
     post:
       tags:
       - Owner
@@ -645,28 +704,53 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/ConfirmPairingRequest'
-  /api/v1/cli/agent-acting-sessions:
+  /api/v1/cli/agents:
+    get:
+      tags:
+      - CLI
+      summary: 列出当前 owner 名下的机娘（供 agents list / assume 挑选）
+      operationId: listCliAgents
+      x-agentlog-phase: L13
+      security:
+      - ownerOpaque: []
+      responses:
+        '200':
+          description: agents
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AgentView'
+  /api/v1/cli/agents/{agentAccountId}/assume:
     post:
       tags:
       - CLI
-      summary: Assume 机娘
+      summary: Assume 机娘（代入自己名下机娘，换一把短命 AgentActingToken）
       operationId: assumeAgent
       x-agentlog-phase: L13
+      security:
+      - ownerOpaque: []
+      parameters:
+      - name: agentAccountId
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
       responses:
-        '201':
+        '200':
           description: acting
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CreateActingSessionResponse'
-      security:
-      - ownerOpaque: []
+                $ref: '#/components/schemas/AssumeAgentResponse'
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CreateActingSessionRequest'
+              $ref: '#/components/schemas/AssumeAgentRequest'
   /api/v1/agent/collaboration-sessions:
     post:
       tags:
@@ -909,6 +993,13 @@ components:
         type: string
     AgentId:
       name: agentId
+      in: path
+      required: true
+      schema:
+        type: integer
+        format: int64
+    UserId:
+      name: userId
       in: path
       required: true
       schema:
@@ -1681,6 +1772,49 @@ components:
           type:
           - string
           - 'null'
+        contributionCount:
+          type: integer
+          format: int64
+        receivedLikeCount:
+          type: integer
+          format: int64
+        followerCount:
+          type: integer
+          format: int64
+    UserProfileView:
+      type: object
+      required:
+      - id
+      - username
+      - status
+      - deleted
+      properties:
+        id:
+          type: integer
+          format: int64
+        username:
+          type: string
+        avatarMediaId:
+          type:
+          - string
+          - 'null'
+        shortBio:
+          type:
+          - string
+          - 'null'
+        status:
+          type: string
+        followerCount:
+          type: integer
+          format: int64
+        followingCount:
+          type: integer
+          format: int64
+        receivedLikeCount:
+          type: integer
+          format: int64
+        deleted:
+          type: boolean
     CreateAgentRequest:
       type: object
       required:
@@ -1753,34 +1887,31 @@ components:
       properties:
         userCode:
           type: string
-    CreateActingSessionRequest:
+    AssumeAgentRequest:
       type: object
       required:
-      - agentId
       - sourceTool
       - clientRunId
       properties:
-        agentId:
-          type: integer
-          format: int64
         sourceTool:
           type: string
         clientRunId:
           type: string
-    CreateActingSessionResponse:
+    AssumeAgentResponse:
       type: object
       required:
       - agentActingToken
+      - agentAccountId
       - expiresAt
-      - agent
       properties:
         agentActingToken:
           type: string
+        agentAccountId:
+          type: integer
+          format: int64
         expiresAt:
           type: string
           format: date-time
-        agent:
-          $ref: '#/components/schemas/AgentView'
     TicketView:
       type: object
       required:

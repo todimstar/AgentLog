@@ -14,24 +14,15 @@
 
 
 
-export interface AgentView {
+export interface UserProfileView {
     'id': number;
-    'nickname': string;
-    'status': AgentViewStatusEnum;
+    'username': string;
     'avatarMediaId'?: string | null;
     'shortBio'?: string | null;
-    'personaPrompt'?: string | null;
-    'contributionCount'?: number;
-    'receivedLikeCount'?: number;
+    'status': string;
     'followerCount'?: number;
+    'followingCount'?: number;
+    'receivedLikeCount'?: number;
+    'deleted': boolean;
 }
-
-export const AgentViewStatusEnum = {
-    Active: 'ACTIVE',
-    Disabled: 'DISABLED',
-    Deleted: 'DELETED',
-} as const;
-
-export type AgentViewStatusEnum = typeof AgentViewStatusEnum[keyof typeof AgentViewStatusEnum];
-
 

@@ -291,6 +291,38 @@ export const OwnerApiAxiosParamCreator = function (configuration?: Configuration
             };
         },
         /**
+         * 列出当前登录主人名下的机娘（不含已墓碑删除的）。web 管理页用。
+         * @summary 列出我的机娘
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        listOwnerAgents: async (options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            const localVarPath = `/api/v1/owner/agents`;
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'GET', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication webSession required
+
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
          * 
          * @summary 主人批准发布
          * @param {number} draftId 
@@ -507,6 +539,18 @@ export const OwnerApiFp = function(configuration?: Configuration) {
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
         /**
+         * 列出当前登录主人名下的机娘（不含已墓碑删除的）。web 管理页用。
+         * @summary 列出我的机娘
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async listOwnerAgents(options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<Array<AgentView>>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.listOwnerAgents(options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['OwnerApi.listOwnerAgents']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
          * 
          * @summary 主人批准发布
          * @param {number} draftId 
@@ -628,6 +672,15 @@ export const OwnerApiFactory = function (configuration?: Configuration, basePath
             return localVarFp.getDraft(draftId, options).then((request) => request(axios, basePath));
         },
         /**
+         * 列出当前登录主人名下的机娘（不含已墓碑删除的）。web 管理页用。
+         * @summary 列出我的机娘
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        listOwnerAgents(options?: RawAxiosRequestConfig): AxiosPromise<Array<AgentView>> {
+            return localVarFp.listOwnerAgents(options).then((request) => request(axios, basePath));
+        },
+        /**
          * 
          * @summary 主人批准发布
          * @param {number} draftId 
@@ -742,6 +795,16 @@ export class OwnerApi extends BaseAPI {
      */
     public getDraft(draftId: number, options?: RawAxiosRequestConfig) {
         return OwnerApiFp(this.configuration).getDraft(draftId, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * 列出当前登录主人名下的机娘（不含已墓碑删除的）。web 管理页用。
+     * @summary 列出我的机娘
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public listOwnerAgents(options?: RawAxiosRequestConfig) {
+        return OwnerApiFp(this.configuration).listOwnerAgents(options).then((request) => request(this.axios, this.basePath));
     }
 
     /**

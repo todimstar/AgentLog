@@ -4,6 +4,7 @@ All URIs are relative to *http://localhost:8080*
 
 |Method | HTTP request | Description|
 |------------- | ------------- | -------------|
+|[**confirmPairing**](#confirmpairing) | **POST** /api/v1/web/device-pairings/confirm | 浏览器确认设备配对|
 |[**getCsrf**](#getcsrf) | **GET** /api/v1/web/csrf | 获取 CSRF Token|
 |[**getCurrentUser**](#getcurrentuser) | **GET** /api/v1/web/me | 当前登录用户|
 |[**loginWeb**](#loginweb) | **POST** /api/v1/web/auth/login | 登录|
@@ -11,6 +12,58 @@ All URIs are relative to *http://localhost:8080*
 |[**registerUser**](#registeruser) | **POST** /api/v1/web/auth/register | 注册|
 |[**sendRegisterCode**](#sendregistercode) | **POST** /api/v1/web/auth/send-code | 发送注册验证码|
 |[**setMyAvatar**](#setmyavatar) | **PUT** /api/v1/web/me/avatar | 设置我的头像|
+
+# **confirmPairing**
+> confirmPairing(confirmPairingRequest)
+
+主人在浏览器登录后输入 CLI 显示的 userCode 批准设备（OAuth 设备授权流的用户验证步）。
+
+### Example
+
+```typescript
+import {
+    WebAuthApi,
+    Configuration,
+    ConfirmPairingRequest
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new WebAuthApi(configuration);
+
+let confirmPairingRequest: ConfirmPairingRequest; //
+
+const { status, data } = await apiInstance.confirmPairing(
+    confirmPairingRequest
+);
+```
+
+### Parameters
+
+|Name | Type | Description  | Notes|
+|------------- | ------------- | ------------- | -------------|
+| **confirmPairingRequest** | **ConfirmPairingRequest**|  | |
+
+
+### Return type
+
+void (empty response body)
+
+### Authorization
+
+[csrfHeader](../README.md#csrfHeader), [webSession](../README.md#webSession)
+
+### HTTP request headers
+
+ - **Content-Type**: application/json
+ - **Accept**: Not defined
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**204** | confirmed |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
 
 # **getCsrf**
 > CsrfTokenResponse getCsrf()

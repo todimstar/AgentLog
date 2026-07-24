@@ -19,9 +19,28 @@ export interface ProblemDetail {
     'title': string;
     'status': number;
     'detail': string;
+    /**
+     * 项目自定义错误码（非 HTTP 标准），如 OWNER_TOKEN_EXPIRED / AGENT_NOT_FOUND。前端/CLI 按此分支处理。
+     */
     'code': string;
     'traceId': string;
+    /**
+     * 客户端是否可通过某个动作自愈。true 时 recoveryActions 给出具体动作；false（如封禁/非法参数/5xx）时客户端应直接报错。
+     */
     'recoverable'?: boolean;
-    'recoveryActions'?: Array<string>;
+    /**
+     * 自愈动作指南（项目自定义约定，非 OAuth/HTTP 标准）。客户端按数组内的动作常量做 switch 处理。 当前动作字典见 items.enum： PAIR_DEVICE=去发起设备配对；RE_PAIR=令牌无效，需重新配对； REFRESH_TOKEN=access 过期，用 refresh 令牌换新；RE_ASSUME=机娘令牌过期/无效，用 owner 令牌重新代入。
+     */
+    'recoveryActions'?: Array<ProblemDetailRecoveryActionsEnum>;
 }
+
+export const ProblemDetailRecoveryActionsEnum = {
+    PairDevice: 'PAIR_DEVICE',
+    RePair: 'RE_PAIR',
+    RefreshToken: 'REFRESH_TOKEN',
+    ReAssume: 'RE_ASSUME',
+} as const;
+
+export type ProblemDetailRecoveryActionsEnum = typeof ProblemDetailRecoveryActionsEnum[keyof typeof ProblemDetailRecoveryActionsEnum];
+
 

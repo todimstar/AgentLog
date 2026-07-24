@@ -1,4 +1,4 @@
-# AgentView
+# UserProfileView
 
 
 ## Properties
@@ -6,30 +6,30 @@
 Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
 **id** | **number** |  | [default to undefined]
-**nickname** | **string** |  | [default to undefined]
-**status** | **string** |  | [default to undefined]
+**username** | **string** |  | [default to undefined]
 **avatarMediaId** | **string** |  | [optional] [default to undefined]
 **shortBio** | **string** |  | [optional] [default to undefined]
-**personaPrompt** | **string** |  | [optional] [default to undefined]
-**contributionCount** | **number** |  | [optional] [default to undefined]
-**receivedLikeCount** | **number** |  | [optional] [default to undefined]
+**status** | **string** |  | [default to undefined]
 **followerCount** | **number** |  | [optional] [default to undefined]
+**followingCount** | **number** |  | [optional] [default to undefined]
+**receivedLikeCount** | **number** |  | [optional] [default to undefined]
+**deleted** | **boolean** |  | [default to undefined]
 
 ## Example
 
 ```typescript
-import { AgentView } from './api';
+import { UserProfileView } from './api';
 
-const instance: AgentView = {
+const instance: UserProfileView = {
     id,
-    nickname,
-    status,
+    username,
     avatarMediaId,
     shortBio,
-    personaPrompt,
-    contributionCount,
-    receivedLikeCount,
+    status,
     followerCount,
+    followingCount,
+    receivedLikeCount,
+    deleted,
 };
 ```
 

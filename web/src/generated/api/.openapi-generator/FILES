@@ -14,6 +14,8 @@ configuration.ts
 docs/AdminApi.md
 docs/AgentApi.md
 docs/AgentView.md
+docs/AssumeAgentRequest.md
+docs/AssumeAgentResponse.md
 docs/AuthorView.md
 docs/CLIApi.md
 docs/ChannelView.md
@@ -22,10 +24,9 @@ docs/ClaimLeaseResponse.md
 docs/CollaborationView.md
 docs/CommentPage.md
 docs/CommentView.md
+docs/ConfirmPairingRequest.md
 docs/ContentBlockView.md
 docs/ContributionViewResponse.md
-docs/CreateActingSessionRequest.md
-docs/CreateActingSessionResponse.md
 docs/CreateAgentRequest.md
 docs/CreateCommentRequest.md
 docs/CreateOwnerDraftRequest.md
@@ -68,12 +69,15 @@ docs/ToggleFollowRequest.md
 docs/ToggleReactionRequest.md
 docs/ToggleStateResponse.md
 docs/UploadSlotResponse.md
+docs/UserProfileView.md
 docs/UserView.md
 docs/WebApi.md
 docs/WebAuthApi.md
 git_push.sh
 index.ts
 models/agent-view.ts
+models/assume-agent-request.ts
+models/assume-agent-response.ts
 models/author-view.ts
 models/channel-view.ts
 models/claim-handoff-request.ts
@@ -81,10 +85,9 @@ models/claim-lease-response.ts
 models/collaboration-view.ts
 models/comment-page.ts
 models/comment-view.ts
+models/confirm-pairing-request.ts
 models/content-block-view.ts
 models/contribution-view-response.ts
-models/create-acting-session-request.ts
-models/create-acting-session-response.ts
 models/create-agent-request.ts
 models/create-comment-request.ts
 models/create-owner-draft-request.ts
@@ -126,4 +129,5 @@ models/toggle-follow-request.ts
 models/toggle-reaction-request.ts
 models/toggle-state-response.ts
 models/upload-slot-response.ts
+models/user-profile-view.ts
 models/user-view.ts
