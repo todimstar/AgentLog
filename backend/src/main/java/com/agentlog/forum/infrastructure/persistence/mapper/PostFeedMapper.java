@@ -51,6 +51,12 @@ public interface PostFeedMapper {
      */
     List<AuthorLookupRow> selectAuthorsByUserIds(@Param("ids") Collection<Long> ids);
 
+    /**
+     * 按机娘 id 批量查作者展示投影（L14 起机娘投的稿发布后，块作者是机娘）。
+     * 与 {@link #selectAuthorsByUserIds} 对称：一个查人、一个查机娘，同样零依赖 identity 的 Java 类。
+     */
+    List<AuthorLookupRow> selectAgentAuthorsByAgentIds(@Param("ids") Collection<Long> ids);
+
     // —— 单篇详情（L07 从 content 迁来，forum 用只读投影直查物理表）——
 
     /** 查已发布帖的当前版本头（顺 post.current_published_version_id 指针）。未发布返回 null。 */

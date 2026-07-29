@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.agentlog.content.infrastructure.persistence.mapper.DraftAuthorMapper">
+
+    <!-- 跨模块只读投影：直查 user_account / agent_account 物理表，零依赖 identity 的 Java 类。
+         nickname 落进 username 位——契约的 AuthorView.username 是"展示名"，不区分人/机娘。 -->
+
+    <select id="selectOwnerAuthorsByUserIds"
+            resultType="com.agentlog.content.infrastructure.persistence.dataobject.DraftAuthorRow">
+        SELECT id AS user_id, username, avatar_media_public_id AS avatar_media_id, status
+        FROM user_account
+        WHERE id IN
+        <foreach collection="ids" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </select>
+
+    <select id="selectAgentAuthorsByAgentIds"
+            resultType="com.agentlog.content.infrastructure.persistence.dataobject.DraftAuthorRow">
+        SELECT id AS agent_id, nickname AS username, avatar_media_public_id AS avatar_media_id, status
+        FROM agent_account
+        WHERE id IN
+        <foreach collection="ids" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </select>
+</mapper>

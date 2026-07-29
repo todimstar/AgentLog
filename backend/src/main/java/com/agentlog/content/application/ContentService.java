@@ -2,6 +2,7 @@ package com.agentlog.content.application;
 
 import com.agentlog.content.api.dto.request.CreateAgentDraftRequest;
 import com.agentlog.content.api.dto.request.CreateOwnerDraftRequest;
+import com.agentlog.content.api.dto.response.AuthorView;
 import com.agentlog.content.api.dto.response.DraftView;
 import com.agentlog.content.api.dto.request.PublishDraftRequest;
 import com.agentlog.content.api.dto.response.PublishDraftResponse;
@@ -23,10 +24,23 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 public class ContentService {
+
+    /**
+     * user_account.status / agent_account.status 的 ACTIVE 值。
+     * 跨模块只读投影直查约定：不 import identity 模块的枚举（模块间零 Java 依赖），
+     * 此字面量须与 identity 的 UserStatus.ACTIVE / AgentAccountStatus.ACTIVE 对齐
+     * （同 forum 模块 FeedService 的同名常量）。
+     */
+    private static final String AUTHOR_STATUS_ACTIVE = "ACTIVE";
 
     private final ForumChannelMapper forumChannelMapper;
     private final PostMapper postMapper;
@@ -36,6 +50,7 @@ public class ContentService {
     private final Clock clock;
     private final PostVersionMapper postVersionMapper;
     private final PostVersionBlockMapper postVersionBlockMapper;
+    private final DraftAuthorMapper draftAuthorMapper;
 
     public ContentService(
             ForumChannelMapper forumChannelMapper,
@@ -45,7 +60,8 @@ public class ContentService {
             DraftBlockMapper draftBlockMapper,
             Clock clock,
             PostVersionMapper postVersionMapper,
-            PostVersionBlockMapper postVersionBlockMapper) {
+            PostVersionBlockMapper postVersionBlockMapper,
+            DraftAuthorMapper draftAuthorMapper) {
         this.forumChannelMapper = forumChannelMapper;
         this.postMapper = postMapper;
         this.contributionMapper = contributionMapper;
@@ -54,6 +70,7 @@ public class ContentService {
         this.clock = clock;
         this.postVersionMapper = postVersionMapper;
         this.postVersionBlockMapper = postVersionBlockMapper;
+        this.draftAuthorMapper = draftAuthorMapper;
     }
 
     /**
@@ -156,7 +173,7 @@ public class ContentService {
         draftBlockMapper.insert(block);
 
 
-        return DraftView.from(draft, List.of(block));
+        return DraftView.from(draft, List.of(block), lookupBlockAuthors(List.of(block)));
     }
 
     /**
@@ -198,9 +215,43 @@ public class ContentService {
                         .orderByAsc(DraftBlockDO::getDisplayOrder)   // ORDER BY display_order ASC
         );
 
-        return DraftView.from(draft,blocks);
+        return DraftView.from(draft,blocks,lookupBlockAuthors(blocks));
     }
 
+    /**
+     * 批量把草稿块上的作者 id 翻译成 AuthorView（防 N+1：两条 IN 查询封顶，不逐块查）。
+     *
+     * 两类作者分开查再并进同一张表——键带类型前缀（见 {@link AuthorView#keyOf}），
+     * 因为 user_account.id 与 agent_account.id 各自独立编号，不加前缀会撞（userId=1 vs agentId=1）。
+     */
+    private Map<String, AuthorView> lookupBlockAuthors(List<DraftBlockDO> blocks) {
+        Set<Long> userIds = blocks.stream().map(DraftBlockDO::getAuthorUserId)
+                .filter(Objects::nonNull).collect(Collectors.toSet());
+        Set<Long> agentIds = blocks.stream().map(DraftBlockDO::getAuthorAgentId)
+                .filter(Objects::nonNull).collect(Collectors.toSet());
+        if (userIds.isEmpty() && agentIds.isEmpty()) {
+            return Map.of();
+        }
+
+        Map<String, AuthorView> index = new HashMap<>();
+        if (!userIds.isEmpty()) {
+            for (DraftAuthorRow row : draftAuthorMapper.selectOwnerAuthorsByUserIds(userIds)) {
+                index.put("U:" + row.getUserId(),
+                        AUTHOR_STATUS_ACTIVE.equals(row.getStatus())
+                                ? AuthorView.owner(row.getUserId(), row.getUsername(), row.getAvatarMediaId())
+                                : AuthorView.deletedOwner(row.getUserId()));
+            }
+        }
+        if (!agentIds.isEmpty()) {
+            for (DraftAuthorRow row : draftAuthorMapper.selectAgentAuthorsByAgentIds(agentIds)) {
+                index.put("A:" + row.getAgentId(),
+                        AUTHOR_STATUS_ACTIVE.equals(row.getStatus())
+                                ? AuthorView.agent(row.getAgentId(), row.getUsername(), row.getAvatarMediaId())
+                                : AuthorView.deletedAgent(row.getAgentId()));
+            }
+        }
+        return index;
+    }
 
     //发布草稿，涉及更新，用乐观锁加事件保证原子性
     @Transactional

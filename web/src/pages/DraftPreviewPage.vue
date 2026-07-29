@@ -12,9 +12,10 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { OwnerApi } from '@/generated/api'
-import type { DraftView } from '@/generated/api'
+import type { DraftView, AuthorView } from '@/generated/api'
 import { httpClient, apiConfig } from '@/api/http'
 import { useSessionStore } from '@/stores/session'
+import AuthorAvatarStack from '@/components/AuthorAvatarStack.vue'
 
 const ownerApi = new OwnerApi(apiConfig, '', httpClient)
 const route = useRoute()
@@ -28,17 +29,27 @@ const loadError = ref('')
 
 const draftId = computed(() => Number(route.params.draftId))
 
-// 「这稿是机娘投的吗」的判据：
-//   主人投稿时 source_tool 落 null（ContentService 的 owner 分支 agent 维度全 null）；
-//   机娘投稿必带 source_tool（assume 时声明的 sourceTool 一路继承到 contribution/draft_block）。
-// 所以只要有任一块带 sourceTool，这篇就是机娘投的。
+// 「这稿是谁写的」——直接读块上的 author（契约 ContentBlockView.author）。
+// 早先这里只能靠 sourceTool 反推「非空即机娘」，因为后端没填 author；
+// 补齐契约缺口后能拿到确切身份（哪个机娘、昵称、头像），审稿判断不再靠猜。
+const authors = computed<AuthorView[]>(() => {
+  const seen = new Map<string, AuthorView>()
+  for (const b of draft.value?.blocks ?? []) {
+    const a = b.author
+    if (!a) continue
+    seen.set(`${a.authorType}-${a.userId ?? a.agentId}`, a)
+  }
+  return Array.from(seen.values())
+})
+const isAgentSubmitted = computed(() => authors.value.some((a) => a.authorType === 'AGENT'))
+
+// 来源工具仍单独展示：author 回答"谁"，sourceTool 回答"用什么跑的"，两件事。
 const agentTools = computed(() => {
   const tools = (draft.value?.blocks ?? [])
     .map((b) => b.sourceTool)
     .filter((t): t is string => !!t)
   return Array.from(new Set(tools))
 })
-const isAgentSubmitted = computed(() => agentTools.value.length > 0)
 
 // 只有可编辑态的草稿能发布；已发布/已废弃的不给按钮，避免误操作。
 const canPublish = computed(() => draft.value?.status === 'EDITABLE')
@@ -131,15 +142,26 @@ onMounted(async () => {
 
       <h1>{{ draft.title }}</h1>
 
+      <!-- 作者组：人蓝、机娘紫描边，点头像进公开主页（复用 L10 组件） -->
+      <div v-if="authors.length" class="author-line">
+        <AuthorAvatarStack :authors="authors" size="md" />
+        <span class="author-names">{{ authors.map((a) => a.username).join('、') }}</span>
+      </div>
+
       <p v-if="isAgentSubmitted" class="agent-hint">
-        本稿由机娘通过 <b>{{ agentTools.join(' / ') }}</b> 投递。机娘只能投草稿，
-        <b>发布权在你手里</b>——确认无误后由你点击下方发布。
+        本稿由机娘
+        <b>{{ authors.filter((a) => a.authorType === 'AGENT').map((a) => a.username).join('、') }}</b>
+        <template v-if="agentTools.length"> 通过 <b>{{ agentTools.join(' / ') }}</b></template>
+        投递。机娘只能投草稿，<b>发布权在你手里</b>——确认无误后由你点击下方发布。
       </p>
 
       <div class="markdown-body">
         <div v-for="block in draft.blocks" :key="block.blockId" class="content-block">
           <p>{{ block.content }}</p>
-          <small v-if="block.sourceTool" class="block-tool">— 来源工具：{{ block.sourceTool }}</small>
+          <small v-if="block.author || block.sourceTool" class="block-tool">
+            <template v-if="block.author">— {{ block.author.username }}</template>
+            <template v-if="block.sourceTool">（{{ block.sourceTool }}）</template>
+          </small>
         </div>
         <el-empty v-if="!draft.blocks?.length" description="这篇草稿还没有正文块" />
       </div>
@@ -173,6 +195,8 @@ onMounted(async () => {
 .status-chip.editable { background: #fffbe6; color: #ad8b00; }
 .status-chip.published { background: #f6ffed; color: #389e0d; }
 .status-chip.discarded { background: #fff1f0; color: #cf1322; }
+.author-line { display: flex; align-items: center; gap: 10px; margin: 12px 0 4px; }
+.author-names { color: #5a6473; font-size: 14px; font-weight: 600; }
 .agent-hint {
   margin: 14px 0;
   padding: 10px 14px;

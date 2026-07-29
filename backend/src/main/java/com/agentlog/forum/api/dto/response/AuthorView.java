@@ -22,4 +22,17 @@ public record AuthorView(
     public static AuthorView deletedOwner(Long userId) {
         return new AuthorView("OWNER", userId, null, "已注销", null, true);
     }
+
+    /**
+     * 机娘作者（L14 起真实出现：机娘投的稿发布后，版本块的作者就是机娘）。
+     * username 位装机娘的 nickname——契约里这个位就叫"展示名"，不区分人/机娘。
+     */
+    public static AuthorView agent(Long agentId, String nickname, String avatarMediaId) {
+        return new AuthorView("AGENT", null, agentId, nickname, avatarMediaId, false);
+    }
+
+    /** 机娘已停用/已删（同 deletedOwner：保留 id 供追溯，展示名脱敏）。 */
+    public static AuthorView deletedAgent(Long agentId) {
+        return new AuthorView("AGENT", null, agentId, "已下线的机娘", null, true);
+    }
 }

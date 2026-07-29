@@ -195,9 +195,6 @@ class AgentDraftIntegrationTest {
                 .andExpect(status().isNotFound());
     }
 
-
-
-
     /**
      * 主人发布机娘投的稿后，版本快照必须完整保留【机娘身份】。
      *
@@ -243,6 +240,66 @@ class AgentDraftIntegrationTest {
         Assertions.assertThat(vb.get("source_tool")).isEqualTo("claude-code");
     }
 
+    /**
+     * 草稿块要带【作者视图】：主人审稿时必须看得出是哪个机娘写的，不能只有 sourceTool。
+     *
+     * 由来：契约 ContentBlockView.author 早已声明，但两个模块的后端都没填（独立 fix 补齐）。
+     * 机娘的 nickname 落进 AuthorView.username 位——契约里这个位是"展示名"，不区分人/机娘。
+     */
+    @Test
+    void draftBlockCarriesAgentAuthor() throws Exception {
+        Fixture f = setup("blockauthor");
+        String agentToken = assume(f.ownerAccessToken, f.agentId, "claude-code", "run-author");
+
+        MvcResult res = mockMvc.perform(post("/api/v1/agent/drafts")
+                        .header("Authorization", "Bearer " + agentToken)
+                        .contentType("application/json")
+                        .content("{\"title\":\"作者视图\",\"channelId\":" + f.channelId
+                                + ",\"content\":\"机娘写的\"}"))
+                .andExpect(status().isCreated())
+                // 建草稿的响应里就该带作者（不必等主人再查一次）。
+                .andExpect(jsonPath("$.draft.blocks[0].author.authorType").value("AGENT"))
+                .andExpect(jsonPath("$.draft.blocks[0].author.agentId").value(f.agentId.intValue()))
+                .andExpect(jsonPath("$.draft.blocks[0].author.deleted").value(false))
+                .andReturn();
+        long draftId = objectMapper.readTree(res.getResponse().getContentAsString())
+                .get("draft").get("draftId").asLong();
+
+        // 主人查草稿详情，同样要带作者，且展示名是机娘昵称。
+        MockHttpSession session = new MockHttpSession();
+        mockMvc.perform(post("/api/v1/web/auth/login").session(session).with(csrf())
+                        .contentType("application/json")
+                        .content("{\"email\":\"" + f.ownerEmail + "\",\"password\":\"password123\"}"))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/v1/owner/drafts/" + draftId).session(session))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.blocks[0].author.authorType").value("AGENT"))
+                .andExpect(jsonPath("$.blocks[0].author.agentId").value(f.agentId.intValue()))
+                .andExpect(jsonPath("$.blocks[0].author.username").value(f.agentNickname))
+                .andExpect(jsonPath("$.blocks[0].sourceTool").value("claude-code"));
+    }
+
+    /** 主人自己投的草稿，块作者是 OWNER + 用户名——与机娘路径形成对照，防止只顾 AGENT 把 OWNER 改回归了。 */
+    @Test
+    void ownerDraftBlockCarriesOwnerAuthor() throws Exception {
+        Fixture f = setup("ownauthor");
+        MockHttpSession session = new MockHttpSession();
+        mockMvc.perform(post("/api/v1/web/auth/login").session(session).with(csrf())
+                        .contentType("application/json")
+                        .content("{\"email\":\"" + f.ownerEmail + "\",\"password\":\"password123\"}"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(post("/api/v1/owner/drafts").session(session).with(csrf())
+                        .contentType("application/json")
+                        .content("{\"title\":\"主人写的\",\"channelId\":" + f.channelId
+                                + ",\"content\":\"正文\",\"declaredExternalAiContent\":false}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.blocks[0].author.authorType").value("OWNER"))
+                .andExpect(jsonPath("$.blocks[0].author.userId").value(f.ownerUserId.intValue()))
+                .andExpect(jsonPath("$.blocks[0].author.agentId").doesNotExist())
+                .andExpect(jsonPath("$.blocks[0].sourceTool").doesNotExist());
+    }
+
     // —— 辅助 ——
 
     /** 建 channel + 铸 owner 令牌 + 建机娘，打包成一次测试的夹具。 */
@@ -257,8 +314,9 @@ class AgentDraftIntegrationTest {
 
         String email = "owner-" + suffix + "@example.com";
         Minted m = mintOwnerToken("inst-" + suffix, "owner-" + suffix, email);
-        Long agentId = insertAgent(m.ownerUserId, "小助-" + suffix);
-        return new Fixture(m.ownerAccessToken, m.ownerUserId, email, agentId, channelId);
+        String nickname = "小助-" + suffix;
+        Long agentId = insertAgent(m.ownerUserId, nickname);
+        return new Fixture(m.ownerAccessToken, m.ownerUserId, email, agentId, nickname, channelId);
     }
 
     private String assume(String ownerToken, Long agentId, String tool, String runId) throws Exception {
@@ -314,6 +372,6 @@ class AgentDraftIntegrationTest {
     }
 
     private record Fixture(String ownerAccessToken, Long ownerUserId, String ownerEmail,
-                           Long agentId, Long channelId) {
+                           Long agentId, String agentNickname, Long channelId) {
     }
 }

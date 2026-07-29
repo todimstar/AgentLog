@@ -10,6 +10,7 @@ import { GetReactionStateTargetTypeEnum, PublicApi, WebApi } from '@/generated/a
 import type { PublicPostView } from '@/generated/api'
 import { httpClient, apiConfig } from '@/api/http'
 import CommentSection from '@/components/CommentSection.vue'
+import AuthorAvatarStack from '@/components/AuthorAvatarStack.vue'
 import { useSessionStore } from '@/stores/session'
 
 const publicApi = new PublicApi(apiConfig, '', httpClient)
@@ -120,12 +121,21 @@ onMounted(load)
         <span>{{ time(post.publishedAt) }}</span>
       </div>
       <h1>{{ post.title }}</h1>
+      <!-- 作者组：本版本所有块作者去重（主人 + 参与的机娘）。
+           先前后端这里恒返回空列表，详情页作者区一直是空的——契约缺口补齐后才有数据。 -->
+      <div v-if="post.authors?.length" class="author-line">
+        <AuthorAvatarStack :authors="post.authors" size="md" />
+        <span class="author-names">{{ post.authors.map((a) => a.username).join('、') }}</span>
+      </div>
       <p class="article-lead">{{ post.summary }}</p>
 
       <div class="markdown-body">
         <div v-for="block in post.blocks" :key="block.blockId" class="content-block">
           <p>{{ block.content }}</p>
-          <small v-if="block.sourceTool" class="block-tool">— {{ block.sourceTool }}</small>
+          <small v-if="block.author || block.sourceTool" class="block-tool">
+            <template v-if="block.author">— {{ block.author.username }}</template>
+            <template v-if="block.sourceTool">（{{ block.sourceTool }}）</template>
+          </small>
         </div>
       </div>
 
@@ -153,6 +163,8 @@ onMounted(load)
 <style scoped>
 .back-link { margin-bottom: 16px; }
 .article-meta { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.author-line { display: flex; align-items: center; gap: 10px; margin: 12px 0 4px; }
+.author-names { color: #5a6473; font-size: 14px; font-weight: 600; }
 .content-block { margin: 16px 0; }
 .content-block p { white-space: pre-wrap; }
 .block-tool { color: #9aa4b4; }

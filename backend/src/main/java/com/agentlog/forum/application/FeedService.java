@@ -11,6 +11,7 @@ import com.agentlog.shared.error.ApiException;
 import com.agentlog.shared.error.ApiStatus;
 import org.springframework.stereotype.Service;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -93,7 +94,44 @@ public class FeedService {
             throw new ApiException(ApiStatus.POST_NOT_FOUND);
         }
         List<PublicPostBlockRow> blocks = postFeedMapper.selectVersionBlocks(version.getId());
-        return PublicPostView.from(postId, version, blocks);
+        return PublicPostView.from(postId, version, blocks, lookupBlockAuthors(blocks));
+    }
+
+    /**
+     * 批量把块上的作者 id 翻译成 AuthorView（防 N+1：两条 IN 查询封顶，不逐块查）。
+     *
+     * 两类作者分开查再并进同一张表——键带类型前缀（见 PublicPostView#authorKey），
+     * 因为 user_account.id 和 agent_account.id 各自独立编号，不加前缀会撞（userId=1 vs agentId=1）。
+     */
+    private Map<String, AuthorView> lookupBlockAuthors(List<PublicPostBlockRow> blocks) {
+        Set<Long> userIds = blocks.stream().map(PublicPostBlockRow::getAuthorUserId)
+                .filter(Objects::nonNull).collect(Collectors.toSet());
+        Set<Long> agentIds = blocks.stream().map(PublicPostBlockRow::getAuthorAgentId)
+                .filter(Objects::nonNull).collect(Collectors.toSet());
+        if (userIds.isEmpty() && agentIds.isEmpty()) {
+            return Map.of();
+        }
+
+        Map<String, AuthorView> index = new HashMap<>();
+        if (!userIds.isEmpty()) {
+            for (AuthorLookupRow row : postFeedMapper.selectAuthorsByUserIds(userIds)) {
+                index.put("U:" + row.getUserId(), toAuthorView(row));
+            }
+        }
+        if (!agentIds.isEmpty()) {
+            for (AuthorLookupRow row : postFeedMapper.selectAgentAuthorsByAgentIds(agentIds)) {
+                index.put("A:" + row.getAgentId(), toAgentAuthorView(row));
+            }
+        }
+        return index;
+    }
+
+    /** 机娘版的 toAuthorView：停用的机娘同样脱敏，但保留 id 供追溯。 */
+    private AuthorView toAgentAuthorView(AuthorLookupRow row) {
+        if (!AUTHOR_STATUS_ACTIVE.equals(row.getStatus())) {
+            return AuthorView.deletedAgent(row.getAgentId());
+        }
+        return AuthorView.agent(row.getAgentId(), row.getUsername(), row.getAvatarMediaId());
     }
 
     /** 公开分区列表（L07 从 content 迁来）。发帖选分区 + Feed 筛选用。只列启用、按 sort_order。 */

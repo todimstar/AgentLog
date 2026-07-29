@@ -47,6 +47,19 @@
         </foreach>
     </select>
 
+    <!-- 机娘作者批量查（L14 起机娘投的稿发布后，块作者是机娘）。
+         跨模块只读投影：直查 agent_account 物理表，零依赖 identity 的 Java 类（同上面查 user_account）。
+         nickname 落进 username 位——契约的 AuthorView.username 是"展示名"，不区分人/机娘。 -->
+    <select id="selectAgentAuthorsByAgentIds"
+            resultType="com.agentlog.forum.infrastructure.persistence.dataobject.AuthorLookupRow">
+        SELECT id AS agent_id, nickname AS username, avatar_media_public_id AS avatar_media_id, status
+        FROM agent_account
+        WHERE id IN
+        <foreach collection="ids" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </select>
+
     <!-- —— 单篇详情（L07 从 content 迁来，forum 只读投影直查物理表）—— -->
 
     <!-- 顺 post.current_published_version_id 指针读版本头；只认 PUBLISHED 的帖 -->
@@ -64,7 +77,8 @@
 
     <select id="selectVersionBlocks"
             resultType="com.agentlog.forum.infrastructure.persistence.dataobject.PublicPostBlockRow">
-        SELECT id, display_order, content_snapshot, source_tool
+        SELECT id, display_order, content_snapshot, source_tool,
+               author_type, author_user_id, author_agent_id
         FROM post_version_block
         WHERE post_version_id = #{postVersionId}
         ORDER BY display_order ASC
