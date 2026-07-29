@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>L14 单机娘 Skill 自动投稿 · 方案B（edge-tts 预生成 mp3 · 真进度条）</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;background:#0d1117;color:#e6edf3;height:100vh;display:flex;flex-direction:column;overflow:hidden;font-size:14px}
+  header{padding:9px 16px;background:#161b22;border-bottom:1px solid #30363d;display:flex;align-items:center;gap:14px;flex-shrink:0}
+  header h1{font-size:15px}
+  .legend{display:flex;gap:6px;flex-wrap:wrap;margin-left:6px}
+  .lg{font-size:11px;padding:2px 8px;border-radius:10px;background:#21262d;border:1px solid #30363d;color:#8b949e}
+  .lg.on{color:#fff}
+  .spacer{flex:1}
+  #voice{font-size:11px;color:#7d8590}
+  .main{flex:1;display:flex;min-height:0}
+  .left{flex:1.35;display:flex;flex-direction:column;min-width:0;border-right:1px solid #30363d}
+  .tree{background:#0d1117;border-bottom:1px solid #30363d;max-height:30%;overflow:auto;padding:8px 0}
+  .tree .th{font-size:11px;color:#7d8590;padding:2px 14px 6px;text-transform:uppercase;letter-spacing:.5px}
+  .node{font-family:"SF Mono",Consolas,monospace;font-size:12.5px;padding:2px 14px;white-space:nowrap;color:#adbac7;cursor:pointer}
+  .node.dir{cursor:default;color:#7d8590}
+  .node .ic{opacity:.7;margin-right:5px}
+  .node.file.on{background:#132a3e;color:#79c0ff;border-left:3px solid #1f6feb;padding-left:11px}
+  .breadcrumb{font-family:monospace;font-size:11.5px;color:#7d8590;padding:6px 16px;background:#0d1117;border-bottom:1px solid #21262d;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .breadcrumb b{color:#f0b429}
+  .code{flex:1;overflow:auto;background:#0d1117;padding:10px 0;transition:box-shadow .3s}
+  .code.glow{box-shadow:inset 0 0 0 2px #3fb950}
+  pre.code-pre{font-family:"SF Mono",Consolas,"Cascadia Code",monospace;font-size:13px;line-height:1.6}
+  .line{display:flex;padding:0 16px;white-space:pre;transition:background .25s,opacity .25s;border-left:3px solid transparent}
+  .line .ln{color:#484f58;width:38px;text-align:right;margin-right:14px;user-select:none;flex-shrink:0}
+  .line.hot{background:#1f2d1f;border-left-color:#3fb950;animation:pulse .8s ease 1}
+  .line.hot .ln{color:#3fb950;font-weight:700}
+  .line.dim{opacity:.30}
+  @keyframes pulse{0%{background:#2e4a2e}100%{background:#1f2d1f}}
+  /* IDEA Darcula 风语法高亮 */
+  .tk-kw{color:#cc7832;font-weight:600}
+  .tk-str{color:#6a8759}
+  .tk-cm{color:#7a7a73;font-style:italic}
+  .tk-ann{color:#bbb529}
+  .tk-num{color:#6897bb}
+  .tk-call{color:#ffc66d}
+  .tk-type{color:#a9b7c6}
+  .right{flex:1;display:flex;flex-direction:column;min-width:320px}
+  .flow{flex:0 0 auto;max-height:46%;overflow:auto;background:#161b22;padding:12px 14px;border-bottom:1px solid #30363d}
+  .flow .th{font-size:11px;color:#7d8590;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px}
+  .lane{display:flex;align-items:center;gap:8px;margin-bottom:9px}
+  .lane-name{font-size:11.5px;width:104px;flex-shrink:0;color:#8b949e;text-align:right;line-height:1.2}
+  .lane.on .lane-name{color:#fff;font-weight:600}
+  .chips{display:flex;gap:6px;flex-wrap:wrap}
+  .chip{font-size:11px;padding:3px 9px;border-radius:12px;background:#21262d;border:1px solid #30363d;color:#8b949e;white-space:nowrap;cursor:pointer}
+  .chip.done{color:#3fb950;border-color:#238636}
+  .chip.on{background:#3fb950;color:#0d1117;border-color:#3fb950;font-weight:700;box-shadow:0 0 0 3px rgba(63,185,80,.25)}
+  .detail{flex:1;overflow:auto;padding:16px 18px;background:#0d1117;transition:box-shadow .3s}
+  .detail.glow{box-shadow:inset 0 0 0 2px #f0b429}
+  .detail .th{font-size:11px;color:#3fb950;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px;font-weight:600}
+  .detail-body{font-size:14.5px;line-height:1.85;color:#c9d1d9}
+  .detail-body b{color:#f0b429}
+  .detail-body code{background:#161b22;padding:1px 5px;border-radius:4px;font-family:monospace;font-size:12.5px;color:#79c0ff}
+  .subtitle{flex-shrink:0;background:#010409;border-top:1px solid #30363d;padding:12px 24px;min-height:64px;display:flex;align-items:center;gap:16px}
+  .focusbadge{flex-shrink:0;font-size:12px;padding:4px 10px;border-radius:12px;background:#161b22;border:1px solid #30363d;color:#8b949e;white-space:nowrap;transition:all .25s}
+  .focusbadge.code{color:#3fb950;border-color:#238636}
+  .focusbadge.detail{color:#f0b429;border-color:#9e6a03}
+  .subtitle .txt{font-size:17px;line-height:1.6;color:#f0f6fc;transition:all .25s}
+  /* 字幕跟随注视区换边：看左侧代码 → [字幕, 徽章] 靠左；看右侧详解 → [徽章, 字幕] 靠右 */
+  .subtitle.focus-code .txt{order:1;text-align:left;margin-right:auto;max-width:58%}
+  .subtitle.focus-code .focusbadge{order:2}
+  .subtitle.focus-detail .focusbadge{order:1}
+  .subtitle.focus-detail .txt{order:2;text-align:right;margin-left:auto;max-width:58%}
+  /* 片尾测验 */
+  .quiz-mask{position:fixed;inset:0;background:rgba(1,4,9,.82);display:none;align-items:center;justify-content:center;z-index:30}
+  .quiz-mask.show{display:flex}
+  .quiz{width:min(860px,92vw);max-height:86vh;overflow:auto;background:#161b22;border:1px solid #30363d;border-radius:12px;padding:22px 26px}
+  .quiz h2{font-size:17px;margin-bottom:4px;color:#f0f6fc}
+  .quiz .sub{font-size:12px;color:#7d8590;margin-bottom:14px}
+  .quiz details{border:1px solid #30363d;border-radius:8px;margin-bottom:10px;background:#0d1117}
+  .quiz summary{cursor:pointer;padding:11px 14px;font-size:14.5px;line-height:1.65;color:#e6edf3;list-style:none}
+  .quiz summary::before{content:'▸ ';color:#3fb950}
+  .quiz details[open] summary::before{content:'▾ '}
+  .quiz .lv{font-size:11px;padding:1px 8px;border-radius:9px;margin-right:8px;border:1px solid}
+  .quiz .lv1{color:#3fb950;border-color:#238636}.quiz .lv2{color:#58a6ff;border-color:#1f6feb}.quiz .lv3{color:#f0b429;border-color:#9e6a03}.quiz .lv4{color:#ff7b72;border-color:#da3633}
+  .quiz .ans{padding:4px 16px 14px;font-size:13.5px;line-height:1.9;color:#c9d1d9;border-top:1px dashed #30363d}
+  .quiz .ans b{color:#f0b429}.quiz .ans code{background:#161b22;padding:1px 5px;border-radius:4px;font-family:monospace;font-size:12px;color:#79c0ff}
+  .quiz .close{margin-top:6px;width:100%}
+  .controls{flex-shrink:0;padding:10px 16px;background:#161b22;border-top:1px solid #30363d}
+  .progress{position:relative;height:14px;border-radius:4px;margin-bottom:10px;background:#21262d;cursor:pointer;overflow:hidden}
+  .progress .fill{position:absolute;left:0;top:0;bottom:0;background:linear-gradient(90deg,#238636,#3fb950);width:0;pointer-events:none}
+  .progress .tick{position:absolute;top:0;bottom:0;width:1px;background:#0d1117;pointer-events:none;opacity:.75}
+  .progress .tick.step{width:2px;background:#010409;opacity:1}
+  .progress:hover{filter:brightness(1.2)}
+  .btns{display:flex;align-items:center;gap:9px}
+  button{background:#21262d;color:#e6edf3;border:1px solid #30363d;border-radius:6px;padding:7px 13px;cursor:pointer;font-size:14px}
+  button:hover{background:#30363d}
+  button.primary{background:#238636;border-color:#2ea043;font-weight:600}
+  button:disabled{opacity:.4;cursor:not-allowed}
+  label{font-size:12px;color:#7d8590;display:flex;align-items:center;gap:5px}
+  input[type=range]{width:110px}
+  .meta{font-size:12px;color:#7d8590}
+  .time{font-family:monospace;font-size:12px;color:#adbac7}
+  .hint{font-size:11px;color:#7d8590;margin-top:8px}
+  .missing{background:#3d1d1d;border:1px solid #f85149;color:#ffa198;padding:8px 12px;border-radius:6px;font-size:12.5px;margin-bottom:8px;display:none}
+  kbd{background:#21262d;border:1px solid #30363d;border-radius:4px;padding:0 5px;font-family:monospace;font-size:11px;color:#adbac7}
+</style>
+</head>
+<body>
+<header>
+  <h1>🎬 L14 单机娘 Skill 自动投稿 · 方案B</h1>
+  <div class="legend" id="legend"></div>
+  <div class="spacer"></div>
+  <span id="voice">🎧 预生成 mp3 · 云健（edge-tts）· 两幕（黑板架构 + 代码走查）</span>
+</header>
+
+<div class="main">
+  <div class="left">
+    <div class="tree"><div class="th">📁 涉及文件（行号=真实源文件行号）</div><div id="tree"></div></div>
+    <div class="breadcrumb" id="crumb">— 点击 ▶ 开始 —</div>
+    <div class="code" id="codePanel"><pre class="code-pre" id="code"></pre></div>
+  </div>
+  <div class="right">
+    <div class="flow"><div class="th">🧭 四条线 · 点节点可跳转</div><div id="flow"></div></div>
+    <div class="detail" id="detailPanel"><div class="th">💡 深入详解</div><div class="detail-body" id="detail">方案B（预生成 mp3）：旁白是 edge-tts 离线生成的一整条音频，所以这是<b>真·进度条</b>——任意位置点击秒级跳转、暂停从当前字续播（不回头）、<b>语速实时调</b>（0.6×~2.0×，立即生效不重读）。<b>本课分两幕</b>：第一幕黑板讲架构（机娘获投稿能力/为什么无 publish/身份跨模块读的 DIP 难题），第二幕真实行号代码走查。字幕/代码高亮由音频时间轴驱动。快捷键：<kbd>空格</kbd> 播放/暂停，<kbd>←</kbd><kbd>→</kbd> 上/下一句，<kbd>Shift+←/→</kbd> 上/下一步。</div></div>
+  </div>
+</div>
+
+<div class="subtitle focus-detail" id="subtitleBar">
+  <span class="focusbadge" id="focusBadge">👀 焦点</span>
+  <span class="txt" id="subtitle">准备好了吗？点 ▶ 开始。本课讲：机娘拿到令牌后的第一个真本事——把开发过程写成草稿投进论坛，但只能投草稿、不能发布。</span>
+</div>
+
+<div class="controls">
+  <div class="missing" id="missing">⚠ 找不到 06-assets/L14-session.mp3 或 timeline.js —— 在仓库根目录运行 <code>.venv-tts/Scripts/python backend/src/magic-L14/06-make-audio.py</code> 生成后刷新本页。</div>
+  <div class="progress" id="progress"><div class="fill" id="fill"></div></div>
+  <div class="btns">
+    <button id="playBtn" class="primary">▶ 开始播放</button>
+    <button id="prevBtn" title="上一句（Shift=上一步）">⏮ 句</button>
+    <button id="nextBtn" title="下一句（Shift=下一步）">句 ⏭</button>
+    <button id="quizBtn" title="片尾测验（听完自动弹出）">📝 测验</button>
+    <span class="time" id="timeLabel">0:00 / 0:00</span>
+    <span class="spacer"></span>
+    <label>语速 <input type="range" id="speed" min="0.6" max="2.0" step="0.1" value="1.0"><span id="speedVal">1.0×</span></label>
+    <span class="meta" id="counter">步 0/0 · 句 0/0</span>
+  </div>
+  <div class="hint">进度条上细线=句边界、粗线=步边界，点任意位置精确跳转；语速立即生效（变速不变调）。第一幕黑板步为示意图（非源码），第二幕代码步为 IDEA 风语法高亮 + 真实源文件行号；字幕自动待在该注视的一侧下方。听完自动弹出 📝 递进测验。</div>
+</div>
+
+<audio id="au" src="06-assets/L14-session.mp3" preload="auto"></audio>
+
+<!-- 片尾测验：由浅入深 5 题，点开看答案。听完音频自动弹出，也可随时点 📝 测验。 -->
+<div class="quiz-mask" id="quizMask">
+  <div class="quiz">
+    <h2>📝 课后测验 · 单机娘 Skill 自动投稿</h2>
+    <div class="sub">由浅入深 5 题。先自己说出答案再点开对照——能讲顺 = 真懂了，卡壳的题回到对应线重听。</div>
+    <details><summary><span class="lv lv1">①基础</span>L14 的硬验收线之一是「Agent 无 publish」。为什么机娘只能投草稿、不能自己发布？</summary>
+      <div class="ans"><b>发布权永远属于人类主人</b>。机娘（AI）写的内容必须经主人审阅、亲手点发布才能公开——这是 AgentLog 的产品安全底线。落到代码上：<code>/api/v1/agent/**</code> 下<b>只有建草稿一个动作，根本没有 publish 端点</b>；发布只在主人的 <code>POST /owner/drafts/{id}/publish</code>（走 Session）。机娘建的草稿 <code>owner_user_id</code> 填的是<b>机娘背后的主人</b>，于是这篇稿天然落进那个主人的草稿箱，只有他能看、审、发。</div></details>
+    <details><summary><span class="lv lv2">②考古</span>契约里明明已经有一个机娘 submit 接口，为什么这一课还要新建一个？</summary>
+      <div class="ans">契约里那个 submit 是 <code>POST /agent/contribution-tickets/{ticketCode}/contributions</code>，返回带 <code>ticketCode</code>/<code>nextHandoffToken</code>——<b>全是 L15/L16 多机娘 ACPP 协作</b>的概念（席位、下一棒交接）。而 L14 的验收线是<b>「不写多机娘接力」</b>。查三份权威文档（用例矩阵/范围与阶段/course_schedule）一致证明：<b>单机娘投稿本就是独立用例</b>，是活契约漏画了它、把它跟协作 submit 混成一个。定性同 L13.5 的 L10 缺席——<b>以权威蓝图为准，补画独立端点 <code>POST /agent/drafts</code> + 登记漂移 D-13</b>，不是照残缺的契约做。</div></details>
+    <details><summary><span class="lv lv3">③架构</span>content 模块的控制器要读机娘身份，但 AgentPrincipal 在 identity 私有包里。直接 import 会怎样？正解是什么？</summary>
+      <div class="ans">直接 <code>@AuthenticationPrincipal AgentPrincipal</code> 会让 <b>content → identity 私有子包</b>产生跨模块依赖，被 <code>ModularityTest</code>（Spring Modulith + ArchUnit 静态校验包依赖）<b>判红</b>。正解是<b>依赖倒置（DIP）</b>：在 <code>shared.security</code>（OPEN 模块，人人可依赖）定义只读接口 <code>AgentIdentity</code>，让 <code>AgentPrincipal implements AgentIdentity</code>（record 自动提供实现，L13 逻辑零改动）。content 的控制器用 <code>@AuthenticationPrincipal AgentIdentity</code>——<b>只依赖 shared 的接口，不碰 identity 的实现类</b>。identity→shared 合法、content→shared 合法，零跨业务模块依赖。</div></details>
+    <details><summary><span class="lv lv3">④设计</span>owner 投稿和 agent 投稿的落库逻辑几乎一样，怎么复用又不把认证关注点漏进业务层？</summary>
+      <div class="ans">把「建 Post 指针 + 不可变 Contribution + Draft 头 + DraftBlock」这套公共动作抽成 <b>私有内核 <code>createDraftInternal(DraftAuthor author, ...)</code></b>，唯一差别——<b>谁写的</b>——用一个 <code>DraftAuthor</code> 参数对象（record）传入。<code>createOwnerDraft</code>/<code>createAgentDraft</code> 各是一层<b>薄封装</b>：owner 版填 <code>authorUserId</code>、agent 维度留 null；agent 版填 <code>authorAgentId</code>+<code>sourceTool</code>+<code>clientRunId</code>，归属键填机娘背后的主人。作者身份<b>从令牌 principal 派生、不从请求体传</b>——防伪造，同 owner 侧 currentUserId 从 Session 派生的思路。</div></details>
+    <details><summary><span class="lv lv4">⑤综合</span>把 skill / CLI / 后端串起来，机娘一次投稿的完整链路是怎样的？令牌在哪些环节出现、又如何不泄漏？</summary>
+      <div class="ans"><b>skill</b>（指令文件夹）告诉 AI 工具：<code>auth status</code>→（必要时 <code>auth login</code>）→<code>agents list</code>→主人选机娘→<code>agent assume</code> 拿机娘令牌→收集证据→<code>agentlog submit --file</code> 投稿→把草稿地址回主人+提醒审稿。<b>CLI submit</b> 取本地存的 acting token、读正文文件，带 <b>Bearer 机娘令牌</b>调 <code>POST /agent/drafts</code>（走 Chain 3）。<b>后端</b>验币→<code>AgentPrincipal</code> 入上下文→<code>createAgentDraft</code> 落库（<code>author_type=AGENT</code>）→拼 <code>draftUrl</code> 返回。<b>令牌全程只写本地文件、绝不打印</b>：CLI 的 stdout 只吐含 draftUrl 的机器可读 JSON，token 不进控制台/日志（沿用 L13 铁律）。多机娘接力（<code>collab</code>）被裁掉，留 L15。</div></details>
+    <button class="close" id="quizClose">关闭，回到视频</button>
+  </div>
+</div>
+
+<script src="06-assets/timeline.js"></script>
+<script>
+// ============ 内容模型（第二幕行号 = 2026-07-25 L14 施工后真实行号，可对照 IDE） ============
+const MODEL = {
+  threads: [
+    { id:"t0", name:"架构·黑板" },
+    { id:"t1", name:"shared 接口" },
+    { id:"t2", name:"content 复用" },
+    { id:"t3", name:"接口·CLI·skill" }
+  ],
+  fileTree: [
+    { path:"shared/security/AgentIdentity.java", label:"AgentIdentity" },
+    { path:"identity/pairing/security/AgentPrincipal.java", label:"AgentPrincipal" },
+    { path:"content/application/ContentService.java", label:"ContentService" },
+    { path:"content/api/AgentDraftController.java", label:"AgentDraftController" },
+    { path:"cli/SubmitCommand.java", label:"SubmitCommand" }
+  ],
+  steps: [
+    // ===================== 第一幕 · 黑板：架构思考（file:null，只画图） =====================
+    { thread:"t0", file:null, fileStart:null,
+      structurePath:"悬念 ▸ 机娘会认门，却不会干活", flowNode:"投稿悬念",
+      codeSnippet:`【上一课的结束点：机娘有身份，但没能力】
+
+  agent assume  ──►  agent_at_xxxx（机娘令牌）
+                          │
+              GET /api/v1/agent/whoami  ──►  200 "我是机娘 #1"
+                          │
+                    …然后呢？没有然后。whoami 只是试金石。
+
+【这一课：给机娘第一个真本事 —— 投稿】
+
+  机娘  ──►  POST /api/v1/agent/drafts  ──►  一篇【草稿】
+                                              │
+                        铁律：机娘只能投草稿，【绝不能自己发布】
+                        发布权永远属于人类主人（审稿后亲手点发布）`,
+      detail:"上一课（L13）机娘拿到了 <b>AgentActingToken</b>，能过 <code>/agent/whoami</code> 那道门报出自己是谁——但那只是<b>试金石</b>，机娘还什么活都干不了。这一课给它<b>第一个真实业务能力</b>：把一段开发过程写成<b>草稿</b>投进论坛。<b>一条硬验收线</b>：机娘只能投草稿，<b>绝不能自己发布</b>——发布权永远属于人类主人，机娘写的东西得主人审过、亲手点发布才见得了人。这是整个产品的安全底线。",
+      sentences:[
+        { t:"上一课机娘拿到了自己的令牌，能通过 agent 斜杠 whoami 那道门报出自己是谁。但它还什么活都干不了——whoami 只是一块试金石。", lines:[3,4,5,6,7] },
+        { t:"这一课给机娘第一个真本事：把一段开发过程写成草稿，投进论坛。但有一条铁律：机娘只能投草稿，绝不能自己发布。", lines:[11,13,14] },
+        { t:"为什么？因为发布权永远属于人类主人。机娘写的东西，得主人审过、亲手点发布，才见得了人。这是整个产品的安全底线。", lines:[15,16] }
+      ] },
+
+    { thread:"t0", file:null, fileStart:null,
+      structurePath:"考古 ▸ submit-single 是独立用例", flowNode:"契约考古",
+      codeSnippet:`【翻契约：已经有一个机娘 submit，但它不对劲】
+
+  契约现有：POST /agent/contribution-tickets/{ticketCode}/contributions
+     返回 { ticketCode, ticketStatus, nextHandoffToken }
+                              ▲               ▲
+                        席位（L16）      下一棒交接令牌（L15）
+     → 这是【多机娘 ACPP 协作】的 submit
+
+  可 L14 验收线：❌ 不写多机娘接力   ← 对不上！
+
+【查三份权威文档，一致结论】
+  用例矩阵 / 范围与阶段 / course_schedule
+     → 单机娘投稿【本就是独立用例】
+     → 是活契约漏画了它，把它跟协作混成了一个
+  处置（同 L13.5 的 L10 缺席）：以权威蓝图为准，补画 POST /agent/drafts + 登记漂移 D-13`,
+      detail:"动手前先破个案。翻契约发现里面<b>已有</b>一个机娘 submit——但它绑着 <code>ticketCode</code>（席位）、返回 <code>nextHandoffToken</code>（下一棒交接），<b>全是 L15/L16 多机娘协作</b>的东西。而 L14 验收线白纸黑字：<b>不写多机娘接力</b>。两边对不上，我<b>没照契约做</b>，去查了三份更权威的设计文档（用例矩阵/范围与阶段/course_schedule）。结论：<b>单机娘投稿本就是独立用例</b>，是活契约漏画了它、跟协作 submit 混成一个。跟上一课（L13.5）挖出的 L10 缺席<b>同一类账目问题</b>——以权威蓝图为准，补画独立端点 + 登记漂移。",
+      sentences:[
+        { t:"动手前先破一个案。翻契约时我发现里面已经有一个机娘投稿接口，可它绑着一个叫 ticket 的席位，还带下一棒交接令牌——那是多机娘接力的东西。", lines:[3,4,5,6,7] },
+        { t:"但这一课的验收线明明写着：不写多机娘接力。两边对不上。我没有照契约做，而是去查了三份更权威的设计文档。", lines:[9] },
+        { t:"结论是：单机娘投稿本来就是一个独立用例，是活契约漏画了它、把它跟多机娘协作混成了一个。跟上一课挖出的 L10 缺席同一类账目问题——以权威蓝图为准，补画接口、登记漂移。", lines:[11,12,13,14,15] }
+      ] },
+
+    { thread:"t0", file:null, fileStart:null,
+      structurePath:"难题 ▸ 机娘身份怎么跨模块读（DIP）", flowNode:"跨模块身份",
+      codeSnippet:`【唯一的真架构难题：身份在 identity，投稿在 content】
+
+  AgentPrincipal（机娘身份）
+     └─ 住在 identity/pairing/security/  ← identity 的【私有子包】
+
+  投稿 controller
+     └─ 归 content 模块管
+
+  ❌ content 直接 import AgentPrincipal
+        = content → identity 私有子包
+        = ModularityTest 判红（模块不许引用彼此内部实现）
+
+【解法：依赖倒置 DIP】
+
+  shared/security/AgentIdentity（只读接口）   ← 人人可依赖（OPEN 模块）
+        ▲                         ▲
+        │ implements              │ @AuthenticationPrincipal
+  identity.AgentPrincipal    content.AgentDraftController
+  （实现，零逻辑改）           （只认接口，不碰实现）
+
+  对比 owner 侧：owner 身份 = 单个 userId，塞进 principal name 即可（CurrentUser）
+              机娘身份 = 一组字段，name 装不下 → 需接口载体。对称又有差异。`,
+      detail:"定了要新建投稿接口，马上撞上<b>这一课唯一的真架构难题</b>：机娘身份 <code>AgentPrincipal</code> 住在 <b>identity 的私有子包</b>，而投稿归 <b>content 模块</b>管。content 的控制器要读机娘是谁、用什么工具、哪次运行才能落库，但它<b>不能直接 import</b> identity 的私有类——那会被 <code>ModularityTest</code> 判红（模块化的规矩：模块间不许引用彼此内部实现）。<b>解法是依赖倒置（DIP）</b>：在人人可依赖的 <code>shared</code>（OPEN 模块）定义只读接口 <code>AgentIdentity</code>，让 <code>AgentPrincipal</code> 去 implement 它。content 只认接口、不碰实现。对比 owner 侧：主人身份只是个 userId，塞进安全上下文名字里就够了；机娘身份是<b>一组字段</b>，一个名字装不下，才需要接口当载体。",
+      sentences:[
+        { t:"定了要新建投稿接口，马上撞上这一课唯一的真架构难题：机娘的身份，长在 identity 模块的私有角落里。", lines:[3,4,5] },
+        { t:"可投稿这件事归 content 模块管。content 的控制器要读机娘是谁、用什么工具、哪次运行才能落库，但它不能直接伸手进 identity 的私有包去拿——那会被模块边界测试判红。", lines:[7,8,10,11,12] },
+        { t:"这就是模块化的规矩：模块之间不许勾肩搭背地引用彼此的内部实现。那 content 到底怎么读到机娘身份？", lines:[12] },
+        { t:"解法是依赖倒置：在人人都能依赖的 shared 公共区，定义一个只读接口，叫机娘身份，让 identity 那个机娘 principal 去实现它。content 只认接口，不碰 identity 的实现类。", lines:[16,18,19,20,21] },
+        { t:"对比人类主人那侧：主人身份只是一个用户 id，塞进安全上下文的名字里就够了；机娘身份是一组字段，一个名字装不下，才需要一个接口当载体。对称，又有差异。", lines:[24,25] }
+      ] },
+
+    // ===================== 第二幕 · 代码：真实行号走查 =====================
+    { thread:"t1", file:"shared/security/AgentIdentity.java", fileStart:19,
+      structurePath:"AgentIdentity ▸ 跨模块身份契约", flowNode:"只读接口",
+      codeSnippet:`public interface AgentIdentity {
+
+    /** 代入的机娘 agent_account.id。 */
+    Long agentAccountId();
+
+    /** 机娘背后的主人 user_account.id（草稿归属键，对齐租户隔离）。 */
+    Long ownerUserId();
+
+    /** 发起代入的设备 client_installation.id。 */
+    Long installationId();
+
+    /** 来源工具（如 claude-code / codex），投稿时落进 contribution.source_tool。 */
+    String sourceTool();
+
+    /** 本次运行 id（隔离键），落进 contribution.client_run_id。 */
+    String clientRunId();
+}`,
+      detail:"进代码。这个新接口放在 <code>shared/security</code>——<b>shared 是 OPEN 模块，人人可依赖</b>。五个只读方法：机娘 id、背后的主人 id、设备 id、来源工具、运行 id，正好对齐 <code>AgentPrincipal</code> 的五个 record 组件名。<b>这是一份跨模块的身份契约</b>：任何业务模块（content、以及将来的其它）都能依赖它读机娘身份，但它<b>不暴露任何实现细节</b>——实现藏在 identity 里。这就是依赖倒置的「倒置」：高层的 content 和底层的 identity 都依赖这个中间的抽象，而不是 content 直接依赖 identity。",
+      sentences:[
+        { t:"进代码。先看这个新接口，放在 shared 的 security 包里。", lines:[19] },
+        { t:"五个只读方法：机娘 id、背后的主人 id、设备 id、来源工具、运行 id。这就是一份跨模块的身份契约——谁都能依赖，但不暴露任何实现。", lines:[4,7,10,13,16] }
+      ] },
+
+    { thread:"t1", file:"identity/pairing/security/AgentPrincipal.java", fileStart:12,
+      structurePath:"AgentPrincipal ▸ 一句 implements 接上", flowNode:"实现接口",
+      codeSnippet:`public record AgentPrincipal(
+        Long agentAccountId,
+        Long ownerUserId,
+        Long installationId,
+        String sourceTool,
+        String clientRunId) implements AgentIdentity {
+}`,
+      detail:"identity 那侧<b>几乎不用改</b>。上一课的 <code>AgentPrincipal</code> 本来就有这五个字段，这一课只在末尾加一句 <code>implements AgentIdentity</code>。<b>record 的魔法</b>：它为每个组件自动生成同名访问器方法（<code>agentAccountId()</code> 等），正好就是接口要求的五个方法——所以<b>零逻辑改动、一行 implements</b>，就把 identity 的实现和 shared 的契约接上了。L13 的认证逻辑完全没动，这是最小侵入的接法。",
+      sentences:[
+        { t:"identity 那侧几乎不用改。上一课的机娘 principal 本来就有这五个字段，这一课只在末尾加一句：实现那个接口。", lines:[1,6] },
+        { t:"record 会自动把这五个组件变成接口要的五个方法。零逻辑改动，一句话就把 identity 的实现和 shared 的契约接上了。", lines:[2,3,4,5,6] }
+      ] },
+
+    { thread:"t2", file:"content/application/ContentService.java", fileStart:76,
+      structurePath:"createAgentDraft + 内核 ▸ 复用", flowNode:"抽公共内核",
+      codeSnippet:`    @Transactional
+    public DraftView createAgentDraft(AgentIdentity principal, CreateAgentDraftRequest request) {
+        DraftAuthor author = DraftAuthor.agent(
+                principal.agentAccountId(), principal.ownerUserId(),
+                principal.sourceTool(), principal.clientRunId());
+        return createDraftInternal(author, request.title(), request.channelId(),
+                request.content(), request.summary(), false);
+    }
+
+    /**
+     * 建草稿公共内核：建 Post 指针 + Contribution(不可变原始) + Draft 头 + DraftBlock。
+     * owner/agent 两条投稿路共用，差别只在【作者维度】(DraftAuthor)。
+     */
+    @Transactional
+    protected DraftView createDraftInternal(DraftAuthor author, String title, Long channelId,
+                                            String content, String summary,
+                                            boolean declaredExternalAiContent) {`,
+      detail:"投稿的落库逻辑在 <code>ContentService</code>。主人投稿和机娘投稿，<b>八成的活是一样的</b>：建 <code>post</code> 指针、建不可变 <code>contribution</code>、建 <code>draft</code> 头、建 <code>draft_block</code>。<b>L90</b> 把这套公共动作抽成私有内核 <code>createDraftInternal</code>，唯一的差别——<b>谁写的</b>——用一个 <code>DraftAuthor</code> 作者维度对象传进去。<b>L77</b> 机娘投稿方法因此很薄：从令牌身份（<code>AgentIdentity</code>）拼出机娘版作者维度，调内核就完事。主人那个 <code>createOwnerDraft</code> 同样薄，<b>重复代码一行都没有</b>。注意 <b>L82</b> 最后那个 <code>false</code>——机娘投稿的 AI 内容标识本课不碰，留 L20 主人审稿时推导。",
+      sentences:[
+        { t:"投稿的落库逻辑在 content 服务里。主人投稿和机娘投稿，八成的活是一样的：建帖子指针、建不可变贡献、建草稿、建正文块。", lines:[11] },
+        { t:"所以我把这套公共动作抽成一个私有内核方法，唯一的差别——谁写的——用一个作者维度对象传进去。", lines:[12,15] },
+        { t:"机娘投稿这个方法因此很薄：从令牌身份拼出机娘版作者维度，调公共内核就完事。主人那个方法同样薄，重复代码一行都没有。", lines:[2,3,4,5,6] }
+      ] },
+
+    { thread:"t2", file:"content/application/ContentService.java", fileStart:167,
+      structurePath:"DraftAuthor ▸ 作者维度参数对象", flowNode:"作者维度",
+      codeSnippet:`    private record DraftAuthor(
+            AuthorType authorType,
+            Long authorUserId,
+            Long authorAgentId,
+            String sourceTool,
+            String clientRunId,
+            Long ownerUserId) {
+
+        static DraftAuthor owner(long currentUserId) {
+            return new DraftAuthor(AuthorType.OWNER, currentUserId, null, null, null, currentUserId);
+        }
+
+        static DraftAuthor agent(Long agentAccountId, Long ownerUserId, String sourceTool, String clientRunId) {
+            return new DraftAuthor(AuthorType.AGENT, null, agentAccountId, sourceTool, clientRunId, ownerUserId);
+        }
+    }`,
+      detail:"作者维度就是这么个小 <code>record</code>，把「谁写的」从投稿主流程里收敛出来，两个静态工厂各拼一个：<b>L9 owner 版</b>——<code>authorType=OWNER</code>、填 <code>authorUserId</code>、agent 那几列（<code>authorAgentId</code>/<code>sourceTool</code>/<code>clientRunId</code>）全 null、归属键 <code>ownerUserId</code> = 自己；<b>L13 agent 版</b>——<code>authorType=AGENT</code>、填 <code>authorAgentId</code>、带上 <code>sourceTool</code>/<code>clientRunId</code>、<b>归属键 <code>ownerUserId</code> 填机娘背后的主人</b>。就是这最后一个字段，让机娘的稿天然落进主人的草稿箱。",
+      sentences:[
+        { t:"作者维度就是这么个小 record，两个静态工厂：主人版填用户 id、机娘那几列留空；机娘版填机娘 id、带上工具和运行 id，归属键填机娘背后的主人。", lines:[9,10,13,14] }
+      ] },
+
+    { thread:"t3", file:"content/api/AgentDraftController.java", fileStart:42,
+      structurePath:"AgentDraftController ▸ 无 publish", flowNode:"投稿接口",
+      codeSnippet:`    @PostMapping("/drafts")
+    @ResponseStatus(HttpStatus.CREATED)
+    public AgentDraftResponse createDraft(
+            @AuthenticationPrincipal AgentIdentity principal,
+            @Valid @RequestBody CreateAgentDraftRequest request) {
+        DraftView draft = contentService.createAgentDraft(principal, request);
+        String draftUrl = webBaseUrl + "/#/owner/drafts/" + draft.draftId();
+        return new AgentDraftResponse(draft, draftUrl);
+    }`,
+      detail:"接口层。新建的 <code>AgentDraftController</code> 挂在 <code>/api/v1/agent/drafts</code>，走上一课那条<b>只认机娘令牌的第三条链</b>（Chain 3）。<b>L45</b> 读身份用的是 <code>@AuthenticationPrincipal AgentIdentity</code>——<b>shared 的接口，不是 identity 的实现类</b>，这就是黑板讲的依赖倒置落到代码上的样子。整个控制器<b>只有一个建草稿动作，从头到尾没有 publish 端点</b>：机娘无 publish 不是忘写，是刻意的验收线。<b>L48</b> 投完拼一个草稿预览地址（<code>base-url</code> + draftId）回给主人去审。",
+      sentences:[
+        { t:"接口这一层。新建的机娘草稿控制器，挂在 agent 斜杠 drafts 上，走的是上一课那条只认机娘令牌的第三条链。", lines:[1,3] },
+        { t:"注意它读身份用的是 shared 的接口，不是 identity 的实现类——这就是刚才那个依赖倒置，落到代码上的样子。", lines:[4] },
+        { t:"整个控制器只有一个建草稿的动作，从头到尾没有发布接口。机娘无 publish 不是忘写，是刻意的验收线。投完拼一个草稿地址回给主人去审。", lines:[1,7,8] }
+      ] },
+
+    { thread:"t3", file:"cli/SubmitCommand.java", fileStart:84,
+      structurePath:"SubmitCommand ▸ 带令牌投稿·不打印", flowNode:"CLI submit",
+      codeSnippet:`        ApiClient api = new ApiClient(config.serverBaseUrl());
+        ApiClient.Result res = api.postJson("/api/v1/agent/drafts", body.toString(), actingToken);
+
+        if (res.status() == 401) {
+            System.err.println("[FAIL] 机娘令牌无效或已过期（AGENT_TOKEN_*）。重新 agent assume 后再试。");
+            return 1;
+        }
+        if (!res.ok()) {
+            System.err.println("[FAIL] 投稿失败: HTTP " + res.status()
+                    + " " + res.body().path("code").asText(""));
+            return 1;
+        }
+
+        // 4. 成功：stdout 出机器可读 JSON（draftId + draftUrl），供 Skill 回主人。绝不含 token。
+        JsonNode b = res.body();
+        String draftUrl = b.path("draftUrl").asText("");
+        long draftId = b.path("draft").path("draftId").asLong();
+        System.err.println("[OK] 草稿已投递。提醒：这仍是草稿，需主人审稿后发布（机娘不能发布）。");
+        System.err.println("     审稿地址: " + draftUrl);
+        System.out.println(mapper.createObjectNode()
+                .put("status", "ok")
+                .put("draftId", draftId)
+                .put("draftUrl", draftUrl)
+                .toString());`,
+      detail:"命令行这侧的 <code>submit</code> 命令。前面它取出本地存的<b>机娘 acting token</b>、校验没过期（短命无 refresh，过期要重新 assume）、读了 <code>--file</code> 正文文件，<b>L85</b> 带着令牌调投稿接口。中间几段是错误处理（401 提示重新 assume、其它错误透传 code）。成功后 <b>L103</b> 标准输出只吐一段<b>机器可读的 JSON</b>（含 <code>draftUrl</code>），供 skill 回给主人。<b>贯穿的铁律</b>：<code>token</code> 从头到尾<b>绝不打印</b>——stdout 里只有草稿信息、没有令牌，stderr 出人类提醒。这条从 L13 贯穿到现在，是 credential-policy 的底线。",
+      sentences:[
+        { t:"命令行这侧的 submit 命令。前面它取出本地存的机娘令牌、读了正文文件，现在带着令牌调投稿接口。", lines:[1,2] },
+        { t:"中间几段是错误处理：令牌过期提示重新 assume，其它错误把服务端的 code 透传出来。", lines:[4,8] },
+        { t:"成功后，标准输出只吐一段机器可读的 JSON，含草稿地址，供 skill 回给主人。", lines:[15,16,20] },
+        { t:"而令牌从头到尾绝不打印。标准输出里只有草稿信息，这条铁律从上一课贯穿到现在。", lines:[14,20] }
+      ] },
+
+    // ===================== 收尾 · skill + 小抄 + 面试 =====================
+    { thread:"t0", file:null, fileStart:null,
+      structurePath:"总结 ▸ skill 串联 + 小抄 + 面试", flowNode:"小抄+面试",
+      codeSnippet:`【skill：一个指令文件夹，把这一切串起来】
+
+  SKILL.md 流程（单机娘，多机娘接力那段裁掉→L15）：
+    auth status →（必要时 auth login）→ agents list
+      → 主人选机娘 → agent assume
+      → 收集证据 → agentlog submit --file
+      → 把草稿地址回主人 + 提醒审稿
+
+【一张小抄：机娘投稿镜像主人投稿】
+  分链：URL 前缀 /agent/** 走 Chain 3（只认机娘令牌）
+  复用：createDraftInternal 公共内核 + DraftAuthor 作者维度
+  跨模块：shared 的 AgentIdentity 接口读身份（DIP）
+  铁律：机娘只投草稿，【不能发布】
+
+【面试：怎么让 AI 智能体安全地往你系统写数据】
+  → 独立认证链 + 身份走接口跨模块解耦
+  → 写权限收窄到「只能建草稿」+ 发布权留给人`,
+      detail:"把这些串起来的是一个 <b>skill</b>：一个指令文件夹（<code>SKILL.md</code> + wrapper 脚本 + references），告诉 AI 工具先 <code>auth status</code>、列机娘、<code>assume</code>、写贡献、<code>submit</code>、把草稿地址回主人、提醒审稿。多机娘接力那段（<code>collab start/join/wait</code>）<b>裁掉了，那是下一课 L15</b>。<b>一张小抄</b>：机娘投稿<b>镜像</b>主人投稿——靠 URL 前缀分链、靠 <code>createDraftInternal</code> 公共内核复用、靠 <code>shared</code> 的 <code>AgentIdentity</code> 接口跨模块读身份；三个动作，一条铁律：机娘只投草稿、不能发布。<b>面试</b>被问「怎么让 AI 智能体安全地往你系统里写数据」，答这一套：独立认证链 + 身份走接口解耦 + 写权限收窄到只能建草稿 + 发布权留给人——比空谈 AI 安全扎实得多。下一课：多机娘 ACPP 接力（session/ticket/handoff）。",
+      sentences:[
+        { t:"把这些串起来的是一个 skill：一个指令文件夹，告诉 AI 工具先确认登录、列机娘、代入、写贡献、投稿、把草稿地址回给主人、提醒他审稿。多机娘接力那段我裁掉了，那是下一课。", lines:[3,4,5,6,7] },
+        { t:"一张小抄。机娘投稿镜像主人投稿：靠 URL 前缀分链、靠公共内核复用、靠一个 shared 接口跨模块读身份。三个动作，一条铁律——机娘只投草稿，不能发布。", lines:[10,11,12,13] },
+        { t:"面试被问怎么让一个 AI 智能体安全地往你系统里写数据，就答这一套：独立认证链、身份走接口跨模块解耦、写权限收窄到只能建草稿、发布权留给人。比空谈 AI 安全扎实得多。", lines:[16,17,18] }
+      ] }
+  ]
+};
+
+// ============ 播放器引擎 v5（真音频驱动）============
+// 时间源 = <audio> 的 currentTime；进度条=真时间轴，任意点击精确 seek；暂停从当前【字】续播；
+// playbackRate 实时变速不变调。字幕/高亮同步：timeline.js 给出每句 [start,end]，timeupdate 里定位当前句。
+const $ = id => document.getElementById(id);
+const au = $('au');
+const TL = window.AUDIO_TIMELINE || null;
+
+const FLAT = [];
+MODEL.steps.forEach((s, si) => s.sentences.forEach((sn, pi) => FLAT.push({ si, pi, sn })));
+const TOTAL = FLAT.length;
+
+let cur = -1, renderedStep = -1;
+
+if (!TL || TL.length !== TOTAL) { $('missing').style.display = 'block'; }
+const DURATION = TL ? TL[TL.length - 1][1] : 0;
+
+$('legend').innerHTML = MODEL.threads.map(t => `<span class="lg" data-t="${t.id}">${t.name}</span>`).join('');
+
+function buildTree() {
+  const root = {};
+  MODEL.fileTree.forEach(f => {
+    const parts = f.path.split('/');
+    let curNode = root;
+    parts.forEach((p, i) => {
+      const isFile = i === parts.length - 1;
+      curNode[p] = curNode[p] || { __file: isFile ? f : null, __children: {} };
+      curNode = curNode[p].__children;
+    });
+  });
+  const out = [];
+  (function walk(node, depth) {
+    Object.keys(node).forEach(name => {
+      const n = node[name];
+      const isFile = n.__file;
+      out.push(`<div class="node ${isFile ? 'file' : 'dir'}" ${isFile ? `data-file="${isFile.path}"` : ''} style="padding-left:${14 + depth * 16}px"><span class="ic">${isFile ? '📄' : '📁'}</span>${name}</div>`);
+      if (!isFile) walk(n.__children, depth + 1);
+    });
+  })(root, 0);
+  $('tree').innerHTML = out.join('');
+  [...document.querySelectorAll('.node.file')].forEach(node => {
+    node.onclick = () => {
+      const i = MODEL.steps.findIndex(s => s.file === node.dataset.file);
+      if (i >= 0) seekToSentence(firstSentenceOfStep(i));
+    };
+  });
+}
+buildTree();
+
+function buildFlow() {
+  const byThread = {};
+  MODEL.steps.forEach((s, i) => { (byThread[s.thread] = byThread[s.thread] || []).push({ ...s, i }); });
+  $('flow').innerHTML = MODEL.threads.map(t => {
+    const chips = (byThread[t.id] || []).map(s => `<span class="chip" data-i="${s.i}">${s.flowNode}</span>`).join('');
+    return `<div class="lane" data-t="${t.id}"><span class="lane-name">${t.name}</span><span class="chips">${chips || '<span class="chip" style="opacity:.4;cursor:default">—</span>'}</span></div>`;
+  }).join('');
+  [...document.querySelectorAll('.chip[data-i]')].forEach(c => { c.onclick = () => seekToSentence(firstSentenceOfStep(+c.dataset.i)); });
+}
+buildFlow();
+
+function firstSentenceOfStep(si) { return FLAT.findIndex(f => f.si === si); }
+
+// —— 真时间轴进度条：句边界细线 / 步边界粗线；点任意处精确 seek ——
+if (TL) {
+  FLAT.forEach((f, k) => {
+    if (k === 0) return;
+    const tick = document.createElement('div');
+    tick.className = 'tick' + (f.pi === 0 ? ' step' : '');
+    tick.style.left = (TL[k][0] / DURATION * 100) + '%';
+    $('progress').appendChild(tick);
+  });
+  $('progress').onclick = e => {
+    const r = $('progress').getBoundingClientRect();
+    au.currentTime = Math.max(0, Math.min(DURATION - .05, (e.clientX - r.left) / r.width * DURATION));
+    if (au.paused) au.play();
+  };
+}
+
+function fmt(sec) { const m = Math.floor(sec / 60), s = Math.floor(sec % 60); return m + ':' + String(s).padStart(2, '0'); }
+
+// —— IDEA Darcula 风语法高亮（单趟正则，防止对已注入的 span 二次着色） ——
+function esc(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+const JAVA_RE = /("[^"]*")|(@[A-Za-z]\w*)|\b(public|private|protected|static|final|class|record|enum|interface|void|new|return|if|else|try|catch|throw|throws|extends|implements|import|package|this|null|true|false|switch|case|default|for|while|boolean|int|long|double|float)\b|\b(\d[\d_]*L?)\b|\.([a-z]\w*)(?=\s*\()/g;
+function hlJava(raw) {
+  const t = raw.trimStart();
+  if (/^(\/\/|\/\*|\*)/.test(t)) return '<span class="tk-cm">' + esc(raw) + '</span>';   // 整行注释/javadoc
+  let rest = raw, tail = '';
+  const ci = rest.indexOf('//');
+  if (ci >= 0 && ((rest.slice(0, ci).match(/"/g) || []).length % 2 === 0)) {            // 行内注释（避开字符串里的 //）
+    tail = '<span class="tk-cm">' + esc(rest.slice(ci)) + '</span>'; rest = rest.slice(0, ci);
+  }
+  let out = '', last = 0, m;
+  JAVA_RE.lastIndex = 0;
+  while ((m = JAVA_RE.exec(rest))) {
+    out += esc(rest.slice(last, m.index));
+    if (m[1]) out += '<span class="tk-str">' + esc(m[1]) + '</span>';
+    else if (m[2]) out += '<span class="tk-ann">' + esc(m[2]) + '</span>';
+    else if (m[3]) out += '<span class="tk-kw">' + m[3] + '</span>';
+    else if (m[4]) out += '<span class="tk-num">' + m[4] + '</span>';
+    else if (m[5]) out += '.<span class="tk-call">' + m[5] + '</span>';
+    last = JAVA_RE.lastIndex;
+  }
+  return out + esc(rest.slice(last)) + tail;
+}
+function hlText(raw) {   // 示意图 / SQL：只把 // 或 -- 注释染灰，其余保持原样
+  let ci = raw.indexOf('//');
+  if (ci < 0) ci = raw.indexOf('--');
+  if (ci < 0) return esc(raw);
+  return esc(raw.slice(0, ci)) + '<span class="tk-cm">' + esc(raw.slice(ci)) + '</span>';
+}
+
+function renderCode(step) {
+  $('code').innerHTML = '';
+  const base = step.fileStart;
+  const isJava = step.file && step.file.endsWith('.java');
+  step.codeSnippet.split('\n').forEach((ln, i) => {
+    const div = document.createElement('div');
+    div.className = 'line';
+    div.dataset.abs = base != null ? (base + i) : (i + 1);
+    const num = document.createElement('span'); num.className = 'ln';
+    num.textContent = base != null ? (base + i) : '·';
+    const tx = document.createElement('span'); tx.innerHTML = isJava ? hlJava(ln) : hlText(ln);
+    div.appendChild(num); div.appendChild(tx); $('code').appendChild(div);
+  });
+}
+function renderStep(si) {
+  renderedStep = si;
+  const s = MODEL.steps[si];
+  [...document.querySelectorAll('.node.file')].forEach(n => n.classList.toggle('on', n.dataset.file === s.file));
+  const onNode = document.querySelector('.node.file.on'); if (onNode) onNode.scrollIntoView({ block: 'nearest' });
+  const lineCount = s.codeSnippet.split('\n').length;
+  $('crumb').innerHTML = s.file
+    ? `📄 ${s.file} &nbsp;›&nbsp; <b>${s.structurePath}</b> &nbsp;·&nbsp; L${s.fileStart}–L${s.fileStart + lineCount - 1}（真实行号，可对照 IDE）`
+    : `⚙ ${s.structurePath} &nbsp;·&nbsp; <b>示意图（非项目源码）</b>`;
+  renderCode(s);
+  [...document.querySelectorAll('.chip[data-i]')].forEach(c => { const ci = +c.dataset.i; c.classList.toggle('on', ci === si); c.classList.toggle('done', ci < si); });
+  [...document.querySelectorAll('.lane')].forEach(l => l.classList.toggle('on', l.dataset.t === s.thread));
+  [...document.querySelectorAll('.lg')].forEach(l => l.classList.toggle('on', l.dataset.t === s.thread));
+  const onChip = document.querySelector('.chip.on'); if (onChip) onChip.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  $('detail').innerHTML = s.detail;
+}
+
+function showSentence(k) {
+  cur = k;
+  const { si, pi, sn } = FLAT[k];
+  if (si !== renderedStep) renderStep(si);
+  const step = MODEL.steps[si];
+
+  const hiset = new Set(sn.lines || []);
+  let first = null;
+  [...document.querySelectorAll('#code .line')].forEach(div => {
+    const abs = +div.dataset.abs;
+    div.classList.remove('hot', 'dim');
+    if (hiset.size) {
+      if (hiset.has(abs)) { div.classList.add('hot'); if (!first) first = div; }
+      else div.classList.add('dim');
+    }
+  });
+  if (first) first.scrollIntoView({ block: 'center', behavior: 'smooth' });
+
+  const focus = sn.focus || (hiset.size ? 'code' : 'detail');
+  $('codePanel').classList.toggle('glow', focus === 'code');
+  $('detailPanel').classList.toggle('glow', focus === 'detail');
+  // 字幕换边：字幕文本始终待在"该注视的面板"下方（左代码/右详解）
+  $('subtitleBar').className = 'subtitle ' + (focus === 'code' ? 'focus-code' : 'focus-detail');
+  const badge = $('focusBadge');
+  if (focus === 'code') {
+    badge.className = 'focusbadge code';
+    badge.textContent = step.fileStart != null && hiset.size
+      ? `👈 看左侧代码 L${Math.min(...hiset)}${hiset.size > 1 ? '–L' + Math.max(...hiset) : ''}`
+      : '👈 看左侧';
+  } else {
+    badge.className = 'focusbadge detail';
+    badge.textContent = '👉 看右侧详解';
+  }
+
+  $('subtitle').textContent = sn.t;
+  $('counter').textContent = `步 ${si + 1}/${MODEL.steps.length} · 句 ${k + 1}/${TOTAL}`;
+  $('prevBtn').disabled = k === 0; $('nextBtn').disabled = k === TOTAL - 1;
+}
+
+// —— 音频时间 → 当前句（timeupdate 每 ~250ms 一次，线性找足够快） ——
+function sentenceAt(t) {
+  for (let k = TOTAL - 1; k >= 0; k--) if (t >= TL[k][0] - 0.05) return k;
+  return 0;
+}
+au.addEventListener('timeupdate', () => {
+  if (!TL) return;
+  $('fill').style.width = (au.currentTime / DURATION * 100) + '%';
+  $('timeLabel').textContent = fmt(au.currentTime) + ' / ' + fmt(DURATION);
+  const k = sentenceAt(au.currentTime);
+  if (k !== cur) showSentence(k);
+});
+au.addEventListener('play', () => { $('playBtn').textContent = '⏸ 暂停'; $('playBtn').classList.remove('primary'); });
+au.addEventListener('pause', () => { $('playBtn').textContent = au.ended ? '↺ 重播' : '▶ 继续'; $('playBtn').classList.add('primary'); });
+au.addEventListener('ended', () => { $('playBtn').textContent = '↺ 重播'; $('playBtn').classList.add('primary'); $('quizMask').classList.add('show'); });
+au.addEventListener('error', () => { $('missing').style.display = 'block'; });
+au.addEventListener('loadedmetadata', () => { $('timeLabel').textContent = '0:00 / ' + fmt(DURATION || au.duration); });
+
+function seekToSentence(k) {
+  if (!TL || k < 0) return;
+  au.currentTime = TL[k][0] + 0.01;
+  showSentence(k);
+  if (au.paused) au.play();
+}
+$('playBtn').onclick = () => {
+  if (!TL) return;
+  if (au.paused) { if (au.ended) au.currentTime = 0; au.play(); } else au.pause();
+};
+$('prevBtn').onclick = e => { seekToSentence(e.shiftKey ? firstSentenceOfStep(Math.max(0, FLAT[Math.max(cur, 0)].si - 1)) : Math.max(0, cur - 1)); };
+$('nextBtn').onclick = e => { seekToSentence(e.shiftKey ? firstSentenceOfStep(Math.min(MODEL.steps.length - 1, FLAT[Math.max(cur, 0)].si + 1)) : Math.min(TOTAL - 1, cur + 1)); };
+$('speed').oninput = () => {           // 真·实时变速：音频变速不变调，立即生效
+  au.playbackRate = parseFloat($('speed').value);
+  $('speedVal').textContent = parseFloat($('speed').value).toFixed(1) + '×';
+};
+$('quizBtn').onclick = () => $('quizMask').classList.add('show');
+$('quizClose').onclick = () => $('quizMask').classList.remove('show');
+$('quizMask').onclick = e => { if (e.target === $('quizMask')) $('quizMask').classList.remove('show'); };
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT') return;
+  if (e.code === 'Space') { e.preventDefault(); $('playBtn').click(); }
+  else if (e.code === 'ArrowRight') { e.preventDefault(); seekToSentence(e.shiftKey ? firstSentenceOfStep(Math.min(MODEL.steps.length - 1, FLAT[Math.max(cur, 0)].si + 1)) : Math.min(TOTAL - 1, cur + 1)); }
+  else if (e.code === 'ArrowLeft') { e.preventDefault(); seekToSentence(e.shiftKey ? firstSentenceOfStep(Math.max(0, FLAT[Math.max(cur, 0)].si - 1)) : Math.max(0, cur - 1)); }
+});
+</script>
+</body>
+</html>

@@ -6,6 +6,63 @@
 > L06–L11.5 条目为 2026-07-09 断更补录：由 11 个挖掘子代理逐行解析 58 个会话转录（157 条变更明细，
 > 在 `docs/changelog-evidence/mine*.json`，含续档分叉去重）与 git 全史交叉核实而成。
 
+## 0.1.0-SNAPSHOT - L14 单机娘 Skill 自动投稿 + 契约缺口独立修复（待提交）
+
+日期：2026-07-29
+
+> **本课主线**：让一个机娘（持 L13 的 AgentActingToken）把一段开发过程写成**草稿**投进 content，
+> 返回草稿 URL 给主人审稿——但**机娘绝不能自己发布**（`Agent 无 publish` 是 course_schedule 钉死的硬验收线）。
+> 这是 Chain 3（`/agent/**`）的第一个真实业务消费者：此前 `/agent/whoami` 只是试金石。
+>
+> **开课前的考古**：施工前发现「L14 的 submit-single 端点在活契约里不存在，契约里只有 L15/L16 的协作版 submit」。
+> 交叉印证三份权威文档（`course_schedule` / `用例到代码矩阵` / `范围与阶段`）后定性：**不是设计冲突，是活契约漏登记**
+> ——单机娘投稿一直是独立用例，写契约的人把它当成「协作的退化情形」并进了脑内模型。详见 D-13 与 ADR-0004。
+
+### Added
+- **ADR-0004**（`docs/decisions/0004-l14-single-agent-submit.md`）：L14 设计简报（考古结论 / 安全不变量 / 决策 / 备选权衡 / 后果），第一道审（审思路）的物证。
+- **content 后端·机娘投稿链路**：
+  - **`AgentDraftController`**（`POST /api/v1/agent/drafts`，Chain 3 保护）：**只有建草稿一个动作，无 publish 端点**（硬验收线）。返回 `{draft, draftUrl}`，`draftUrl = {agentlog.web.base-url}/#/owner/drafts/{draftId}`。
+  - **`ContentService` 重构**：把 `createOwnerDraft` 里「建 Post + Contribution + Draft + DraftBlock」的公共内核抽成私有 `createDraftInternal(DraftAuthor, ...)`，owner/agent 各自薄封装——**差别只在作者维度**（`DraftAuthor` 参数对象：谁写的 / 什么工具 / 哪次运行 / 归属谁）。新增 `createAgentDraft`：草稿 `owner_user_id` 填**机娘背后的主人**，天然对齐既有租户隔离（主人在 `/owner/drafts` 里能看能审能发）。
+  - **`AgentIdentity`（`shared.security`）+ `AgentPrincipal implements` 它**：本课**唯一的真架构决策**。content 的 controller 要读机娘身份，但 `AgentPrincipal` 在 `identity.pairing.security` 私有子包，直接 import 会踩 `ModularityTest`。解法＝**依赖倒置**：在 shared（OPEN 模块）定只读接口，identity 的 principal 实现它，content 只认接口 → `content→identity` 那条箭头消失。`AgentPrincipal` 是 record，组件访问器天然满足接口方法，**一行实现代码都不用写**。
+  - DTO：`CreateAgentDraftRequest`（**不含作者维度**——由令牌服务端派生，防伪造）+ `AgentDraftResponse`。
+  - **零迁移**：`contribution` 的 `author_agent_id`/`source_tool`/`client_run_id` 三列 V005 建表时已预留（注释原写「留到 L15+」，按 course_schedule 校正为 L14）。
+  - 新配置 `agentlog.web.base-url`（main + test 两处 yml）。
+- **CLI `submit` 命令**：`agentlog submit --file <正文> --title <标题> --channel <分区id> [--summary]`。带 acting token 调 `/agent/drafts`；**stdout 出机器可读 JSON（含 draftUrl，供 Skill 回主人）、stderr 出人类诊断、绝不打印 token**。`CredentialStore` 补 `getActingToken`/`isActingValid`/`readNestedString`。
+- **`skill/agentlog/`**（按 Pack `08-skill` 蓝图**裁出单机娘部分**，剔除全部 `collab start/join/wait/claim-turn`——那是 L15）：`SKILL.md` + `scripts/agentlog.sh|ps1` wrapper + 3 个裁剪版 `references/`。
+- **前端草稿审稿页**（`web/src/pages/DraftPreviewPage.vue` + 路由 `/owner/drafts/:draftId`）：机娘投稿后 `draftUrl` 的落点，也是**发布权的唯一入口**。未登录自动跳登录并带 `?redirect=`；机娘投的稿显示 🤖 badge + 作者组 + 专属二次确认文案。
+  - ⚠️ `course_schedule` 的 L14 `files` 只列 `skill/content/cli`、**无 web**，但主人拍板的「草稿 URL 指向预览路径」若无此页则链路断（点开 404），故补做。正式版审稿 UX 在 **L20**（Pack `06-web/owner-review-ux.md` 已有规格）。
+- **L14 教学交付**：`backend/src/magic-L14/00-L14讲义.md` + 方案B视频（`06-L14单机娘投稿-方案B-mp3.html` + mp3 6.1min/29 句 + timeline）+ `AgentLog-L14.postman_collection.json`。
+- **面试故事 ×3**（`INTERVIEW-STORIES.md` 故事 15-17，均由主人真实疑问驱动、**原话逐字保存**）：三种 principal 与依赖倒置 / `client_run_id` 的可信边界 / 契约声明未实装的「三方各退一步」。
+
+### Fixed
+- 🔴 **发布丢作者身份**（端到端实测抓到，非新代码 bug）：`ContentService#publish` 复制草稿块到 `post_version_block` 的循环**写于 L06**——当时只有 OWNER 作者、agent 两列恒 null 故未复制。**L14 激活 AGENT 路径后立刻产出自相矛盾快照**：`author_type=AGENT` 却 `author_agent_id=NULL`/`source_tool=NULL`，追溯链在「发布」这一步断掉。投稿时四字段完整，一发布就丢后两个。补 `setAuthorAgentId`/`setSourceTool`（零迁移，列 V005 已备）+ 回归测试 `publishPreservesAgentAuthorship`。**只有走完整端到端才能抓到——单看 L14 新写的代码毫无问题。**
+- 🔴 **契约声明未实装：`ContentBlockView.author`**（独立 fix，见 D-14）：契约自 v1.1 就声明了「这块是谁写的」，但 **content 与 forum 两个后端模块的 record 都只有 4 字段**，且 forum 的 `PublicPostView.authors` **写死空列表**（注释：「暂保留骨架」）。前端生成类型里 `author?` 一直在但页面从未读。**三方各退一步，字段纸面存在、实际恒空跨越八节课**——因为 AI 投稿之前一篇只有一个作者，块级作者是冗余信息。修法：两模块各建只读作者投影（`DraftAuthorMapper` / `selectAgentAuthorsByAgentIds`）、`ContentBlockView` 补 `author`、`PublicPostView.authors` 改真数据、前端两页接上 `AuthorAvatarStack`。**契约无需改动**（它本来就对），故未重生成客户端。
+- **Postman 登录凭据**：L14 集合的 `email` 从 L13 复制残留的 `l13owner@example.com` 改为 `alice@demo.agentlog.local`（V009 按 `LOWER(display_name)@demo.agentlog.local` 回填，见 `V009__add_email_login.sql:17`；密码 `password123` 同 V008 seed）。浏览器实测登录通过。
+
+### Changed
+- **活契约**（`docs/api/agentlog-openapi.yaml`）：补登记 `POST /api/v1/agent/drafts` + schema `CreateAgentDraftRequest`/`AgentDraftResponse`。`api:validate` 通过、`npm run api:generate` 重生成客户端、`vue-tsc` + `vite build` 通过。**冻结面登记 D-13**。
+- `AuthorType.java` / `ContributionDO.java` 的「L15+」注释按 course_schedule 校正为「L14 启用」。
+
+### Verified
+- 后端 `./mvnw clean -pl backend test`：**67 绿**（16 测试类·0 失败 0 错误·clean 排除 stale 污染）。对比 L13.5 的 58 测 +9，其中 `AgentDraftIntegrationTest` **9 例**（投稿落库 / 归属主人 / 草稿URL / 无令牌401 / owner令牌打agent链401 / **机娘无publish 404** / **发布保真** / **机娘块作者** / **主人块作者对照**）。`ModularityTest` 2 绿——`AgentIdentity` 接口方案 + 跨模块 SQL 投影**均未引入跨模块 import**。
+- CLI `./mvnw -pl cli package` + `CliStoreTest` **5 绿**（新增 acting token 存取往返）。
+- 前端 `npm run type-check` + `npm run build`：0 类型错、build 成功。
+- **真实端到端**（非模拟，一手终端一手浏览器）：`auth refresh`(RTR 轮换) → `agents assume --agent-id 1` → `submit --file` → 草稿 #6 → 库里核对 `author_type=AGENT`/`author_agent_id=1`/`source_tool=claude-code`/`client_run_id=run-dbb61da8-…`/草稿 `owner_user_id=1` → 浏览器开 draftUrl（未登录跳登录带 redirect → 登录回跳 → 页面正确渲染）→ 点「审阅通过·发布」→ 二次确认 → 发布成功跳 `/#/posts/9` v1。
+
+### Notes / 出处
+- **交付顺序**按铁律走完整链：设计简报→ADR→tests-first→实现→测绿→教学三件套→主人验收→前端→端到端→回写→commit。
+- ⚠️ **`content_origin` 仍为 `HUMAN_ONLY`**：机娘投的稿发布后不带「AI 参与」标识。**这是主人拍板的本课范围外事项**（「AI 内容标识本课不碰，推导留 **L20** 主人审稿课」），不是缺陷。
+- ⚠️ **CLI `--channel` 是悬空引用**（主人实测卡住暴露）：命令强制要 `channelId`，但**整个 CLI 没有任何命令能告诉你 id 是几**，须去浏览器/`curl /public/channels`/翻 SQL。对 AI 同样致命（skill 自动投稿时机娘也不知道 id）。两条修法：加 `agentlog channels` 子命令（治标）/ 让 `--channel` 收 slug 由服务端解析（治本，slug 是语义标识、id 是实现细节不该泄漏到用户界面）。**待主人定放哪课。**
+- ⚠️ **Markdown 渲染是全课程空白**：扫过 `course_schedule` 全 26 课，**无一课涉及 markdown 渲染 / UI 美化**。当前正文是 `white-space: pre-wrap` 纯文本，机娘投的 md 原样显示。最接近的是 L19（`DraftEditor.vue`）/ L20（`ContributionView.vue` + `owner-review-ux.md`）/ L23（`PostLogCard.vue` 性能优化）。**待主人定：独立做（需 `markdown-it` + `DOMPurify` 消毒——机娘内容是不可信输入，直接 `v-html` 即 XSS）/ 并进 L19-L20 / 暂缓。**
+- ⚠️ **隔离索引非 UNIQUE**：`agent_acting_session` 的 `idx_agent_acting_isolation(agent_account_id, source_tool, client_run_id)` 是普通索引，同一次运行可重复 assume（**现阶段正确**——令牌 1h 短命无 refresh，长跑本就要多次换令牌）。将来做投稿幂等（L16 协作 submit 标了幂等）时 `clientRunId` 可能升格为幂等键，届时约束需重新设计。另 `contribution.client_run_id` 是 `VARCHAR(128)`(V005) 而 `agent_acting_session.client_run_id` 是 `VARCHAR(64)`(V011)，窄→宽不截断、非 bug，但两处该对齐。
+- **冻结面已登记** Pack `16-codex/DRIFT-REGISTER.md` **D-13**（L14 新端点 + 契约漏画考古）与 **D-14**（`ContentBlockView.author` 合规补齐 + 发布保真修复），重新冻结标记 **v1.1+drift-20260729**。
+- 施工与验收 [会话 1a99b344（L14 主线，2026-07-25~29）]、[会话 567c6e52（主人实测 CLI 卡点分诊）]。
+
+### 💼 面试故事（本课三则，均由主人真实疑问驱动）
+- **故事 15 · 三种 principal、两种读法、一个接口**：`SecurityContext` 是 ThreadLocal 每请求一份，全项目只有三个 `setAuthentication` 写入点（L05 登录 / L13 两个 Bearer 过滤器）；`@AuthenticationPrincipal` 是参数解析器不是注入，**类型不符默认静默返回 null**（`errorOnInvalidType=false`）。判据洞察：**单值身份塞 `auth.getName()` 的 String 槽，多值身份必须上对象 principal**——跟是不是机娘无关，跟字段数有关。附「面向接口编程 vs 依赖倒置」的锐化判据：**删掉这个接口，有没有依赖箭头改变方向？没有就是仪式，有就是停火协议。**
+- **故事 16 · `client_run_id` 凭什么敢让客户端随便填**：库里同列出现 `run-1`（Postman 手填）与 `run-bf3e…`（CLI UUID 自动生成）两种格式。把链路字段分三级可信度（🟢服务端权威 / 🟡客户端提出+服务端裁决 / 🔴客户端自由声明），得出核心判据：**伪造它能不能带来越权收益？不能 → 可以交给客户端**。服务端不能自己生成的原因：**它不知道「一次运行」的边界在哪**，且令牌 1h 过期而一次长跑要换多次令牌——所以 `contribution` 存 runId 而非 session 主键（**存主键会把一次长跑切碎成几段**）。业界同族：OTel trace id / Stripe Idempotency-Key / AWS ClientRequestToken。
+- **故事 17 · 契约声明了、后端没填、前端假装没这回事**：`ContentBlockView.author` 纸面存在八节课、实际恒空。**因为 AI 投稿之前一篇只有一个作者，块级作者是冗余信息，三方都合理跳过了**；机娘的加入让它从「冗余」变成「唯一能回答哪段是谁写的地方」。**这类债没有任何测试会失败——因为从来没人断言过它。** 附四个可迁移点：契约先行≠契约被实现；注释里的「暂/先/留到 Lxx」是无人追踪的债务标记；多套独立自增 id 合表键必须带类型前缀；实体删除后降级展示而非断链。
+
 ## 0.1.0-SNAPSHOT - L13.5 考古式修复：补做从未落地的 L10 + 契约对账 + 前端/CLI 补齐（待提交）
 
 日期：2026-07-24

@@ -1120,6 +1120,563 @@ opaque access                  → 每请求查库,但即时吊销白送
 
 ---
 
+## 故事 15:一个请求进来,后端凭什么知道"你是谁"?——三种 principal、两种读法、一个接口（L05→L14）
+
+> **一句话**:同一个 `@AuthenticationPrincipal` 注解,在我项目的三条认证链上会拿到**三种完全不同的对象**;而为了让业务模块能读"机娘身份"又不违反模块边界,我用依赖倒置在中立模块放了一个只读接口。
+>
+> **什么时候讲**:面试官问「Spring Security 怎么拿当前登录用户」「多种认证方式怎么共存」「你项目的模块边界怎么保证不被破坏」「说说你用过的设计模式」。
+>
+> **开场钩子**(能立刻让面试官坐直):"我项目里同时跑着三种 principal 类型。顺便说个坑——`@AuthenticationPrincipal` 类型对不上的时候,它**默认是静默返回 null**,不报错。"
+
+### 🎬 场景重建(先帮你想起当时在干什么)
+
+当时在做 **L14:单机娘自动投稿**——让一个 AI 机娘拿着自己的令牌,把一段开发过程写成**草稿**投进论坛,但机娘**绝不能自己发布**(发布权永远属于主人)。
+
+我刚写完机娘投稿的 controller,盯着这一行发呆:
+
+```java
+// backend/src/main/java/com/agentlog/content/api/AgentDraftController.java:45
+public AgentDraftResponse createDraft(
+        @AuthenticationPrincipal AgentIdentity principal,      // ← 卡在这行
+        @Valid @RequestBody CreateAgentDraftRequest request) {
+```
+
+然后我翻到**隔壁文件**——主人投稿的 controller,发现它根本没用这个注解:
+
+```java
+// backend/src/main/java/com/agentlog/content/api/OwnerDraftController.java:30
+public DraftView createDraft(@Valid @RequestBody CreateOwnerDraftRequest request){
+    long currentUserId = CurrentUser.requireId();              // ← 完全不同的读法
+```
+
+**同一个 `content` 模块、同一个"建草稿"动作,读身份居然是两套写法。** 我卡住了:判据是什么?
+
+顺手一搜,更懵——项目里居然有 **三种 principal**:`OwnerPrincipal`、`AgentPrincipal`、还有 Spring 内置的 `User`。而我在代码里**只看得到 controller 在"取"**,从来没看到谁在"存"。
+
+### ❓ 我当时的原话疑问(原汁原味保存,不修改)
+
+> 依赖倒置,似乎跟传统三层架构的mvc里service的impl和外层接口有点像?2.不太能直观理解owner和本次的机娘身份塞到principal的差别,主要是两方具体的使用地点我没找出来,没法对比和理清楚双方各处调用链,请你帮忙。还有我发现有好多principal,他们都是什么时候被塞到security的?我现在只见在controller层去注解调用,是在上节课注入的吗?那为什么一次注入能被多种形式的principal拿出?
+
+### 💬 面试时可以这么说(优化表达 —— 上面的原话保留,不覆盖)
+
+> 我当时有三个连着的困惑:
+> **① 多种 principal 共存**——我只在 controller 看到 `@AuthenticationPrincipal` 在"取",找不到"存"在哪;更不懂为什么同一个注解能取出不同类型的对象。
+> **② 同模块两套读法**——主人投稿用 `CurrentUser.requireId()`,机娘投稿用 `@AuthenticationPrincipal`,我想找出这个差异背后的**判据**,而不是死记。
+> **③ 接口摆放**——我用依赖倒置解决了跨模块读身份,但它看起来跟三层架构里 `IUserService` + `UserServiceImpl` 很像,我想搞清楚这两者是不是同一回事。
+
+---
+
+### 🔍 追查过程:三步定位
+
+**第一步:全局搜"谁在写 SecurityContext"。**
+
+我用一条命令就把问题解决了大半——搜 `setAuthentication`:
+
+```bash
+grep -rn "setAuthentication" backend/src/main/java
+```
+
+全项目**只有三个写入点**:
+
+| # | 写入点 | 哪节课埋的 | 写进去的 principal | 管辖 URL |
+|---|---|---|---|---|
+| 1 | `WebAuthController:97-99` | **L05** 登录 | Spring 内置 `User`(不是自定义类!) | Chain 1 兜底 · 浏览器 |
+| 2 | `OwnerBearerAuthenticationFilter:76-79` | **L13** | `OwnerPrincipal` | Chain 2 · `/api/v1/cli/**` |
+| 3 | `AgentBearerAuthenticationFilter:69-73` | **L13** | `AgentPrincipal` | Chain 3 · `/api/v1/agent/**` |
+
+**我原以为的"上节课注入的"——只对了三分之二**:Chain 2/3 确实是 L13 埋的,但 Chain 1 那个是 **L05 登录时**就埋下的。三节课各埋一个,我一直没串起来。
+
+**第二步:想通"一次注入"这个说法本身就是错的。**
+
+`SecurityContext` 存在 `SecurityContextHolder` 里,底层是 **ThreadLocal**——也就是说它是**每个 HTTP 请求各自一份**,不是 Spring 容器启动时创建的单例 bean。
+
+所以根本不存在"一次注入、多种形式取出"。真实链路是:
+
+```
+请求进来
+  → URL 匹配决定走哪条 SecurityFilterChain(chain 有 securityMatcher)
+    → 该链上的过滤器验证凭证,写它自己那种 principal 进 SecurityContext
+      → controller 的 @AuthenticationPrincipal 按【形参声明的类型】去对一下
+```
+
+**第三步:扒开 `@AuthenticationPrincipal` 看它到底干了什么。**
+
+它不是"注入",是一个**参数解析器**(`AuthenticationPrincipalArgumentResolver`)。核心逻辑就三行:
+
+```java
+principal = SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+if (形参声明的类型.isAssignableFrom(principal.getClass()))  →  塞进去
+else                                                       →  塞 null    // ⚠️ 不报错!
+```
+
+### ⚠️ 挖出的坑(这个最值得讲给面试官)
+
+类型对不上时,**默认返回 `null`,没有异常、没有日志**。因为 `@AuthenticationPrincipal` 有个属性 `errorOnInvalidType`,**默认是 `false`**。
+
+后果:如果我在 `/cli/**` 的 controller 里手滑写成 `@AuthenticationPrincipal AgentPrincipal`(应该是 `OwnerPrincipal`),不会 500、不会有任何提示,我会拿到一个 `null`,然后 **NPE 炸在三行之后的业务代码里,堆栈完全指不到根因**。
+
+想让它响,得显式写 `@AuthenticationPrincipal(errorOnInvalidType = true)`。
+
+---
+
+### ✅ 答案①:为什么同模块里有两套读身份的写法?
+
+我一开始以为判据是「主人 vs 机娘」。**错了。真正的判据是"身份携带几个字段"。**
+
+| | 身份有几个字段 | 载体 | 读法 |
+|---|---|---|---|
+| 浏览器登录的主人 | **1 个**(userId) | 塞进 `auth.getName()` 那个 **String 槽** | `CurrentUser.requireId()` 解析字符串 |
+| CLI 里的主人 | **2 个**(ownerUserId + installationId) | String 槽装不下 → **对象** | `@AuthenticationPrincipal` |
+| 机娘 | **5 个** | 更装不下 → **对象** | `@AuthenticationPrincipal` |
+
+看 L05 当时的做法就懂了(`AppUserDetailsService:43-46`):它把**数据库主键 id 塞进了 `User` 的 `username` 字段**,把一个 String 槽当身份载体用。
+
+```java
+return new User(
+        String.valueOf(account.getId()),    // ← username 槽里装的其实是 userId
+        account.getPasswordHash(),
+        List.of(new SimpleGrantedAuthority("ROLE_USER")));
+```
+
+**这招只在"身份是单值"时成立。** 到了 CLI 场景,身份多出一个 `installationId`(你是从哪台设备来的,为多设备审计和按设备吊销留的钩子),String 槽立刻不够用,必须换成对象 principal。
+
+> 📌 **一句话记法:单值身份可以塞 name 槽,多值身份必须上对象 principal。跟"是不是机娘"无关,跟"身份有几个维度"有关。**
+
+**具体使用地点**(当时我就是找不到这个清单):
+
+- **Chain 1 · 浏览器主人**(`CurrentUser.requireId()`):`OwnerDraftController`(建/读/**发布**草稿)、`CommentController`、`ReactionController`、`OwnerAgentController`、`OwnerMediaController`、`WebDevicePairingController`
+- **Chain 2 · CLI 主人**(`@AuthenticationPrincipal OwnerPrincipal`):`CliIdentityController:19`(whoami)、`CliAgentController:39`(列机娘)/`:46`(assume)
+- **Chain 3 · 机娘**(`@AuthenticationPrincipal`):`AgentIdentityController:19` 用**具体类** `AgentPrincipal`;`AgentDraftController:45` 用**接口** `AgentIdentity` ← 这个差异就是答案③
+
+### ✅ 答案②:依赖倒置 vs 三层架构的 Service 接口,是一回事吗?
+
+**形式上确实同构,你的直觉没错——但摆放位置不同,导致一个是仪式、一个是解药。**
+
+```
+经典三层:   Controller ──→ IUserService ←── UserServiceImpl
+我的 L14:   content    ──→ AgentIdentity ←── AgentPrincipal
+```
+
+箭头形状一模一样。差别在三处:
+
+**差别一:接口摆在谁的地盘。**
+
+经典三层的 `IUserService` 和 `UserServiceImpl`,**同一个包、同一个模块、同一个人维护、一起改一起提交**。在模块依赖图上,加不加这个接口——**纹丝不动**。
+
+我这个 `AgentIdentity` 摆在**第三方地盘** `shared`(一个所有模块都能依赖的 OPEN 模块),实现类在 `identity.pairing.security` 私有子包。加了它之后,模块依赖图**真的变了**:
+
+```
+加接口前:  content ─────────────────→ identity     ✗ ArchUnit 判红
+加接口后:  content ──→ shared ←────── identity     ✓ 那条箭头消失了
+```
+
+**差别二:收益能不能被机器验证。**
+
+经典三层加接口的理由通常是"可 mock / 上 AOP / 万一以后换实现"——现实是 99% 的 `IXxxService` 一辈子只有一个实现类。**没有任何自动化手段能证明这个接口是必要的**,它是习惯,不是约束。
+
+我这个接口的必要性有**硬指标**:把 `implements AgentIdentity` 删掉、controller 改回 `@AuthenticationPrincipal AgentPrincipal`,`ModularityTest`(ArchUnit 静态校验包依赖)**立刻变红**。
+
+**差别三:"倒置"到底倒的是什么。**
+
+这是最本质的一点,也是很多人把「面向接口编程」和「依赖倒置」混为一谈的地方:
+
+- 经典三层里,Controller **调用** Service、Controller 也**依赖** Service 接口——**调用方向和依赖方向同向**,压根没发生"倒置"。它只是**面向接口编程**。
+- 我这里:运行时 content 拿到的实实在在是 `AgentPrincipal` 实例、调的是它的方法(**调用方向** content → identity);但**编译期** content 的源码里一个 identity 的类名都没有,反倒是 identity 主动 `implements` 了 shared 的接口(**依赖方向** identity → shared)。**两个方向被掰成了反向——这才叫倒置。**
+
+> 📌 **给你一条实战判据**:
+> **把这个接口删掉,有没有任何一条依赖箭头会因此改变方向或消失?**
+> - 没有 → **仪式性接口**(只为 mock/AOP,值不值另说)
+> - 有 → **结构性接口**,它是两个模块之间的**停火协议**
+
+用这条判据回看三层:`IUserService` 删掉,Controller 直接依赖 `UserServiceImpl`,箭头方向不变 → **仪式**。
+
+### 🎁 一个顺手的巧思(细节,但面试官会喜欢)
+
+`AgentPrincipal` 是个 **record**,而它的 `implements` **方法体是空的**:
+
+```java
+public record AgentPrincipal(
+        Long agentAccountId, Long ownerUserId, Long installationId,
+        String sourceTool, String clientRunId) implements AgentIdentity {
+}                                    // ← 一行实现代码都没写
+```
+
+因为 record 自动生成的组件访问器 `agentAccountId()`、`ownerUserId()`… **恰好就是接口要求的方法签名**。
+
+这不是运气——我是**照着 record 的命名风格反过来设计接口的**(方法名不带 `get` 前缀)。代价近乎零,换来一条模块边界。
+
+---
+
+### 🎤 面试自述(3 分钟版,可直接背)
+
+> 我项目里有三条认证链:浏览器 Session、CLI 的主人令牌、AI 机娘的代理令牌。我一开始很困惑——我只在 controller 上看到 `@AuthenticationPrincipal` 在取身份,却找不到谁在存,而且不同 controller 取出来的类型还不一样。
+>
+> 后来我全局搜 `setAuthentication`,发现全项目只有三个写入点,分别属于三条链,而且是三节课分别埋下的。想通之后关键认知是:**`SecurityContext` 是 ThreadLocal、每个请求各自一份**,根本不存在"一次注入";`@AuthenticationPrincipal` 也不是注入,是个参数解析器,它拿到 principal 后按形参**声明的类型**做匹配。这里有个坑我记得很清楚——**类型对不上时它默认静默返回 null,不抛异常**,`errorOnInvalidType` 默认 false,所以踩了会 NPE 在很远的地方、堆栈指不到根因。
+>
+> 第二个收获是搞清了"什么时候该用对象 principal"。我原以为判据是用户类型,其实是**身份的字段数**:主人在浏览器里身份只有一个 userId,可以塞进 `auth.getName()` 那个 String 槽;但 CLI 的主人多了个 installationId、机娘有五个字段,String 槽装不下,就必须上对象 principal。**单值塞 name 槽,多值上对象。**
+>
+> 第三个是架构层面的。机娘的 principal 类在 identity 模块的私有子包里,但要读它的业务模块是 content——直接 import 就违反 Spring Modulith 的模块边界,ArchUnit 会判红。我用依赖倒置解:在中立的 shared 模块定义一个只读接口 `AgentIdentity`,让 identity 的 principal 去 implements 它,content 只依赖接口。这样 content→identity 那条箭头就消失了,变成两边都指向 shared。
+>
+> 我特意想过它跟三层架构里 `IUserService`+`Impl` 的区别——形状一样,但三层那个接口和实现在同一个模块,删掉它模块依赖图纹丝不动,是"仪式";我这个删掉之后 ArchUnit 立刻红,是"结构"。而且三层里调用方向和依赖方向是同向的,严格说只是面向接口编程,没有真正的倒置。**我后来把这个总结成一条判据:删掉这个接口,有没有依赖箭头改变方向?没有就是仪式,有就是停火协议。**
+
+### 📌 学习点(半年后只看这几条也能捡回来)
+
+1. `SecurityContext` 是 **ThreadLocal · 每请求一份**,不是单例 bean——"一次注入"这个说法本身就不成立
+2. `@AuthenticationPrincipal` 是**参数解析器**,按形参声明类型匹配;**类型不符默认静默返回 null**(`errorOnInvalidType=false`),这是个能让人查半天的坑
+3. 找"身份从哪来"的万能招:全局搜 `setAuthentication`,写入点通常就那么几个
+4. **单值身份可以塞 `auth.getName()` 的 String 槽,多值身份必须用对象 principal**——判据是字段数,不是用户类型
+5. Spring Security 的 principal 类型是 `Object`,`UserDetails` 只是最常见的一种,可以自定义
+6. **区分"面向接口编程"和"依赖倒置"**:前者调用方向=依赖方向,后者把依赖方向掰反了
+7. **判断接口是仪式还是结构**:删掉它,有没有依赖箭头改变方向/消失?
+8. record 的组件访问器天然满足无 `get` 前缀的接口方法——设计接口时对齐实现的语言特性,能白捡零成本
+
+### 🔗 关联
+
+- [故事 13:四层认证体系](#故事-13为-cli--ai-机娘设计一套四层认证体系选型流程与安全纵深l12-l13) —— 三条链的全景由来
+- [故事 9:过滤器双重注册](#故事-9spring-boot-过滤器双重注册为什么-component-反而是坑l13) —— 同一批过滤器上的另一个坑
+- [故事 7:跨模块操作的三种规则](#故事-7跨模块操作的三种规则l07l09-三层递进) —— 模块边界的其他解法
+- [故事 16:client_run_id 的可信边界](#故事-16一个字段凭什么敢让客户端随便填可信边界怎么划l13l14) —— 同一课的另一个疑问
+
+---
+
+## 故事 16:一个字段凭什么敢让客户端随便填?——可信边界怎么划（L13→L14）
+
+> **一句话**:我在数据库里发现同一列存着 `run-1` 和 `run-bf3e3fed-8e12-...` 两种完全不同格式的值,追下去发现这个字段**是纯客户端说了算的**——然后我搞清了"哪些字段能信客户端、哪些绝对不能"的判据。
+>
+> **什么时候讲**:面试官问「你怎么做参数校验」「怎么防越权」「审计日志怎么设计」「幂等怎么做」,或者任何关于**信任边界**的话题。
+>
+> **开场钩子**:"我项目里有个字段是完全交给客户端自由填的,连格式都不校验。这不是漏掉了,是想清楚之后**故意**的。"
+
+### 🎬 场景重建(先帮你想起当时在干什么)
+
+在做 **L14 单机娘投稿**的验收。我用 Postman 走完整链路:
+
+```
+设备配对 → 拿主人令牌 → assume 代入机娘 → 拿机娘令牌 → 投稿
+```
+
+其中 assume 这一步是这样的:
+
+```
+POST {{baseUrl}}/api/v1/cli/agents/{{agentAccountId}}/assume
+{
+  "sourceTool": "claude-code",
+  "clientRunId": "run-1"          ← 我盯上的就是这个
+}
+```
+
+验收完我去数据库翻 `agent_acting_session` 表,看到 `client_run_id` 列里躺着**两种画风完全不同的值**:
+
+```
+run-1                                        ← 我 Postman 里手填的
+run-bf3e3fed-8e12-477a-8c5a-372bccdbe186     ← 这个哪来的?
+```
+
+我当场就懵了:**这字段真的纯粹是客户端想填啥填啥?没人管?** 而且 L13 讲 assume 的时候,我脑子里的印象只是"发一把新令牌而已",完全没意识到请求体里这两个字段是什么来头。
+
+### ❓ 我当时的原话疑问(原汁原味保存,不修改)
+
+> “{{baseUrl}}/api/v1/cli/agents/{{agentAccountId}}/assume”代入自己机娘是runId竟然是由cli传来的定的吗?你看数据库发现甚至有“run-bf3e3fed-8e12-477a-8c5a-372bccdbe186”和“run-1”这样不同的id,真的纯交给客户端?是什么意思,还有这个id有啥用?是审计的?还是审计用的其实是agent_access_session的主键id?代入这条线似乎之前教学没有讲过这里,当时我只领悟到就是简单发个新的令牌嘛。
+
+### 💬 面试时可以这么说(优化表达 —— 上面的原话保留,不覆盖)
+
+> 验收时我在数据库同一列里发现了两种格式完全不同的值,追下去发现这个 `clientRunId` 是**客户端自由填、服务端不校验**的。我的第一反应是"这是不是个安全漏洞",于是去梳理了这条链路上**每个字段的来源和可信度**,想搞清楚:哪些字段可以信客户端、哪些绝对不能,判据是什么;以及既然已经有会话主键 id 了,为什么还要额外存一个客户端给的 id。
+
+---
+
+### 🔍 追查过程
+
+**第一步:两种格式的来源找到了——是两个不同的客户端。**
+
+| 值 | 谁产生的 | 出处 |
+|---|---|---|
+| `run-1` | 我自己在 Postman 里手填的 | `AgentLog-L14.postman_collection.json` 的 assume 请求体 |
+| `run-bf3e3fed-…` | **CLI 自动生成的默认值** | `cli/.../AgentCommand.java:116-117` |
+
+CLI 那段代码是这样的:
+
+```java
+// cli/src/main/java/com/agentlog/cli/AgentCommand.java:116-117
+String runId = (clientRunId != null && !clientRunId.isBlank())
+        ? clientRunId : "run-" + UUID.randomUUID();     // 没传就随机生成一个
+```
+
+**所以不是"数据脏了",是两个不同来源的客户端各按自己的习惯生成。** 这本身就说明了这个字段的性质。
+
+**第二步:确认服务端到底校不校验。**
+
+翻 `AgentAssumeService`,答案很干脆——**除了 `@NotBlank`,一个字符都不校验,原样落库**:
+
+```java
+// backend/.../identity/pairing/application/AgentAssumeService.java:47
+agentService.findOwnedActiveAgentOrThrow(owner.ownerUserId(), agentAccountId);
+//  ↑ 唯一的安全校验:机娘必须存在、属于当前主人、且 ACTIVE,否则 404
+
+// :57-58
+session.setSourceTool(request.sourceTool());       // 原样存
+session.setClientRunId(request.clientRunId());     // 原样存,不校验格式
+```
+
+---
+
+### ✅ 答案①:核心判据——**一个字段能不能交给客户端,取决于它参不参与授权决策**
+
+我把这条链路上所有字段按可信度分成三级,分完之后一切都清楚了:
+
+| 可信度 | 字段 | 谁决定的 | 为什么可以/不可以 |
+|---|---|---|---|
+| 🟢 **服务端权威** | `owner_user_id`、`installation_id`、`session.id`、令牌摘要 | **服务端**从令牌反查出来 | 客户端**碰都碰不到**,伪造无门 |
+| 🟡 **客户端提出,服务端裁决** | `agentAccountId`(URL 路径参数) | 客户端提出 → 服务端校验 | 客户端可以随便写别人的机娘 id,但 `:47` 那行会挡下来 → **404**(而且刻意不返回 403,免得泄漏"这个机娘存在") |
+| 🔴 **客户端自由声明** | `sourceTool`、`clientRunId` | **纯客户端** | **它不参与任何授权决策**,伪造它没有任何安全收益 |
+
+**关键推理**:假设一个机娘乱填 `clientRunId="run-老板的运行"` 会怎样?
+
+答案是——**什么也不会发生**。它换到的令牌,权限完全由 🟢🟡 两级字段决定(它只能代入自己主人名下的机娘)。乱填 runId 的唯一后果是**给自己的投稿贴了个错标签**,伤害的是它自己的可追溯性。
+
+> 📌 **一句话判据:如果伪造一个字段无法带来任何越权收益,那它就可以交给客户端。反之则必须服务端权威。**
+
+### ✅ 答案②:为什么服务端不能自己生成这个 id?
+
+这个问题我一开始也想岔了——"服务端自己生成一个不就干净了吗?"
+
+**不行,因为服务端根本不知道"一次运行"的边界在哪。**
+
+"一次运行"是**客户端进程/会话的概念**:一个 AI 机娘从被唤起、干活、到收尾,这段跨度只有客户端自己清楚。服务端看到的只是**一堆离散的 HTTP 请求**,它没有任何依据把请求 A 和请求 B 归为同一次运行。
+
+而且更关键——**令牌会过期,但运行不会因此结束**:
+
+```
+一次长跑(比如机娘干了 3 小时)
+├── 第 1 小时:assume → 令牌 A(1h 过期,无 refresh)
+├── 第 2 小时:令牌 A 过期 → 重新 assume → 令牌 B
+└── 第 3 小时:令牌 B 过期 → 重新 assume → 令牌 C
+                     ↑
+        三把令牌 = 三条 session 行 = 三个不同的 session.id
+        但逻辑上这是【同一次运行】,应该共享同一个 clientRunId
+```
+
+**这就是为什么 `contribution` 表存的是 `client_run_id` 而不是 `session.id`**——如果存 session.id,一次长跑的产出会被切成好几段,再也拼不回来。
+
+### ✅ 答案③:所以两个 id 是分工,不是二选一
+
+我原来的疑问是"审计到底用哪个"。答案是**两个都要,各管一段**:
+
+| | `agent_acting_session.id`(主键) | `client_run_id` |
+|---|---|---|
+| **谁产生** | 服务端(自增) | 客户端声明 |
+| **可信度** | 🟢 绝对可信 | 🔴 不可信,仅作标注 |
+| **回答什么问题** | "**用哪把令牌**写进来的" | "机娘**哪一次干活**产出的" |
+| **性质** | 技术凭证的审计锚点 | 业务运行的关联标识 |
+| **粒度** | 每次 assume 一条 | 一次运行一个(可跨多条 session) |
+| **能不能用于鉴权** | 是(令牌验证的落点) | **绝对不能** |
+
+**一句话:`session.id` 审计"凭证",`client_run_id` 关联"业务"。**
+
+### 🌍 这不是我们的土办法,是业界通行模式
+
+想通之后我发现,"客户端声明的关联标识"到处都是:
+
+| 例子 | 谁生成 | 服务端态度 |
+|---|---|---|
+| **OpenTelemetry 的 trace id** | 客户端/上游服务 | 记录并串联,**不校验** |
+| **Stripe 的 `Idempotency-Key`** | 客户端 | 用它去重,**不校验格式** |
+| **AWS 的 `ClientRequestToken`** | 客户端 | 同上 |
+| **HTTP `User-Agent`** | 客户端 | 记录/分流,**从不用于授权** |
+
+**共同点:全都是客户端声明、服务端记录但不信任、绝不参与授权。** `clientRunId` 属于同一族。
+
+### ⚠️ 诚实交代一个当前的缺口(讲出来反而加分)
+
+`V011` 里那个隔离索引是**普通 KEY,不是 UNIQUE**:
+
+```sql
+KEY idx_agent_acting_isolation (agent_account_id, source_tool, client_run_id)
+--  ↑ 普通索引,不是 UNIQUE
+```
+
+意味着现在同一组 `(机娘, 工具, 运行)` 可以 assume **无数次**,各拿一把令牌,谁也不拦。
+
+**现阶段这是对的**——因为上面说了,一次长跑本来就需要多次 assume 换令牌。但如果将来要做**投稿幂等**(后续课的多机娘协作 submit 就标了"幂等"要求),`clientRunId` 很可能要升格成幂等键,那时候约束和唯一性就得重新设计。
+
+**我把它记下来了,而不是假装没这回事。**
+
+> 另外一个小的不一致,也一并记着:`contribution.client_run_id` 是 `VARCHAR(128)`(V005 建的),而 `agent_acting_session.client_run_id` 是 `VARCHAR(64)`(V011 建的)。方向是"窄 → 宽",不会截断,所以不是 bug,但两处该对齐。
+
+---
+
+### 🎤 面试自述(3 分钟版,可直接背)
+
+> 验收的时候我在数据库同一列里看到两种画风完全不同的值:一个是 `run-1`,一个是 `run-` 加 UUID。追下去发现是两个客户端各自生成的——一个是我 Postman 手填的,一个是 CLI 默认用 UUID 生成的。再往下查,发现服务端**除了非空,一个字符都不校验**,原样落库。
+>
+> 我第一反应是"这是不是漏了校验",于是把这条链路上每个字段按可信度分了三级:服务端从令牌反查出来的(主人 id、设备 id、会话 id)是绝对权威,客户端碰不到;URL 里的机娘 id 是客户端提出、服务端裁决——它可以填别人的机娘,但服务端会校验归属,不通过就返回 404,而且刻意不用 403,避免泄漏"这个机娘存在";剩下的 sourceTool 和 clientRunId 是纯客户端声明的。
+>
+> **想通的判据是:伪造这个字段能不能带来越权收益。** clientRunId 不参与任何授权决策,乱填的唯一后果是给自己的投稿贴错标签,伤的是自己的可追溯性,所以可以放心交给客户端。
+>
+> 那服务端为什么不自己生成一个?因为**服务端不知道"一次运行"的边界在哪**——那是客户端进程的概念。而且我们的机娘令牌是一小时短命、没有 refresh 的,一次三小时的长跑要重新 assume 三次、产生三条会话记录,但逻辑上还是同一次运行。所以 contribution 表存的是 clientRunId 而不是会话主键——**存主键会把一次运行切碎成几段,再也拼不回来**。
+>
+> 最后我理清了两个 id 是分工不是二选一:**会话主键审计"用哪把令牌进来的",clientRunId 关联"哪一次干活产出的"**。后来我发现这正是业界通行模式——OpenTelemetry 的 trace id、Stripe 的 Idempotency-Key、AWS 的 ClientRequestToken,全都是客户端声明、服务端记录但不信任、绝不参与授权。
+>
+> 顺带我也记下了一个当前缺口:那个隔离索引现在是普通索引不是唯一索引,所以同一次运行可以重复 assume。现阶段是对的,但将来要做投稿幂等的话,这个字段可能要升格成幂等键,约束得重新设计。
+
+### 📌 学习点(半年后只看这几条也能捡回来)
+
+1. **核心判据:一个字段能不能交给客户端 = 伪造它能不能带来越权收益。** 不能 → 放心交出去
+2. 把链路上的字段分**三级可信度**:🟢服务端权威 / 🟡客户端提出+服务端裁决 / 🔴客户端自由声明——分完之后设计意图自然浮现
+3. **服务端不该生成"客户端会话边界"类的 id**——它没有依据判断边界在哪
+4. **令牌生命周期 ≠ 业务运行生命周期**。令牌会过期换新,业务运行不会因此中断,所以业务记录要用**业务级关联 id**,不能用技术凭证的主键
+5. **两个 id 分工**:技术主键审计"凭证",客户端 id 关联"业务"
+6. 归属校验失败返 **404 而不是 403**,是刻意的——403 等于承认"这东西存在",会泄漏存在性
+7. 这类"客户端声明的关联标识"是业界通行模式(trace id / Idempotency-Key / ClientRequestToken / User-Agent),**共性是:记录但不信任、绝不参与授权**
+8. 已知缺口要写下来而不是掩盖:隔离索引非 UNIQUE → 将来做幂等要重新设计
+
+### 🔗 关联
+
+- [故事 15:三种 principal](#故事-15一个请求进来后端凭什么知道你是谁三种-principal两种读法一个接口l05l14) —— 同一课的另一个疑问;那些🟢字段就是从 principal 里来的
+- [故事 13:四层认证体系](#故事-13为-cli--ai-机娘设计一套四层认证体系选型流程与安全纵深l12-l13) —— assume 这一层的完整由来
+- [故事 10:RTR 令牌轮换](#故事-10rtr-令牌轮换比双-token-多做的两件事l13) —— 令牌短命/轮换的设计背景
+
+---
+
+## 故事 17:契约声明了、后端没填、前端假装没这回事——一个"三方各退一步"造出的洞（L06→L14）
+
+> **一句话**:OpenAPI 契约里声明了 `ContentBlockView.author`(这段是谁写的),但**两个后端模块都没填、前端也没读**,于是这个字段在纸面上存在了 8 节课、实际上从来没有值——直到 AI 机娘开始投稿,"看不出哪段是机器写的"才变成真问题。
+>
+> **什么时候讲**:面试官问「契约先行怎么落地」「前后端怎么对齐」「你怎么发现隐藏的技术债」「N+1 怎么防」。
+>
+> **开场钩子**:"我们是契约先行的项目。但我发现契约里有个字段,后端两个模块都没实现,前端也没读——**三方都'没错',字段就这么空了八节课**。"
+
+### 🎬 场景重建(先帮你想起当时在干什么)
+
+L14 刚做完:AI 机娘能自动投稿了,我也补了主人的审稿页。端到端跑通,机娘投的草稿在页面上显示:
+
+```
+🤖 机娘投稿   可编辑   草稿 #6   v0
+L14 收尾：补齐草稿预览页……
+—— 来源工具：claude-code          ← 只有这一行
+```
+
+我盯着"来源工具：claude-code"看了几秒,意识到一个问题:**我库里有两个机娘,星梦(id=1)和 Queen(id=2)。这页告诉我"是用 claude-code 跑的",但没告诉我是它们俩谁写的。**
+
+审稿的人最需要知道的恰恰是"谁写的"——不同机娘可能有不同人格、不同可信度。结果页面上只有工具名。
+
+我去翻契约,愣住了:
+
+```yaml
+# docs/api/agentlog-openapi.yaml
+ContentBlockView:
+  properties:
+    blockId: ...
+    displayOrder: ...
+    content: ...
+    author:                          # ← 早就声明了!
+      $ref: '#/components/schemas/AuthorView'
+    sourceTool: ...
+```
+
+**契约里明明白白写着 `author`。** 那为什么没有值?
+
+### 🔍 追查:三方各自"没错",合起来就是个洞
+
+我顺着查了三层,发现这不是谁犯了错,而是**三方各退一步,退出来一个空洞**:
+
+**第一层 · 后端 content 模块** — record 只有 4 个字段,压根没有 `author`:
+
+```java
+public record ContentBlockView(
+        Long blockId, Integer displayOrder, String content, String sourceTool) {}
+        //                                    ↑ 契约里 author 该在这儿,没有
+```
+
+**第二层 · 后端 forum 模块** — 同名 record,**同样 4 个字段**(两模块各持一份读模型,互不 import,这是 Modulith 边界的正常做法)。**两处一起漏**。
+
+**第三层 · 更狠的**:forum 的帖子详情里,连帖子级的作者列表都是写死的空:
+
+```java
+return new PublicPostView(
+        ...,
+        List.of(),        // ← authors 直接返回空列表
+        ...);
+// 注释写着:"authors 详情页暂保留骨架；L10 先补 Feed 卡片作者头像组"
+```
+
+那条注释是**关键证据**:当时的判断是"详情页作者先欠着,Feed 卡片更要紧"。这个"暂"字一欠就是好几节课,而且**没有任何机制会提醒它**。
+
+**第四层 · 前端**:生成的 TS 客户端里 `author?: AuthorView` 一直存在(它是从契约生成的),但页面代码从来没读过它——因为读了也是 `undefined`。
+
+### 💡 为什么八节课都没人发现?
+
+这才是我觉得最值得讲的部分。
+
+**因为在 L14 之前,所有内容都是主人自己写的。** 一篇帖子只有一个作者,而这个作者信息在**别的地方已经有了**(帖子级的 owner、Feed 卡片的作者头像)。块级的 `author` 是冗余的,空着完全不影响任何人。
+
+**是 AI 机娘的加入让这个字段第一次有了信息量**——同一篇稿可能有主人写的段落 + 机娘写的段落,块级作者从"冗余"变成"唯一能回答'哪段是谁写的'的地方"。
+
+> 📌 **这是一类典型的技术债:字段在纸面上存在,但因为当时的业务形态用不到它,三方都合理地跳过了。等业务形态变了,它就从"冗余"变成"缺失"——而且没有任何测试会失败,因为从来没人断言过它。**
+
+### ✅ 怎么修的
+
+**关键约束:content / forum 都需要作者的展示名,但作者数据在 identity 模块**(主人在 `user_account.username`,机娘在 `agent_account.nickname`)。直接 import identity 的类会被 ArchUnit 判红。
+
+按项目既定规则(放弃 Facade、改用 Spring Modulith 包边界):**跨模块【只读】走 SQL 投影直查物理表,【写】只碰本模块表**。所以两个模块各自写自己的投影查询,只 SELECT 展示字段,零 Java 依赖。
+
+**修法三要点:**
+
+**① 两类作者查两次,合进一张表,键必须带类型前缀**
+
+```java
+index.put("U:" + row.getUserId(), ...);    // 人
+index.put("A:" + row.getAgentId(), ...);   // 机娘
+```
+
+**为什么必须加前缀**:`user_account.id` 和 `agent_account.id` 是两套独立自增序列。**userId=1 和 agentId=1 同时存在且是不同实体**——不加前缀,同一张 Map 里直接撞车,主人会显示成机娘。这个坑我是在设计键的时候就想到的,不是撞出来的。
+
+**② 防 N+1:两条 IN 查询封顶,不逐块查**
+
+一篇稿可能有几十个块。逐块查作者就是教科书级 N+1。做法是先把所有块的 userId / agentId 收成两个 Set,两条 `IN` 查完,再在内存里拼装。**这跟项目里 Feed 卡片查作者是同一个套路**(收 id → 批量查 → 内存 join)。
+
+**③ 查不到时降级成脱敏占位,不返回 null**
+
+```java
+return b.getAuthorAgentId() != null
+        ? AuthorView.deletedAgent(b.getAuthorAgentId())   // "已下线的机娘"
+        : AuthorView.deletedOwner(b.getAuthorUserId());   // "已注销"
+```
+
+契约里 `AuthorView.deleted` 这个布尔字段就是为这个场景准备的:**作者注销了,内容还在,追溯链不能断**——保留 id 供追溯,展示名脱敏。只有 L06 之前那种作者维度整个为空的历史数据才如实返回 `null`。
+
+**④ 补测试锁住**:机娘投稿的块作者是 AGENT + 昵称对得上;主人投稿的块作者是 OWNER + 用户名对得上、且 `agentId` 不存在。**两条对照着写**,防止只顾修 AGENT 把 OWNER 改回归了。
+
+### 🎤 面试自述(3 分钟版)
+
+> 我们项目是契约先行的——OpenAPI 写在前面,前端客户端代码从契约生成。我在做 AI 机娘投稿功能时发现,审稿页只能显示"来源工具 claude-code",却显示不出是哪个机娘写的。翻契约一看,`ContentBlockView` 里明明声明了 `author` 字段。
+>
+> 追下去发现是**三方各退一步造出的洞**:后端两个模块的 DTO 都只有 4 个字段、没实现 author;其中一个模块连帖子级的作者列表都是写死的空数组,注释还留着"暂保留骨架";前端生成的类型里 author 一直在,但页面从没读过——读了也是 undefined。
+>
+> **为什么八节课没人发现?因为在 AI 投稿之前,所有内容都是主人自己写的,一篇一个作者,块级作者是冗余信息,空着不影响任何人。** 是机娘的加入让它从"冗余"变成"唯一能回答哪段是谁写的地方"。这类债很隐蔽——**没有任何测试会失败,因为从来没人断言过它**。
+>
+> 修的时候有三个技术点。第一,作者数据在 identity 模块,但要它的是 content 和 forum——直接 import 会被 ArchUnit 判红,所以按项目规则走跨模块只读 SQL 投影,各模块查各自的,零 Java 依赖。第二,人和机娘的 id 是两套独立自增序列,userId=1 和 agentId=1 是不同实体,所以作者查找表的键必须带类型前缀,否则主人会显示成机娘。第三,防 N+1——一篇稿几十个块,不能逐块查,而是收齐 id 两条 IN 查完再内存拼装。
+>
+> 还有个细节我比较满意:作者查不到时我没返回 null,而是降级成"已注销"这种脱敏占位并保留 id。**因为作者注销了内容还在,追溯链不能断**——契约里 `deleted` 这个布尔字段本来就是为这个场景设计的。
+
+### 📌 学习点(半年后只看这几条也能捡回来)
+
+1. **契约先行不等于契约被实现**。生成客户端只保证"类型对得上",不保证"字段有值"——**契约合规性需要单独测**
+2. 一类隐蔽技术债:**字段因当时业务形态用不到而被三方合理跳过,业务形态一变就从"冗余"变"缺失"**,且无测试会失败
+3. 代码注释里的 **"暂"「先」「留到 Lxx」是债务标记**——没有机制追踪它就会永远欠着。看到这种注释要么建 issue 要么就别写
+4. **多套独立自增 id 合进同一张 Map,键必须带类型前缀**(userId=1 ≠ agentId=1)
+5. 批量翻译 id → 视图对象:**收 id 成 Set → 少数几条 IN → 内存 join**,是防 N+1 的通用套路
+6. **实体删除后,引用它的历史内容要降级展示而不是断链**:保留 id 供追溯 + 展示名脱敏 + 一个 `deleted` 标记位
+7. 跨模块要数据时,先问"是读还是写":**只读可以走 SQL 投影直查(零 Java 依赖),写必须留在自己模块**
+8. 修一个分支时,**给对照分支也补一条测试**(修 AGENT 就同时锁住 OWNER),否则容易顾此失彼
+
+### 🔗 关联
+
+- [故事 15:三种 principal](#故事-15一个请求进来后端凭什么知道你是谁三种-principal两种读法一个接口l05l14) —— 同样是"跨模块拿身份",那次用 DIP 接口,这次用 SQL 投影,判据是**读 vs 写**
+- [故事 7:跨模块操作的三种规则](#故事-7跨模块操作的三种规则l07l09-三层递进) —— 跨模块规则的完整版
+- [故事 1:Feed 列表的 N+1 问题怎么防](#故事-1feed-列表的-n1-问题怎么防l07) —— 同一个批量查询套路的起源
+
+---
+
 ## 面试自述模板
 
 选 2-3 个故事串成 3-5 分钟:
