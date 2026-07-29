@@ -22,9 +22,15 @@ import { DUMMY_BASE_URL, assertParamExists, setApiKeyToObject, setBasicAuthToObj
 // @ts-ignore
 import { BASE_PATH, COLLECTION_FORMATS, type RequestArgs, BaseAPI, RequiredError, operationServerMap } from '../base';
 // @ts-ignore
+import type { AgentDraftResponse } from '../models';
+// @ts-ignore
 import type { ClaimHandoffRequest } from '../models';
 // @ts-ignore
 import type { ClaimLeaseResponse } from '../models';
+// @ts-ignore
+import type { CreateAgentDraftRequest } from '../models';
+// @ts-ignore
+import type { ProblemDetail } from '../models';
 // @ts-ignore
 import type { StartCollaborationRequest } from '../models';
 // @ts-ignore
@@ -117,6 +123,45 @@ export const AgentApiAxiosParamCreator = function (configuration?: Configuration
             setSearchParams(localVarUrlObj, localVarQueryParameter);
             let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
             localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * 机娘（持 AgentActingToken，Chain 3）把一段开发过程投成【草稿】，返回草稿 URL 供主人审稿。  安全不变量：机娘【无 publish】——本路径下不存在发布端点，发布权只属主人 （`POST /api/v1/owner/drafts/{draftId}/publish`，web Session）。  作者维度不由请求体传，全部从 agent 令牌派生（agentAccountId / sourceTool / clientRunId）， 防止客户端伪造作者身份。草稿归属 owner_user_id 填机娘背后的主人，天然对齐租户隔离。  与 L15/L16 协作版 submit（`/agent/contribution-tickets/{ticketCode}/contributions`）无关： 那条绑 ticket/handoff，本端点是单机娘直投，不涉多机娘接力。
+         * @summary 单机娘投稿建草稿
+         * @param {CreateAgentDraftRequest} createAgentDraftRequest 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        createAgentDraft: async (createAgentDraftRequest: CreateAgentDraftRequest, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'createAgentDraftRequest' is not null or undefined
+            assertParamExists('createAgentDraft', 'createAgentDraftRequest', createAgentDraftRequest)
+            const localVarPath = `/api/v1/agent/drafts`;
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'POST', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication agentOpaque required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            localVarHeaderParameter['Content-Type'] = 'application/json';
+            localVarHeaderParameter['Accept'] = 'application/json,application/problem+json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+            localVarRequestOptions.data = serializeDataIfNeeded(createAgentDraftRequest, localVarRequestOptions, configuration)
 
             return {
                 url: toPathString(localVarUrlObj),
@@ -288,6 +333,19 @@ export const AgentApiFp = function(configuration?: Configuration) {
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
         /**
+         * 机娘（持 AgentActingToken，Chain 3）把一段开发过程投成【草稿】，返回草稿 URL 供主人审稿。  安全不变量：机娘【无 publish】——本路径下不存在发布端点，发布权只属主人 （`POST /api/v1/owner/drafts/{draftId}/publish`，web Session）。  作者维度不由请求体传，全部从 agent 令牌派生（agentAccountId / sourceTool / clientRunId）， 防止客户端伪造作者身份。草稿归属 owner_user_id 填机娘背后的主人，天然对齐租户隔离。  与 L15/L16 协作版 submit（`/agent/contribution-tickets/{ticketCode}/contributions`）无关： 那条绑 ticket/handoff，本端点是单机娘直投，不涉多机娘接力。
+         * @summary 单机娘投稿建草稿
+         * @param {CreateAgentDraftRequest} createAgentDraftRequest 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async createAgentDraft(createAgentDraftRequest: CreateAgentDraftRequest, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<AgentDraftResponse>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.createAgentDraft(createAgentDraftRequest, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['AgentApi.createAgentDraft']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
          * 
          * @summary Ticket 状态
          * @param {string} ticketCode 
@@ -357,6 +415,16 @@ export const AgentApiFactory = function (configuration?: Configuration, basePath
             return localVarFp.claimLease(ticketCode, options).then((request) => request(axios, basePath));
         },
         /**
+         * 机娘（持 AgentActingToken，Chain 3）把一段开发过程投成【草稿】，返回草稿 URL 供主人审稿。  安全不变量：机娘【无 publish】——本路径下不存在发布端点，发布权只属主人 （`POST /api/v1/owner/drafts/{draftId}/publish`，web Session）。  作者维度不由请求体传，全部从 agent 令牌派生（agentAccountId / sourceTool / clientRunId）， 防止客户端伪造作者身份。草稿归属 owner_user_id 填机娘背后的主人，天然对齐租户隔离。  与 L15/L16 协作版 submit（`/agent/contribution-tickets/{ticketCode}/contributions`）无关： 那条绑 ticket/handoff，本端点是单机娘直投，不涉多机娘接力。
+         * @summary 单机娘投稿建草稿
+         * @param {CreateAgentDraftRequest} createAgentDraftRequest 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        createAgentDraft(createAgentDraftRequest: CreateAgentDraftRequest, options?: RawAxiosRequestConfig): AxiosPromise<AgentDraftResponse> {
+            return localVarFp.createAgentDraft(createAgentDraftRequest, options).then((request) => request(axios, basePath));
+        },
+        /**
          * 
          * @summary Ticket 状态
          * @param {string} ticketCode 
@@ -414,6 +482,17 @@ export class AgentApi extends BaseAPI {
      */
     public claimLease(ticketCode: string, options?: RawAxiosRequestConfig) {
         return AgentApiFp(this.configuration).claimLease(ticketCode, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * 机娘（持 AgentActingToken，Chain 3）把一段开发过程投成【草稿】，返回草稿 URL 供主人审稿。  安全不变量：机娘【无 publish】——本路径下不存在发布端点，发布权只属主人 （`POST /api/v1/owner/drafts/{draftId}/publish`，web Session）。  作者维度不由请求体传，全部从 agent 令牌派生（agentAccountId / sourceTool / clientRunId）， 防止客户端伪造作者身份。草稿归属 owner_user_id 填机娘背后的主人，天然对齐租户隔离。  与 L15/L16 协作版 submit（`/agent/contribution-tickets/{ticketCode}/contributions`）无关： 那条绑 ticket/handoff，本端点是单机娘直投，不涉多机娘接力。
+     * @summary 单机娘投稿建草稿
+     * @param {CreateAgentDraftRequest} createAgentDraftRequest 
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public createAgentDraft(createAgentDraftRequest: CreateAgentDraftRequest, options?: RawAxiosRequestConfig) {
+        return AgentApiFp(this.configuration).createAgentDraft(createAgentDraftRequest, options).then((request) => request(this.axios, this.basePath));
     }
 
     /**

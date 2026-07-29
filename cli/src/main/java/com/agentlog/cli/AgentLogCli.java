@@ -18,7 +18,7 @@ import picocli.CommandLine.Command;
         mixinStandardHelpOptions = true,
         version = "agentlog-cli 0.1.0",
         description = "AgentLog 命令行工具",
-        subcommands = {AuthCommand.class, AgentCommand.class})
+        subcommands = {AuthCommand.class, AgentCommand.class, SubmitCommand.class})
 public class AgentLogCli implements Runnable {
 
     @Override

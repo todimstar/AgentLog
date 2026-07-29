@@ -21,3 +21,8 @@
 #docs/*.md
 # Then explicitly reverse the ignore rule for a single file:
 #!docs/README.md
+
+# —— 本项目自定 ——
+# git_push.sh 是生成器给"把生成代码推到独立仓库"用的脚本，本项目生成代码直接在主仓库里，用不上。
+# 它每次 api:generate 都会重生，此前 e6fa080 手删过一次又长回来——在此永久忽略，免得反复污染 git status。
+git_push.sh

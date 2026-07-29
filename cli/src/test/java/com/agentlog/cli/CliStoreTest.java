@@ -69,6 +69,25 @@ class CliStoreTest {
     }
 
     @Test
+    void actingTokenRoundTripAndValidityByExpiry() {
+        CredentialStore store = new CredentialStore();
+        // 未 assume 时无 acting token，判为无效。
+        assertThat(store.getActingToken()).isNull();
+        assertThat(store.getActingAgentId()).isNull();
+        assertThat(store.isActingValid(Instant.now())).isFalse();
+
+        Instant future = Instant.now().plus(1, ChronoUnit.HOURS);
+        store.saveActingToken(42L, "agent_at_secret", future.toString());
+
+        // 存回读出，agent id 与有效期正确。
+        assertThat(store.getActingToken()).isEqualTo("agent_at_secret");
+        assertThat(store.getActingAgentId()).isEqualTo(42L);
+        assertThat(store.isActingValid(Instant.now())).isTrue();
+        // 过期后判无效（机娘令牌短命无 refresh，须重新 assume）。
+        assertThat(store.isActingValid(future.plus(1, ChronoUnit.MINUTES))).isFalse();
+    }
+
+    @Test
     void configAndCredentialsAreSeparateFiles() throws Exception {
         new CliConfig().getOrCreateInstallationCode();
         new CredentialStore().saveTokens("a", "b", Instant.now().toString());

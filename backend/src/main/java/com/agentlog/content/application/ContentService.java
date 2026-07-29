@@ -1,10 +1,12 @@
 package com.agentlog.content.application;
 
+import com.agentlog.content.api.dto.request.CreateAgentDraftRequest;
 import com.agentlog.content.api.dto.request.CreateOwnerDraftRequest;
 import com.agentlog.content.api.dto.response.DraftView;
 import com.agentlog.content.api.dto.request.PublishDraftRequest;
 import com.agentlog.content.api.dto.response.PublishDraftResponse;
 import com.agentlog.content.domain.AuthorType;
+import com.agentlog.shared.security.AgentIdentity;
 import com.agentlog.content.domain.ContentOrigin;
 import com.agentlog.content.domain.DraftStatus;
 import com.agentlog.content.domain.ModerationStatus;
@@ -54,20 +56,51 @@ public class ContentService {
         this.postVersionBlockMapper = postVersionBlockMapper;
     }
 
+    /**
+     * 主人建草稿（web Session，author_type=OWNER）。薄封装：拼一个 OWNER 作者维度，调公共内核。
+     */
     @Transactional
     public DraftView createOwnerDraft(long currentUserId, CreateOwnerDraftRequest request) {
+        DraftAuthor author = DraftAuthor.owner(currentUserId);
+        return createDraftInternal(author, request.title(), request.channelId(),
+                request.content(), request.summary(), request.declaredExternalAiContent());
+    }
+
+    /**
+     * 机娘投稿建草稿（L14·Chain 3，author_type=AGENT）。薄封装：从 agent 令牌身份拼 AGENT 作者维度，调公共内核。
+     *
+     * 关键：草稿归属键 owner_user_id 填【机娘背后的主人】（principal.ownerUserId），
+     * 于是这篇稿天然落进该主人的草稿箱——只有他能在 /owner/drafts 里看、审、发（机娘无 publish）。
+     * declaredExternalAiContent 固定 false：机娘投稿的 AI 参与标识留 L20 主人审稿时推导（本课不碰）。
+     */
+    @Transactional
+    public DraftView createAgentDraft(AgentIdentity principal, CreateAgentDraftRequest request) {
+        DraftAuthor author = DraftAuthor.agent(
+                principal.agentAccountId(), principal.ownerUserId(),
+                principal.sourceTool(), principal.clientRunId());
+        return createDraftInternal(author, request.title(), request.channelId(),
+                request.content(), request.summary(), false);
+    }
+
+    /**
+     * 建草稿公共内核：建 Post 指针 + Contribution(不可变原始) + Draft 头 + DraftBlock。
+     * owner/agent 两条投稿路共用，差别只在【作者维度】(DraftAuthor)——谁写的、用什么工具、哪次运行、归属谁。
+     */
+    @Transactional
+    protected DraftView createDraftInternal(DraftAuthor author, String title, Long channelId,
+                                            String content, String summary,
+                                            boolean declaredExternalAiContent) {
         Instant now = Instant.now(clock);
 
-        //
-        ForumChannelDO channel = forumChannelMapper.selectById(request.channelId());
+        ForumChannelDO channel = forumChannelMapper.selectById(channelId);
         if(channel == null){
             throw new ApiException(ApiStatus.CHANNEL_NOT_FOUND);
         }
 
         //先帖子指针库占位
         PostDO post = new PostDO();
-        post.setOwnerUserId(currentUserId);
-        post.setChannelId(request.channelId());
+        post.setOwnerUserId(author.ownerUserId());
+        post.setChannelId(channelId);
         post.setVisibilityStatus(PostVisibility.DRAFT_ONLY.getCode());
         post.setIterationCount(0);
         post.setViewCount(0L);
@@ -83,21 +116,24 @@ public class ContentService {
         postMapper.insert(post);
 
         ContributionDO contribution = new ContributionDO();
-        contribution.setAuthorType(AuthorType.OWNER.getCode());
-        contribution.setAuthorUserId(currentUserId);
-        contribution.setRawContent(request.content());  //content原始备份
+        contribution.setAuthorType(author.authorType().getCode());
+        contribution.setAuthorUserId(author.authorUserId());
+        contribution.setAuthorAgentId(author.authorAgentId());
+        contribution.setSourceTool(author.sourceTool());
+        contribution.setClientRunId(author.clientRunId());
+        contribution.setRawContent(content);  //content原始备份
         contribution.setCreatedAt(now);
         contributionMapper.insert(contribution);
 
         //草稿头
         DraftDO draft = new DraftDO();
         draft.setPostId(post.getId());
-        draft.setOwnerUserId(currentUserId);
-        draft.setTitle(request.title());
-        draft.setSummary(request.summary());    //可选字段
-        draft.setChannelId(request.channelId());
+        draft.setOwnerUserId(author.ownerUserId());
+        draft.setTitle(title);
+        draft.setSummary(summary);    //可选字段
+        draft.setChannelId(channelId);
         draft.setStatus(DraftStatus.EDITABLE.getCode());
-        draft.setDeclaredExternalAiContent(request.declaredExternalAiContent());
+        draft.setDeclaredExternalAiContent(declaredExternalAiContent);
         draft.setVersion(0L);
         draft.setCreatedAt(now);
         draft.setUpdatedAt(now);
@@ -108,9 +144,11 @@ public class ContentService {
         block.setDraftId(draft.getId());
         block.setContributionId(contribution.getId());
         block.setAuthorType(contribution.getAuthorType());//这才是沉淀于contribution
-        block.setAuthorUserId(currentUserId);
+        block.setAuthorUserId(author.authorUserId());
+        block.setAuthorAgentId(author.authorAgentId());
+        block.setSourceTool(author.sourceTool());  //供 ContentBlockView 展示工具来源
         block.setDisplayOrder(0);   //特定字段主人写法
-        block.setRenderedContent(request.content());
+        block.setRenderedContent(content);
         block.setIsHidden(false);
         block.setVersion(0L);
         block.setCreatedAt(now);
@@ -119,6 +157,28 @@ public class ContentService {
 
 
         return DraftView.from(draft, List.of(block));
+    }
+
+    /**
+     * 建草稿的【作者维度】参数对象。把"谁写的"从投稿主流程里收敛出来，owner/agent 各拼一个。
+     *   owner：author_type=OWNER，authorUserId=当前登录用户，agent 维度全 null，归属自己。
+     *   agent：author_type=AGENT，authorAgentId=代入的机娘，带 source_tool/client_run_id，归属机娘背后的主人。
+     */
+    private record DraftAuthor(
+            AuthorType authorType,
+            Long authorUserId,
+            Long authorAgentId,
+            String sourceTool,
+            String clientRunId,
+            Long ownerUserId) {
+
+        static DraftAuthor owner(long currentUserId) {
+            return new DraftAuthor(AuthorType.OWNER, currentUserId, null, null, null, currentUserId);
+        }
+
+        static DraftAuthor agent(Long agentAccountId, Long ownerUserId, String sourceTool, String clientRunId) {
+            return new DraftAuthor(AuthorType.AGENT, null, agentAccountId, sourceTool, clientRunId, ownerUserId);
+        }
     }
 
     //查草稿，自带userId和draftId
@@ -140,6 +200,7 @@ public class ContentService {
 
         return DraftView.from(draft,blocks);
     }
+
 
     //发布草稿，涉及更新，用乐观锁加事件保证原子性
     @Transactional

@@ -72,6 +72,34 @@ public class CredentialStore {
         }
     }
 
+    /** 取当前代入机娘的 acting token（L14 投稿带 Bearer 用）；无则 null。 */
+    public String getActingToken() {
+        return readNestedString("activeAgent", "agentActingToken");
+    }
+
+    /** 当前代入机娘的 agent_account.id；无则 null。 */
+    public Long getActingAgentId() {
+        String v = readNestedString("activeAgent", "agentAccountId");
+        try {
+            return v == null ? null : Long.parseLong(v);
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    /** acting token 是否仍在有效期内（本地判断；无令牌/无过期时间视为无效）。过期须重新 assume（无 refresh）。 */
+    public boolean isActingValid(Instant now) {
+        String exp = readNestedString("activeAgent", "expiresAt");
+        if (getActingToken() == null || exp == null) {
+            return false;
+        }
+        try {
+            return now.isBefore(Instant.parse(exp));
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
     /** access token 是否仍在有效期内（本地判断，不查服务端；无凭据/无过期时间视为无效）。 */
     public boolean isAccessValid(Instant now) {
         String exp = getAccessExpiresAt();
@@ -89,6 +117,20 @@ public class CredentialStore {
         try {
             ObjectNode root = load();
             return root.hasNonNull(key) ? root.get(key).asText() : null;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /** 读嵌套对象下的字段（如 activeAgent.agentActingToken）；缺任一层则 null。 */
+    private String readNestedString(String parent, String key) {
+        try {
+            ObjectNode root = load();
+            if (!root.has(parent) || !root.get(parent).isObject()) {
+                return null;
+            }
+            ObjectNode child = (ObjectNode) root.get(parent);
+            return child.hasNonNull(key) ? child.get(key).asText() : null;
         } catch (Exception e) {
             return null;
         }

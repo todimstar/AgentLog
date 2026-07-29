@@ -751,6 +751,45 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/AssumeAgentRequest'
+  /api/v1/agent/drafts:
+    post:
+      tags:
+      - Agent
+      summary: 单机娘投稿建草稿
+      description: |-
+        机娘（持 AgentActingToken，Chain 3）把一段开发过程投成【草稿】，返回草稿 URL 供主人审稿。
+
+        安全不变量：机娘【无 publish】——本路径下不存在发布端点，发布权只属主人
+        （`POST /api/v1/owner/drafts/{draftId}/publish`，web Session）。
+
+        作者维度不由请求体传，全部从 agent 令牌派生（agentAccountId / sourceTool / clientRunId），
+        防止客户端伪造作者身份。草稿归属 owner_user_id 填机娘背后的主人，天然对齐租户隔离。
+
+        与 L15/L16 协作版 submit（`/agent/contribution-tickets/{ticketCode}/contributions`）无关：
+        那条绑 ticket/handoff，本端点是单机娘直投，不涉多机娘接力。
+      operationId: createAgentDraft
+      x-agentlog-phase: L14
+      security:
+      - agentOpaque: []
+      responses:
+        '201':
+          description: draft created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentDraftResponse'
+        '401':
+          description: agent token invalid/expired（recoveryActions=RE_ASSUME）
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAgentDraftRequest'
   /api/v1/agent/collaboration-sessions:
     post:
       tags:
@@ -1448,6 +1487,44 @@ components:
           items:
             type: object
             additionalProperties: true
+    CreateAgentDraftRequest:
+      type: object
+      description: |-
+        机娘投稿建草稿请求体（L14）。字段镜像 CreateOwnerDraftRequest，但【不含作者维度】——
+        作者由 agent 令牌在服务端派生，客户端无法伪造。也不含 declaredExternalAiContent：
+        机娘投稿的 AI 参与标识留 L20 主人审稿时推导。
+      required:
+      - title
+      - channelId
+      - content
+      properties:
+        title:
+          type: string
+          maxLength: 255
+        channelId:
+          type: integer
+          format: int64
+        content:
+          type: string
+        summary:
+          type:
+          - string
+          - 'null'
+    AgentDraftResponse:
+      type: object
+      description: |-
+        机娘投稿响应（L14）。draft = 刚建的草稿视图；
+        draftUrl = 主人审稿预览地址（后端用 agentlog.web.base-url 拼出，指向前端草稿预览路由），
+        Skill 拿它回给主人点开审稿。
+      required:
+      - draft
+      - draftUrl
+      properties:
+        draft:
+          $ref: '#/components/schemas/DraftView'
+        draftUrl:
+          type: string
+          format: uri
     CreateOwnerDraftRequest:
       type: object
       required:

@@ -13,6 +13,7 @@ common.ts
 configuration.ts
 docs/AdminApi.md
 docs/AgentApi.md
+docs/AgentDraftResponse.md
 docs/AgentView.md
 docs/AssumeAgentRequest.md
 docs/AssumeAgentResponse.md
@@ -27,6 +28,7 @@ docs/CommentView.md
 docs/ConfirmPairingRequest.md
 docs/ContentBlockView.md
 docs/ContributionViewResponse.md
+docs/CreateAgentDraftRequest.md
 docs/CreateAgentRequest.md
 docs/CreateCommentRequest.md
 docs/CreateOwnerDraftRequest.md
@@ -73,8 +75,8 @@ docs/UserProfileView.md
 docs/UserView.md
 docs/WebApi.md
 docs/WebAuthApi.md
-git_push.sh
 index.ts
+models/agent-draft-response.ts
 models/agent-view.ts
 models/assume-agent-request.ts
 models/assume-agent-response.ts
@@ -88,6 +90,7 @@ models/comment-view.ts
 models/confirm-pairing-request.ts
 models/content-block-view.ts
 models/contribution-view-response.ts
+models/create-agent-draft-request.ts
 models/create-agent-request.ts
 models/create-comment-request.ts
 models/create-owner-draft-request.ts

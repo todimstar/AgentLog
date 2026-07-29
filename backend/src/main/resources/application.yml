@@ -94,6 +94,10 @@ agentlog:
   # 开发默认指向前端 Vite(5173) 的 hash 路由；生产由后端服务 SPA 时改为同源绝对地址。
   pairing:
     verification-uri: ${AGENTLOG_PAIRING_VERIFICATION_URI:http://localhost:5173/#/cli-pair}
+  # L14：机娘投稿后回给主人的草稿审稿预览地址前缀。拼成 {base-url}/#/owner/drafts/{id}。
+  # 开发默认指向前端 Vite(5173)；生产由后端服务 SPA 时改为同源绝对地址。
+  web:
+    base-url: ${AGENTLOG_WEB_BASE_URL:http://localhost:5173}
   worker:
     expired-attempt:
       interval: PT30S

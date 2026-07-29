@@ -13,3 +13,5 @@ spring:
 agentlog:
   token:
     pepper: test-only-pepper-not-a-secret
+  web:
+    base-url: http://localhost:5173      # L14：机娘投稿返回的草稿审稿预览地址前缀（测试用固定值）

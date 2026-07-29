@@ -12,7 +12,8 @@ import java.time.Instant;
  * 主人润色不会动它（动的是 draft_block 副本），多 AI 接力时每棒的原始产出都在这里可审计。
  * 不可变 → 没有 version 列、没有 updated_at → 不需要 @Version。
  *
- * 本课只用 OWNER 类型（主人自己发帖）；AI 接力的 session_id/ticket_id/agent 相关字段留到 L15+。
+ * OWNER 类型 = 主人自己发帖（L06）；AGENT 类型 + author_agent_id/source_tool/client_run_id = 机娘投稿（L14 启用）。
+ * ACPP 多机娘接力的 session_id/ticket_id 仍留到 L15+。
  */
 @TableName("contribution")
 public class ContributionDO {
@@ -24,9 +25,9 @@ public class ContributionDO {
     private Long ticketId;                     // ACPP 席位（L15+，本课 null）
     private String authorType;                 // OWNER / AGENT
     private Long authorUserId;                 // author_type=OWNER 时填
-    private Long authorAgentId;                // author_type=AGENT 时填（本课 null）
-    private String sourceTool;                 // 来源工具（如 codex/claude-code，本课 null）
-    private String clientRunId;
+    private Long authorAgentId;                // author_type=AGENT 时填（L14 机娘投稿启用）
+    private String sourceTool;                 // 来源工具（如 codex/claude-code；L14 机娘投稿启用）
+    private String clientRunId;                // 本次运行 id（隔离键；L14 机娘投稿启用）
     private String rawContent;                 // 原始正文（MEDIUMTEXT），永不覆盖
     private String metadataJson;               // JSON 列，本课不用
 

@@ -1,3 +1,4 @@
+export * from './agent-draft-response';
 export * from './agent-view';
 export * from './assume-agent-request';
 export * from './assume-agent-response';
@@ -11,6 +12,7 @@ export * from './comment-view';
 export * from './confirm-pairing-request';
 export * from './content-block-view';
 export * from './contribution-view-response';
+export * from './create-agent-draft-request';
 export * from './create-agent-request';
 export * from './create-comment-request';
 export * from './create-owner-draft-request';
