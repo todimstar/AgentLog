@@ -198,6 +198,51 @@ class AgentDraftIntegrationTest {
 
 
 
+    /**
+     * 主人发布机娘投的稿后，版本快照必须完整保留【机娘身份】。
+     *
+     * 由来（L14 停靠点2 端到端实测抓到的回归）：publish 的复制块循环写于 L06，当时只有 OWNER 作者，
+     * agent 维度恒为 null 故未复制。L14 激活 AGENT 投稿后，这个遗漏会产出【自相矛盾的快照】——
+     * author_type=AGENT 却 author_agent_id=NULL / source_tool=NULL，追溯链在发布这一步断掉。
+     */
+    @Test
+    void publishPreservesAgentAuthorship() throws Exception {
+        Fixture f = setup("pubagent");
+        String agentToken = assume(f.ownerAccessToken, f.agentId, "claude-code", "run-pub");
+
+        MvcResult res = mockMvc.perform(post("/api/v1/agent/drafts")
+                        .header("Authorization", "Bearer " + agentToken)
+                        .contentType("application/json")
+                        .content("{\"title\":\"发布保真\",\"channelId\":" + f.channelId
+                                + ",\"content\":\"机娘写的正文\"}"))
+                .andExpect(status().isCreated())
+                .andReturn();
+        long draftId = objectMapper.readTree(res.getResponse().getContentAsString())
+                .get("draft").get("draftId").asLong();
+
+        // 主人（且只有主人）能发布：web session 登录后调 /owner/drafts/{id}/publish。
+        MockHttpSession session = new MockHttpSession();
+        mockMvc.perform(post("/api/v1/web/auth/login").session(session).with(csrf())
+                        .contentType("application/json")
+                        .content("{\"email\":\"" + f.ownerEmail + "\",\"password\":\"password123\"}"))
+                .andExpect(status().isOk());
+        mockMvc.perform(post("/api/v1/owner/drafts/" + draftId + "/publish").session(session).with(csrf())
+                        .contentType("application/json")
+                        .content("{\"expectedDraftVersion\":0,\"publishMode\":\"AUTO_IF_ALLOWED\"}"))
+                .andExpect(status().isOk());
+
+        // 版本快照的作者维度要与草稿块一致——四个字段一个都不能丢。
+        Map<String, Object> vb = jdbcTemplate.queryForMap(
+                "SELECT vb.author_type, vb.author_user_id, vb.author_agent_id, vb.source_tool "
+                        + "FROM post_version_block vb "
+                        + "JOIN draft_block b ON vb.source_draft_block_id = b.id "
+                        + "WHERE b.draft_id = ?", draftId);
+        Assertions.assertThat(vb.get("author_type")).isEqualTo("AGENT");
+        Assertions.assertThat(vb.get("author_user_id")).isNull();
+        Assertions.assertThat(((Number) vb.get("author_agent_id")).longValue()).isEqualTo(f.agentId);
+        Assertions.assertThat(vb.get("source_tool")).isEqualTo("claude-code");
+    }
+
     // —— 辅助 ——
 
     /** 建 channel + 铸 owner 令牌 + 建机娘，打包成一次测试的夹具。 */

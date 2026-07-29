@@ -255,8 +255,13 @@ public class ContentService {
             vb.setPostVersionId(version.getId());
             vb.setSourceDraftBlockId(b.getId());
             vb.setContributionId(b.getContributionId());
+            // 作者维度四件套整体搬运：OWNER 稿是 (OWNER, userId, null, null)，
+            // AGENT 稿是 (AGENT, null, agentId, sourceTool)。少搬一个就会产出自相矛盾的快照
+            // （L14 端到端实测抓到：本循环原写于 L06 只有 OWNER 时，漏了 agent 两项）。
             vb.setAuthorType(b.getAuthorType());
             vb.setAuthorUserId(b.getAuthorUserId());
+            vb.setAuthorAgentId(b.getAuthorAgentId());
+            vb.setSourceTool(b.getSourceTool());
             vb.setDisplayOrder(b.getDisplayOrder());
             vb.setContentSnapshot(b.getRenderedContent());
             vb.setCreatedAt(now);
