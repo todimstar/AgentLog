@@ -1,0 +1,143 @@
+/* Markdown 正文排版 —— 只服务 .markdown-body 容器（MarkdownContent.vue 的根元素）。
+ *
+ * 为什么单开一个文件、不改 base.css：
+ *   base.css 是从 Mock 前端【整体移植并压缩成 7 行】的设计系统，手改它可读性归零，
+ *   将来若重新移植还会冲突。Markdown 排版是新增关注点，独立文件天然合适，
+ *   将来接代码高亮库的样式也放这里。
+ *
+ * 为什么必须是全局样式（在 main.ts 引入），不能写进组件的 <style scoped>：
+ *   scoped 靠编译期给模板元素打 data-v-xxx 属性生效；
+ *   v-html 插进来的节点是【运行时】产物，没有这个属性，scoped 选择器一条都命中不了。
+ *
+ * base.css 里已有 .markdown-body 的 padding / h2 / p / pre 四条，本文件只补缺的部分。 */
+
+.markdown-body {
+  word-wrap: break-word;
+}
+
+/* ---------- 标题 ---------- */
+.markdown-body h1 {
+  font-size: 24px;
+  line-height: 1.35;
+  margin: 26px 0 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+}
+.markdown-body h3 {
+  font-size: 17px;
+  margin: 20px 0 6px;
+}
+.markdown-body h4,
+.markdown-body h5,
+.markdown-body h6 {
+  font-size: 15px;
+  margin: 16px 0 6px;
+  color: #4b5563;
+}
+/* 首个标题不要再往上顶出空白 */
+.markdown-body > :first-child {
+  margin-top: 0;
+}
+
+/* ---------- 列表 ---------- */
+.markdown-body ul,
+.markdown-body ol {
+  padding-left: 24px;
+  margin: 10px 0;
+  color: #4b5563;
+  line-height: 1.9;
+}
+.markdown-body li + li {
+  margin-top: 4px;
+}
+.markdown-body li > ul,
+.markdown-body li > ol {
+  margin: 4px 0;
+}
+
+/* ---------- 引用 ---------- */
+.markdown-body blockquote {
+  margin: 14px 0;
+  padding: 2px 16px;
+  border-left: 3px solid #c9c3ff;
+  background: #faf9ff;
+  border-radius: 0 10px 10px 0;
+  color: #5d6575;
+}
+.markdown-body blockquote p {
+  margin: 10px 0;
+}
+
+/* ---------- 代码 ---------- */
+/* 行内 code：与代码块（base.css 里的深色 pre）区分开，用浅底，免得一行字里插一块黑 */
+.markdown-body code {
+  font-family: "JetBrains Mono", Consolas, Menlo, monospace;
+  font-size: 0.9em;
+  background: #f2f4f9;
+  color: #5348a8;
+  padding: 2px 6px;
+  border-radius: 6px;
+}
+/* 代码块内部的 code 复位：外层 pre 已经有深色底和内边距了 */
+.markdown-body pre code {
+  background: none;
+  color: inherit;
+  padding: 0;
+  border-radius: 0;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+/* ---------- 表格 ---------- */
+.markdown-body table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 14px 0;
+  font-size: 14px;
+  display: block;
+  overflow-x: auto; /* 窄屏时表格自己横向滚动，不撑破文章卡片 */
+}
+.markdown-body th,
+.markdown-body td {
+  border: 1px solid var(--line);
+  padding: 8px 12px;
+  text-align: left;
+}
+.markdown-body th {
+  background: #f6f8fc;
+  font-weight: 700;
+}
+.markdown-body tbody tr:nth-child(even) {
+  background: #fbfcfe;
+}
+
+/* ---------- 链接 / 图片 / 分割线 ---------- */
+.markdown-body a {
+  color: var(--primary);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.markdown-body a:hover {
+  opacity: 0.8;
+}
+.markdown-body img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 12px;
+  margin: 10px 0;
+}
+.markdown-body hr {
+  border: 0;
+  border-top: 1px solid var(--line);
+  margin: 22px 0;
+}
+
+/* ---------- 行内强调 ---------- */
+.markdown-body strong {
+  font-weight: 800;
+  color: var(--text);
+}
+.markdown-body del {
+  color: #9aa4b4;
+}

@@ -6,7 +6,92 @@
 > L06–L11.5 条目为 2026-07-09 断更补录：由 11 个挖掘子代理逐行解析 58 个会话转录（157 条变更明细，
 > 在 `docs/changelog-evidence/mine*.json`，含续档分叉去重）与 git 全史交叉核实而成。
 
-## 0.1.0-SNAPSHOT - L14 单机娘 Skill 自动投稿 + 契约缺口独立修复（待提交）
+## 0.1.0-SNAPSHOT - Markdown 正文渲染与 XSS 消毒（全局补做 · 待提交）
+
+日期：2026-07-30
+
+> **不是新课，是补一笔跨 14 节课的欠账**。正文块（机娘投的稿、主人写的日志）本来就是 Markdown 源文，
+> 前端却一直用 `{{ block.content }}` 纯文本插值直接吐出来——满屏 `#` 和 ``` 原样显示。
+>
+> **开工前的取证结论：这不是新设计，是蓝图欠账**（与 L14 故事 17「契约声明未实装」是孪生兄弟，这次是**架构文档声明未实装**）：
+>
+> | 证据 | 内容 |
+> |---|---|
+> | Pack `02-architecture/技术BOM.md:23` | 技术选型里就有 **markdown-it、DOMPurify** |
+> | Pack `06-web/frontend-architecture.md:15` | 组件树里**早就列了 `MarkdownContent.vue`** |
+> | 同文件 `## Markdown` 节 | 五条规范：markdown-it 渲染 / DOMPurify 清理 / **禁止直接 `v-html` 输出未清理正文** / 代码块可后续接高亮 / V1 先保证安全和排版 |
+> | Pack `09-security/threat-model.md:5` | 威胁模型第一行：`XSS 读取认证 → Markdown DOMPurify` |
+> | `git log -S"markdown-it"` | **`5b49e17 feat(l00)` 就把依赖装好了** |
+> | 全局 grep | `markdown-it`/`dompurify` **0 处 import**、`v-html` **0 处** |
+>
+> **依赖在 L00 装好、组件在架构图里画好、威胁模型里指定好对策——然后没人接，14 节课。**
+> 故本次**无选型决策、无新增运行时依赖**，只是把设计意图落地并把蓝图没说透的细节钉死。
+> 扫过 `course_schedule` 全 26 课确认**无任何一课安排此事**，最接近的 L19/L20 是编辑与审稿 UX，不含渲染。
+
+### Added
+- **`web/src/utils/markdown.ts`**：全项目**唯一**持有 HTML 字符串的地方。markdown-it 模块级单例（`html:false` / `linkify:true` / `breaks:true` / `typographer:false`）+ DOMPurify 消毒 + 外链加固 hook，导出 `renderMarkdown(source)`。
+- **`web/src/components/MarkdownContent.vue`**（组件名由蓝图组件树钦定）：`props.source` 进、消毒后的 HTML 出，**调用方拿不到中间的 HTML 字符串**。自带 `.markdown-body` 根类，可独立用于任何页面（含将来 L19 的编辑预览）。
+- **`web/src/styles/markdown.css`**：`.markdown-body` 的元素排版（h1/h3-h6、ul/ol/li、blockquote、行内 code、table、a、img、hr、strong/del）。`base.css` 原本只有 h2/p/pre 三条。
+- **`web/src/utils/__tests__/markdown.spec.ts`**：**项目第一个前端测试**，23 例。11 种 XSS 载荷参数化 + 排版 + 外链加固。
+- devDependencies：`jsdom`（DOMPurify 需要真 DOM 才能跑）、`@types/markdown-it`（**markdown-it@14.2.0 不自带类型声明**，`strict` 下直接 TS7016）。
+
+### Changed
+- `PostDetailPage.vue` / `DraftPreviewPage.vue`：正文块 `<p>{{ block.content }}</p>` → `<MarkdownContent :source="block.content" />`；外层容器从 `.markdown-body` 改名 `.article-blocks`（每块自带该类，避免嵌套双重内边距）。
+- 两页各删掉一行 `.content-block p { white-space: pre-wrap }`——`breaks:true` 已把单换行变 `<br>`，再叠 `pre-wrap` 会让换行**翻倍**。
+- `main.ts` 引入 `styles/markdown.css`（**必须全局**：`scoped` 靠编译期给元素打 `data-v-xxx` 生效，而 `v-html` 插入的节点是运行时产物，拿不到这个属性，scoped 选择器一条都命中不了）。
+- `vite.config.ts`：`defineConfig` 改从 `vitest/config` 导入（vite 版的超集，多认一个 `test` 字段），加 `test: { environment: 'jsdom', include: ['src/**/*.spec.ts'] }`。**不新开 `vitest.config.ts`**，免得别名/插件维护两份。
+- 修正上一条目 L14 标题里过期的「（待提交）」→ 实际已随 `00c5ceb`/`18f4f49`/`c66afd0`/`35abad4` 四笔入库。
+
+### 关键决策（10 条，理由见代码注释）
+1. **封成组件**，不是函数、不是指令——函数式 `renderMd()+v-html` 在「消毒」与「输出」之间留缝，指令挡不住旁边有人直接写 `v-html`；组件让调用方**结构上拿不到** HTML 字符串。同 L14 用 `AgentIdentity` 接口守模块边界一个思路。
+2. **消毒在渲染时，不在存储时**——① `APPROVAL_RECORD` 冻结的「Contribution 永不覆盖」要求 `raw_content` 是作者原文，存储时消毒＝篡改不可变原始记录；② 规则可演进，将来收紧全部历史内容立刻受益；③ 业界主流（GitHub/Discourse）。
+3. **双层防御**（分工见下方 Verified 的实测更正）。
+4. markdown-it 配置四项，其中 **`breaks:true` 对本项目是硬需求**：机娘和开发者写日志习惯单换行分段，标准 Markdown 会把它们挤成一坨。
+5. **外链加固用 DOMPurify hook 而不是正则**——正则改 HTML 是经典错误（HTML 不是正则语言，畸形标签能绕过）；`afterSanitizeAttributes` 操作**已解析的 DOM 节点**，绕不过去。给 `<a>` 加 `target=_blank` + `rel="noopener noreferrer"`（防 tabnabbing），给 `<img>` 加 `loading=lazy`。
+6. **模块级单例 + `computed`**：解析器初始化要构建整条规则链，不在组件里 new。
+7. **新建 `styles/markdown.css`，绝不动 `base.css`**——后者是从 Mock 前端整体移植并**压缩成 7 行**的设计系统，手改可读性归零、将来重新移植会冲突。
+8. **范围锁死「正文块」**：摘要/标题/评论/bio 一律保持纯文本插值。摘要在 Feed 卡片有 `-webkit-line-clamp:2`，塞块级元素直接破功；评论蓝图只字未提 markdown，短文本收益低、平白多一个攻击面。
+9. **代码高亮 V1 不接、留注释钩子**：蓝图明说「V1 先保证安全和排版」；且 bundle 已超 Vite 500KB 警戒线，highlight.js 全量 ~900KB 硬塞主包会拖首屏，要接须配动态 import，是独立一件事。
+10. **后端一行不改、契约一字不动**：Markdown 是呈现层关注点，不该污染领域模型；`draft_block.rendered_content` 的 "rendered" 指**主人润色后的 Markdown 源文**而非 HTML（`APPROVAL_RECORD`「主人润色只修改 DraftBlock」佐证）。故**零迁移、零客户端重生成**。
+
+### Verified
+- **前端测试 23 绿**（`npm run test`，jsdom 环境）：11 种 XSS 载荷（含实体编码 `java&#115;cript:`、大小写 `JaVaScRiPt:`、`data:text/html`、`<svg onload>`、`<body onload>`）逐条断言无可执行节点；排版 9 例；外链加固 2 例。
+- `npm run type-check` 0 错；`npm run build` 通过。**bundle 1,252 kB（引入前约 1,100 kB，+~150 kB）**——这是 markdown-it+DOMPurify 的真实代价，如实记录。
+- 构建产物核对：`dist/assets/*.css` 含 `.markdown-body` 新规则、`dist/assets/*.js` 含 `afterSanitizeAttributes` 与 `noopener noreferrer`，证明 `main.ts` 引入与 hook 都进了产物。
+- **真实链路投稿**：`auth refresh`(RTR) → `agents assume --agent-id 1` → `submit` 一篇富 Markdown 验收样本（标题/列表/代码块/表格/引用/外链/裸链 + **6 条故意的 XSS 载荷**）→ **草稿 #9**（`http://localhost:5173/#/owner/drafts/9`）。**⚠️ 浏览器目视验收待主人完成**（playwright 的 Chrome profile 被占用，未强杀主人进程）；预期：6 条载荷全部显示为普通文字、零弹窗。
+- 🔴 **实测更正了设计阶段的一处错误论断**（详见面试故事 19）。
+
+### 💼 面试故事（3 条，素材已就位，完整版待写入 `INTERVIEW-STORIES.md` 故事 18-20）
+1. **故事 18 · 架构文档声明未实装（故事 17 的孪生兄弟）**
+   - **症状**：机娘投的稿满屏 `#` 和 ``` 原样显示，前端从没渲染过 Markdown。
+   - **排查**：以为要做选型 → grep 发现 `markdown-it`/`dompurify` **早在 L00 就装进 dependencies**，但全项目 0 处 import；再翻 Pack，组件树里 `MarkdownContent.vue` 画好了、威胁模型指定了 DOMPurify、frontend-architecture 写了五条规范。
+   - **根因**：**依赖装好、组件画好、对策定好——然后没人接**，跨 14 节课。与 L14 的「契约声明未实装」同构：**声明层与实装层之间没有任何机器化的一致性检查**。
+   - **权衡**：不新增依赖、不改后端、不改契约，只补呈现层；范围锁死"正文块"一个概念，宁可少做也不扩面。
+   - **金句**：「文档里写着的东西，没有测试保护就等于没写。」
+2. **故事 19 · 我把两层防御的分工讲错了，是探针纠正了我**
+   - **症状**：设计简报里断言「`[点我](javascript:alert(1))` 是合法 markdown，第一道 `html:false` 拦不住，只有 DOMPurify 能拦」。
+   - **排查**：写测试时这条断言**红了**——输出是 `<p>[点我](javascript:alert(1))</p>`，纯文本。于是写探针**关掉 DOMPurify**、只用 markdown-it 打 10 种绕过载荷（实体编码/大小写/制表符/data:text%2Fhtml/autolink），结果**全部被挡**。
+   - **根因**：markdown-it 自带 `validateLink`，黑名单 `^(vbscript|javascript|file|data):`（`dist/index.cjs.js:5110`，`data:image/{gif,png,jpeg,webp}` 例外），拦下后**退回字面量文本、连 `<a>` 都不生成**。我把第二道的功劳记在了它没干的事上。
+   - **权衡**：既然第一道全挡住了，DOMPurify 还留不留？**留**——但理由必须改对：① 黑名单会随新协议过期，白名单默认拒绝未知标签属性，方向更稳；② 防**配置漂移**（有人把 `html` 改成 true、装了吐原始 HTML 的插件、版本回归）；③ 外链加固 hook 必须挂在它上面。
+   - **金句**：「安全防线的价值在于它失效那天还在，而不在于它今天抓到了几个。——**『今天没抓到东西』不等于『可以删』**。」
+3. **故事 20 · 用字符串断言查 XSS 是错的**
+   - **症状**：第一版测试 3 条红，其中 `expect(html).not.toContain('onerror')` 对 `<img src=x onerror=alert(1)>` 失败。
+   - **排查**：看实际输出——`&lt;img src=x onerror=alert(1)&gt;`。防线**完全正常工作**（转义成了文本），但"onerror"这几个字母确实还在字符串里。
+   - **根因**：**断言问错了问题**。XSS 的真问题从来不是"输出字符串里有没有这个词"，而是"浏览器会不会造出危险的 DOM 节点"。转义后的文本包含危险关键词是**正常且必然**的。
+   - **权衡**：改成把结果塞进真 DOM 再结构化断言（`querySelector('script')` 为 null、全树扫 `on*` 属性为空、`<a href>` 不匹配危险协议）——**这恰好也是 DOMPurify 自己的工作方式**，测试与被测对象用同一套世界观。顺带把 11 种载荷参数化成 `it.each`，加一条就多一层保护。
+   - **金句**：「安全测试要断言 DOM，不要断言字符串——**你和攻击者看的是同一棵树，不是同一段文本**。」
+
+### Notes / 出处
+- **未触及冻结面，故不新增 DRIFT 条目**：技术BOM 第 23 行本就列了 markdown-it + DOMPurify，本次是**实装追上文档**而非偏离文档；契约/迁移编号/错误码/配置模板/模块边界一处未动。新增的 `jsdom`/`@types/markdown-it` 是纯测试期工具依赖。
+- **遗留待办**（不假装没有）：
+  1. **代码高亮**未接（决策 9），接的时候务必配动态 import，别进主包；
+  2. **外链图片隐私**：`![](https://外站/x.png)` 会把读者 IP 泄漏给第三方，V1 先做 `loading=lazy` + `max-width`，**图片代理留后续**；
+  3. **评论是否走 Markdown** 仍未定（V1 不做，蓝图未要求）；
+  4. `.markdown-body` 将来要与 L19 `DraftEditor.vue` 的**编辑预览**复用同一套渲染——组件化已为此铺路；
+  5. bundle 超 500KB 警戒线的**代码分割**始终没做，本次又 +150KB。
+- 施工与验收 [会话 d1557e11（方案设计与全局取证）]、[会话 53f5f3e5（施工、测试、探针更正、端到端投稿）]。
+
+## 0.1.0-SNAPSHOT - L14 单机娘 Skill 自动投稿 + 契约缺口独立修复（已入库：`00c5ceb` / `18f4f49` / `c66afd0` / `35abad4`）
 
 日期：2026-07-29
 

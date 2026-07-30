@@ -11,6 +11,7 @@ import type { PublicPostView } from '@/generated/api'
 import { httpClient, apiConfig } from '@/api/http'
 import CommentSection from '@/components/CommentSection.vue'
 import AuthorAvatarStack from '@/components/AuthorAvatarStack.vue'
+import MarkdownContent from '@/components/MarkdownContent.vue'
 import { useSessionStore } from '@/stores/session'
 
 const publicApi = new PublicApi(apiConfig, '', httpClient)
@@ -129,9 +130,11 @@ onMounted(load)
       </div>
       <p class="article-lead">{{ post.summary }}</p>
 
-      <div class="markdown-body">
+      <!-- 正文块：内容是 Markdown 源文，交给 MarkdownContent 渲染+消毒。
+           每个块自带 .markdown-body（组件根元素），故外层容器不再重复挂这个类。 -->
+      <div class="article-blocks">
         <div v-for="block in post.blocks" :key="block.blockId" class="content-block">
-          <p>{{ block.content }}</p>
+          <MarkdownContent :source="block.content" />
           <small v-if="block.author || block.sourceTool" class="block-tool">
             <template v-if="block.author">— {{ block.author.username }}</template>
             <template v-if="block.sourceTool">（{{ block.sourceTool }}）</template>
@@ -166,7 +169,8 @@ onMounted(load)
 .author-line { display: flex; align-items: center; gap: 10px; margin: 12px 0 4px; }
 .author-names { color: #5a6473; font-size: 14px; font-weight: 600; }
 .content-block { margin: 16px 0; }
-.content-block p { white-space: pre-wrap; }
+/* 注意:此前这里有 .content-block p { white-space: pre-wrap }，随 Markdown 渲染删除——
+   breaks:true 已把单换行变成 <br>，再叠加 pre-wrap 会让换行翻倍。 */
 .block-tool { color: #9aa4b4; }
 .article-actions { display: flex; gap: 14px; align-items: center; margin-top: 20px; }
 .action-btn { background: none; border: 1px solid #e0e3e8; border-radius: 16px; padding: 4px 12px; cursor: pointer; color: #5a6473; font-size: 14px; }

@@ -16,6 +16,7 @@ import type { DraftView, AuthorView } from '@/generated/api'
 import { httpClient, apiConfig } from '@/api/http'
 import { useSessionStore } from '@/stores/session'
 import AuthorAvatarStack from '@/components/AuthorAvatarStack.vue'
+import MarkdownContent from '@/components/MarkdownContent.vue'
 
 const ownerApi = new OwnerApi(apiConfig, '', httpClient)
 const route = useRoute()
@@ -155,9 +156,11 @@ onMounted(async () => {
         投递。机娘只能投草稿，<b>发布权在你手里</b>——确认无误后由你点击下方发布。
       </p>
 
-      <div class="markdown-body">
+      <!-- 审稿必须看到【最终呈现形态】：机娘投的是 Markdown 源文，
+           这里若只显示纯文本，主人审的就不是读者将来看到的东西。 -->
+      <div class="article-blocks">
         <div v-for="block in draft.blocks" :key="block.blockId" class="content-block">
-          <p>{{ block.content }}</p>
+          <MarkdownContent :source="block.content" />
           <small v-if="block.author || block.sourceTool" class="block-tool">
             <template v-if="block.author">— {{ block.author.username }}</template>
             <template v-if="block.sourceTool">（{{ block.sourceTool }}）</template>
@@ -207,7 +210,8 @@ onMounted(async () => {
   line-height: 1.7;
 }
 .content-block { margin: 16px 0; }
-.content-block p { white-space: pre-wrap; }
+/* 注意:此前这里有 .content-block p { white-space: pre-wrap }，随 Markdown 渲染删除——
+   breaks:true 已把单换行变成 <br>，再叠加 pre-wrap 会让换行翻倍。 */
 .block-tool { color: #9aa4b4; }
 .review-actions { display: flex; gap: 14px; align-items: center; margin-top: 24px; }
 .publish-disabled-hint { color: #9aa4b4; font-size: 14px; }

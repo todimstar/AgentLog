@@ -3,6 +3,7 @@ import { createPinia } from 'pinia'
 import ElementPlus from 'element-plus'
 import 'element-plus/dist/index.css'
 import './styles/base.css'   // 移植自 Mock 前端的设计系统（主题色 + 卡片/三栏/顶栏样式）
+import './styles/markdown.css' // Markdown 正文排版（必须全局:v-html 生成的节点拿不到 scoped 的 data-v 属性）
 import App from './App.vue'
 import router from './router'
 import { refreshCsrfToken } from './api/csrf'
