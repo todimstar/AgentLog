@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.agentlog.collaboration.infrastructure.persistence.mapper.HandoffTokenMapper">
+
+    <!--
+      ★★★ L15 的核心：接力棒的原子消费 ★★★
+
+      整条语句是【一条】UPDATE（分号才是语句边界；SET 里的逗号只是列清单分隔符，
+      同 SELECT a, b, c 里的逗号）。而"一条"正是原子性的全部来源：
+
+        MySQL 扫到 token_digest 命中的那一行
+          → 立刻加排他锁 X
+          → 求值 WHERE 里的 status='AVAILABLE' AND expires_at >= NOW(3)
+          → 成立就改、不成立就跳过
+          → 语句结束才放锁
+        从"检查"到"修改"全程持锁，另一个线程连读这行的最新版本都得排队。
+
+      对比「SELECT 查 → if 判 → UPDATE 改」三步走：SELECT 一结束就放锁，
+      if 与 UPDATE 之间那个空窗就是 TOCTOU 竞态的窝，两个线程会双双"成功"。
+
+      判定条件全部写在 WHERE 里，一个都不许挪到 Java：
+        token_digest = ?          按摘要定位（明文从不落库；UNIQUE 键点查，走 uk_handoff_digest）
+        status = 'AVAILABLE'      一次性消费的实现——已 CONSUMED/FROZEN/REVOKED/EXPIRED 一律抢不到
+        expires_at >= #{now}      时效惰性判定 → 正确性【不依赖清理 Worker 是否及时】（L15 禁止写 Worker）
+
+      affectedRows 就是裁决书：1 = 抢到；0 = 没抢到（再回查 selectByDigest 判定具体原因）。
+
+      ⚠️ 为什么时效比较用应用传入的 #{now}，而【不用】数据库的 NOW(3)：
+        第一版写的是 NOW(3)，理由是"判定该由数据库单方面裁决，免得多实例时钟不一致"。
+        测试 joinRejectsExpiredToken 当场把它打红了（过期令牌被判成没过期，期望 410 实得 201）。
+        根因：expires_at 是【Java 写进去的】DATETIME，而 NOW(3) 是【数据库自己的】墙上时间，
+        两者的时区口径由 JDBC 连接参数决定——主库 URL 带 serverTimezone=UTC，
+        而测试的 Testcontainers 自建 URL 没有这个参数，于是同一份代码在两处的行为不一样。
+        换成 #{now} 后，写入与比较走【同一条驱动转换路径】，时区偏移自动抵消，
+        正确性不再依赖任何连接参数。
+        代价（可接受）：改用应用时钟后，多实例间的时钟漂移会影响判定——但 NTP 下那是毫秒级，
+        而时区错配是小时级；我们消除的是大得多的那个风险。
+        ★ 更要紧的是：原子性【完全不受影响】——它来自"单条 UPDATE 持行锁"，与用谁的时钟无关。
+        全项目其余过期判断（配对码 / owner 令牌 / acting 令牌）本来也都在 Java 侧比较，这样反而口径统一了。
+    -->
+    <update id="consumeAvailableToken">
+        UPDATE handoff_token
+        SET status               = 'CONSUMED',
+            consumed_by_agent_id = #{agentId},
+            consumed_at          = #{now},
+            version              = version + 1
+        WHERE token_digest = #{tokenDigest}
+          AND status       = 'AVAILABLE'
+          AND expires_at  >= #{now}
+    </update>
+
+    <!--
+      回填「这张令牌换出了哪张席位」。按主键更新，天然无竞争——
+      因为能走到这一行的只有【已经通过上面那道闸门】的赢家。
+
+      为什么不合进上面那条 UPDATE：合并就必须先建票才能消费，于是两个线程会双双先建票、
+      在 uk_ticket_sequence 上撞车，败者拿到 DuplicateKeyException 而不是干净的 409。
+      闸门必须在最前面。详见 HandoffTokenMapper#linkConsumedTicket 的 javadoc。
+    -->
+    <update id="linkConsumedTicket">
+        UPDATE handoff_token
+        SET consumed_ticket_id = #{ticketId},
+            version            = version + 1
+        WHERE id = #{id}
+    </update>
+
+    <!--
+      消费失败后的【诊断查询】——只用来把"0 行"翻译成具体错误码与自愈动作，不参与互斥判定。
+      顺序很重要：先原子改，改不动才回头问"为什么"。反过来就又变成三步走了。
+    -->
+    <select id="selectByDigest"
+            resultType="com.agentlog.collaboration.infrastructure.persistence.dataobject.HandoffTokenDO">
+        SELECT id,
+               token_digest,
+               session_id,
+               owner_user_id,
+               predecessor_ticket_id,
+               status,
+               expires_at,
+               consumed_by_agent_id,
+               consumed_ticket_id,
+               consumed_at,
+               version,
+               created_at
+        FROM handoff_token
+        WHERE token_digest = #{tokenDigest}
+    </select>
+</mapper>

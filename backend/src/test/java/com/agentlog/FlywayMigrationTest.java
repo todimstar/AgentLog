@@ -139,4 +139,74 @@ class FlywayMigrationTest {
                 Integer.class);
         assertThat(collectionUniqueKeys).isGreaterThan(0);
     }
+
+    /**
+     * L15 验收：V012 ACPP 三表建出来，且三个"设计不变量"真的落到了物理约束上。
+     *
+     * 这个测试是 V012 里【循环外键】的探针——collaboration_session.tail_handoff_token_id 指向
+     * handoff_token.id，而 handoff_token.session_id 又指回 collaboration_session.id。
+     * 两张表互指成环，谁都不能先于对方建完外键，必须"先建表、后 ALTER 补"。
+     * 若写成 CREATE TABLE 内联外键，Flyway 会在这里直接炸（errno 150）。
+     */
+    @Test
+    void migratesCollaborationTablesOnEmptyDatabase() {
+        Integer tableCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.tables "
+                        + "WHERE table_schema = DATABASE() AND table_name IN "
+                        + "('collaboration_session','contribution_ticket','handoff_token')",
+                Integer.class);
+        assertThat(tableCount).isEqualTo(3);
+
+        // ① D-15 补列真的建上了（蓝图 V009 缺这三列，契约却要 title+channelId）。
+        Integer plannedColumns = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.columns "
+                        + "WHERE table_schema = DATABASE() AND table_name = 'collaboration_session' "
+                        + "AND column_name IN ('planned_title','planned_channel_id','planned_summary')",
+                Integer.class);
+        assertThat(plannedColumns).isEqualTo(3);
+
+        // ② 成环的那条外键补上了（本测试的核心：证明"先建表后 ALTER"这一步没被省掉）。
+        Integer tailFk = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.table_constraints "
+                        + "WHERE table_schema = DATABASE() AND constraint_type = 'FOREIGN KEY' "
+                        + "AND table_name = 'collaboration_session' "
+                        + "AND constraint_name = 'fk_collab_tail_handoff'",
+                Integer.class);
+        assertThat(tailFk).isEqualTo(1);
+
+        // ③ V005 留的坑填了：contribution 的 session_id / ticket_id 两列终于有外键指向。
+        Integer contributionAcppFks = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.table_constraints "
+                        + "WHERE table_schema = DATABASE() AND constraint_type = 'FOREIGN KEY' "
+                        + "AND table_name = 'contribution' "
+                        + "AND constraint_name IN ('fk_contribution_session','fk_contribution_ticket')",
+                Integer.class);
+        assertThat(contributionAcppFks).isEqualTo(2);
+
+        // ④ 三个状态机的合法值集锁在 CHECK 约束里（写错字面量插入即被拒，不必等运行时发现）。
+        Integer statusChecks = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.table_constraints "
+                        + "WHERE table_schema = DATABASE() AND constraint_type = 'CHECK' "
+                        + "AND constraint_name IN ('ck_collab_status','ck_ticket_status','ck_handoff_status')",
+                Integer.class);
+        assertThat(statusChecks).isEqualTo(3);
+
+        // ⑤ 因果链的自引用外键（predecessor）——顺序不靠时间戳，靠这条链。
+        Integer predecessorFk = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.table_constraints "
+                        + "WHERE table_schema = DATABASE() AND constraint_type = 'FOREIGN KEY' "
+                        + "AND table_name = 'contribution_ticket' "
+                        + "AND constraint_name = 'fk_ticket_predecessor'",
+                Integer.class);
+        assertThat(predecessorFk).isEqualTo(1);
+
+        // ⑥ 宽度审计：source_tool 必须 >= 来源 agent_acting_session.source_tool 的 64，否则严格模式下超长报错。
+        //    蓝图 V009 此处写的是 32（比来源窄），我们取 64 与来源对齐。
+        Integer sourceToolWidth = jdbcTemplate.queryForObject(
+                "SELECT character_maximum_length FROM information_schema.columns "
+                        + "WHERE table_schema = DATABASE() AND table_name = 'contribution_ticket' "
+                        + "AND column_name = 'source_tool'",
+                Integer.class);
+        assertThat(sourceToolWidth).isGreaterThanOrEqualTo(64);
+    }
 }

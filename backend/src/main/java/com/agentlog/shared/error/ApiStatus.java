@@ -52,6 +52,24 @@ public enum ApiStatus {
     AGENT_TOKEN_EXPIRED(HttpStatus.UNAUTHORIZED, "AGENT_TOKEN_EXPIRED", "机娘令牌已过期，请重新代入"),
     AGENT_TOKEN_INVALID(HttpStatus.UNAUTHORIZED, "AGENT_TOKEN_INVALID", "机娘令牌无效，请重新代入"),
     AGENT_NOT_FOUND(HttpStatus.NOT_FOUND, "AGENT_NOT_FOUND", "机娘不存在或不属于你"),
+
+    // —— ACPP 接力棒（L15 collaboration · ADR-0005）—— 冻结面已登记 DRIFT D-15
+    //
+    // 这批码的 HTTP 语义是刻意区分的，客户端（CLI/Skill）靠它们做自愈决策
+    // （对齐 Pack 08-skill/agentlog/references/error-actions.md 的动作表）：
+    //   404 NOT_FOUND  → 令牌压根不存在，【或存在但不属于你】。★ 跨主人一律 404 而非 403：
+    //                    403 等于承认"这东西存在、只是不给你"，会泄漏资源存在性、给枚举者反馈。
+    //                    见 Pack 09-security/多租户授权与行级隔离.md §5。
+    //   409 CONFLICT   → 令牌真实存在且属于你，但当前状态不允许消费（已用过 / 被冻结 / 被吊销）。
+    //                    "冲突"= 你的意图和资源的当前状态打架，重试同一个请求不会变好，
+    //                    要换个东西（向主人索取最新尾令牌）。
+    //   410 GONE       → 曾经有效、现已永久失效（过期）。410 比 404 多告诉客户端一件事：
+    //                    "别再拿这个试了"，同 PAIRING_EXPIRED 用 410 的口径。
+    ACPP_HANDOFF_NOT_FOUND(HttpStatus.NOT_FOUND, "ACPP_HANDOFF_NOT_FOUND", "接力令牌不存在"),
+    ACPP_HANDOFF_CONSUMED(HttpStatus.CONFLICT, "ACPP_HANDOFF_CONSUMED", "接力令牌已被使用，请向主人索取最新的尾令牌"),
+    ACPP_HANDOFF_EXPIRED(HttpStatus.GONE, "ACPP_HANDOFF_EXPIRED", "接力令牌已过期，请向主人索取新的尾令牌"),
+    ACPP_HANDOFF_FROZEN(HttpStatus.CONFLICT, "ACPP_HANDOFF_FROZEN", "接力链已冻结（前序失败），请停止并报告主人"),
+    ACPP_HANDOFF_REVOKED(HttpStatus.CONFLICT, "ACPP_HANDOFF_REVOKED", "接力令牌已被吊销，本次协作已结束"),
     ;
 
     private final HttpStatus status;

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.agentlog.collaboration.infrastructure.persistence.mapper.ChannelExistsMapper">
+
+    <!-- 跨模块只读投影：直查 forum_channel 物理表，零依赖 content 模块的 Java 类（守 D-05）。
+         只要存在性，连列都不取——EXISTS 让 MySQL 命中主键就能停，不必回表读数据。 -->
+    <select id="existsById" resultType="boolean">
+        SELECT EXISTS (SELECT 1 FROM forum_channel WHERE id = #{channelId})
+    </select>
+</mapper>
