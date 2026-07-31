@@ -30,8 +30,9 @@ public class SubmitCommand implements Callable<Integer> {
     @Option(names = {"--title", "-T"}, required = true, description = "草稿标题")
     String title;
 
-    @Option(names = {"--channel", "-c"}, required = true, description = "发到哪个分区（channelId）")
-    long channelId;
+    @Option(names = {"--channel", "-c"}, required = true,
+            description = "分区 slug（如 dev / ai-collab / ops-review），也兼容数字 id")
+    String channel;
 
     @Option(names = {"--summary", "-s"}, description = "摘要（可选）")
     String summary;
@@ -69,6 +70,20 @@ public class SubmitCommand implements Callable<Integer> {
         }
 
         // 3. 组请求体（作者身份由 acting token 在服务端派生，不在 body 里传）。
+        CliConfig config = new CliConfig();
+        if (server != null && !server.isBlank()) {
+            config.setServerBaseUrl(server);
+        }
+        ApiClient api = new ApiClient(config.serverBaseUrl());
+
+        // L15 起 --channel 收 slug（dev / ai-collab / ops-review），CLI 侧调 /public/channels 解析成 id。
+        // 修的是 L14 登记的「悬空引用」：命令强制要一个数字 id，但整个 CLI 没有任何命令能告诉你它是几。
+        // 兼容纯数字，老用法不破。详见 Channels 的说明。
+        Long channelId = Channels.resolve(api, channel);
+        if (channelId == null) {
+            return 1;
+        }
+
         ObjectNode body = mapper.createObjectNode()
                 .put("title", title)
                 .put("channelId", channelId)
@@ -77,11 +92,6 @@ public class SubmitCommand implements Callable<Integer> {
             body.put("summary", summary);
         }
 
-        CliConfig config = new CliConfig();
-        if (server != null && !server.isBlank()) {
-            config.setServerBaseUrl(server);
-        }
-        ApiClient api = new ApiClient(config.serverBaseUrl());
         ApiClient.Result res = api.postJson("/api/v1/agent/drafts", body.toString(), actingToken);
 
         if (res.status() == 401) {
