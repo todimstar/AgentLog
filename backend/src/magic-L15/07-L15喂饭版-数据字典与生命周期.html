@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>L15 喂饭版 · ACPP 三表数据字典与生命周期</title>
+<style>
+:root{
+  --bg:#1e1f22; --panel:#2b2d30; --panel2:#232528; --line:#3c3f43;
+  --txt:#dfe1e5; --dim:#9aa0a6; --acc:#7f6fff; --acc2:#4fc3f7;
+  --ok:#57c597; --warn:#e0a14c; --bad:#e06c75; --new:#3a4a3a; --chg:#4a453a;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--txt);
+  font:14px/1.7 "Segoe UI","PingFang SC","Microsoft YaHei",system-ui,sans-serif}
+code,.mono{font-family:"JetBrains Mono",Consolas,Menlo,monospace}
+a{color:var(--acc2)}
+
+/* 顶栏 */
+.top{display:flex;align-items:center;gap:14px;padding:10px 18px;
+  background:var(--panel);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:20}
+.top h1{font-size:15px;margin:0;font-weight:700}
+.top .sub{font-size:11px;color:var(--dim)}
+.tabs{display:flex;gap:6px;margin-left:auto}
+.tabs button{background:var(--panel2);color:var(--dim);border:1px solid var(--line);
+  border-radius:8px;padding:6px 13px;font-size:13px;cursor:pointer;font-weight:600}
+.tabs button.on{background:var(--acc);color:#fff;border-color:var(--acc)}
+
+.wrap{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(340px,.85fr);
+  gap:14px;padding:14px;align-items:start}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.card>.hd{padding:9px 14px;background:var(--panel2);border-bottom:1px solid var(--line);
+  font-size:12px;font-weight:700;color:var(--dim);display:flex;align-items:center;gap:8px}
+.card>.bd{padding:14px}
+.hint{font-size:11px;color:var(--dim);font-weight:400;margin-left:auto}
+
+/* ER 图 */
+svg{width:100%;height:auto;display:block}
+.node{cursor:pointer}
+.node rect{fill:var(--panel2);stroke:var(--line);stroke-width:1.5;rx:9}
+.node.core rect{stroke:var(--acc);stroke-width:2}
+.node.sel rect{fill:#343a52;stroke:var(--acc2);stroke-width:2.5}
+.node.dimmed{opacity:.28}
+.node text{fill:var(--txt);font-size:12.5px;font-weight:700;pointer-events:none}
+.node text.t2{fill:var(--dim);font-size:10.5px;font-weight:400}
+.edge{stroke:var(--line);stroke-width:1.4;fill:none;marker-end:url(#arrow)}
+.edge.lit{stroke:var(--acc2);stroke-width:2.4;marker-end:url(#arrowLit)}
+.edge.dimmed{opacity:.12}
+.elabel{fill:var(--dim);font-size:9.5px}
+.elabel.lit{fill:var(--acc2);font-weight:700}
+
+/* 字段表 */
+.fields{width:100%;border-collapse:collapse;font-size:13px}
+.fields th{text-align:left;color:var(--dim);font-size:11px;font-weight:700;
+  padding:6px 8px;border-bottom:1px solid var(--line)}
+.fields td{padding:7px 8px;border-bottom:1px solid #33363a;vertical-align:top}
+.fields tr{cursor:pointer}
+.fields tr:hover td{background:#33363a}
+.fields tr.sel td{background:#343a52}
+.fields .fn{font-family:"JetBrains Mono",Consolas,monospace;color:var(--acc2);white-space:nowrap}
+.fields .ft{color:var(--dim);font-size:11px;white-space:nowrap}
+.tag{display:inline-block;font-size:9.5px;font-weight:700;padding:1px 6px;border-radius:9px;margin-left:5px}
+.tag.pk{background:#4a3f6b;color:#c9bfff}
+.tag.uk{background:#3f5a4a;color:#a8e6c4}
+.tag.fk{background:#3f4d6b;color:#a8c8ff}
+.tag.trap{background:#5a3f3f;color:#ffb3b3}
+.tag.new{background:#5a4a2a;color:#ffd699}
+
+/* 详解 */
+.detail h3{margin:0 0 8px;font-size:15px;color:var(--acc2)}
+.detail .kv{margin:12px 0}
+/* 只有 kv 的【第一个直接子 b】当小标题；正文里的 <b> 保持内联，否则整段会被撑断行 */
+.detail .kv>b:first-child{display:block;font-size:11px;color:var(--dim);margin-bottom:3px;letter-spacing:.4px}
+.detail .kv p{margin:7px 0}
+.loc{display:inline-block;font-family:"JetBrains Mono",Consolas,monospace;font-size:11.5px;
+  background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:2px 7px;margin:2px 4px 2px 0}
+.counter{background:#2f2a3a;border-left:3px solid var(--acc);padding:9px 12px;border-radius:0 8px 8px 0;margin:10px 0}
+.counter b{color:#c9bfff}
+.trapbox{background:#3a2b2b;border-left:3px solid var(--bad);padding:9px 12px;border-radius:0 8px 8px 0;margin:10px 0}
+.mine{background:#2b3a33;border-left:3px solid var(--ok);padding:9px 12px;border-radius:0 8px 8px 0;margin:10px 0;font-size:12.5px}
+.mine b{color:var(--ok)}
+
+/* 面试 */
+.iv{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:11px 13px;margin:12px 0}
+.iv .q{font-weight:700;color:var(--warn);margin-bottom:8px}
+.iv details{margin:5px 0}
+.iv summary{cursor:pointer;font-size:12px;color:var(--dim);font-weight:700;user-select:none}
+.iv .lv{padding:7px 10px;border-radius:7px;margin-top:5px;font-size:12.5px}
+.iv .l1{background:#3a2f2f;border-left:3px solid #8a5a5a}
+.iv .l2{background:#2f3a35;border-left:3px solid var(--ok)}
+.iv .l3{background:#2f3348;border-left:3px solid var(--acc2)}
+
+/* 时间轴 */
+.tl{display:flex;gap:0;margin:6px 0 16px;flex-wrap:wrap}
+.tl button{flex:1;min-width:96px;background:var(--panel2);color:var(--dim);border:1px solid var(--line);
+  padding:9px 5px;font-size:11.5px;cursor:pointer;font-weight:600;line-height:1.3}
+.tl button:first-child{border-radius:8px 0 0 8px}
+.tl button:last-child{border-radius:0 8px 8px 0}
+.tl button.on{background:var(--acc);color:#fff;border-color:var(--acc)}
+.tl button.future{opacity:.45}
+.tl button small{display:block;font-size:9.5px;opacity:.8;font-weight:400}
+.rows{width:100%;border-collapse:collapse;font-size:11.5px;margin-bottom:14px}
+.rows th{background:var(--panel2);color:var(--dim);font-size:10px;padding:5px 7px;
+  text-align:left;border:1px solid var(--line);white-space:nowrap}
+.rows td{padding:5px 7px;border:1px solid #33363a;font-family:"JetBrains Mono",Consolas,monospace;
+  font-size:11px;white-space:nowrap}
+.rows tr.ins td{background:var(--new)}
+.rows tr.upd td{background:var(--chg)}
+.cell-chg{color:var(--warn);font-weight:700}
+.tname{font-size:12.5px;font-weight:700;color:var(--acc2);margin:14px 0 5px}
+.tname .op{font-size:10px;font-weight:400;color:var(--dim);margin-left:8px}
+.narr{background:var(--panel2);border-left:3px solid var(--acc);padding:10px 13px;
+  border-radius:0 8px 8px 0;margin-bottom:12px;font-size:13px}
+.empty{color:var(--dim);font-style:italic;padding:8px}
+.legend2{font-size:10.5px;color:var(--dim);margin-top:6px}
+.sw{display:inline-block;width:11px;height:11px;border-radius:3px;vertical-align:-1px;margin:0 3px 0 9px}
+kbd{background:var(--panel2);border:1px solid var(--line);border-radius:4px;padding:0 5px;font-size:11px}
+</style>
+</head>
+<body>
+
+<div class="top">
+  <div>
+    <h1>🍚 L15 喂饭版 · ACPP 三表数据字典与生命周期</h1>
+    <div class="sub">从「这张表为什么存在」讲到「这一列谁写谁读、代码在哪一行」——目标：能跟面试官聊满一小时</div>
+  </div>
+  <div class="tabs">
+    <button id="tabEr" class="on">① 关系网</button>
+    <button id="tabLife">② 生命周期</button>
+  </div>
+</div>
+
+<div class="wrap">
+  <!-- 左 -->
+  <div class="card">
+    <div class="hd"><span id="leftTitle">🗺 表关系网</span><span class="hint" id="leftHint">点任意表 → 右侧看它的存在缘由与全部字段</span></div>
+    <div class="bd">
+      <div id="erPane"><svg id="er" viewBox="0 0 760 480"></svg></div>
+      <div id="lifePane" style="display:none">
+        <div class="tl" id="tlBar"></div>
+        <div class="narr" id="tlNarr"></div>
+        <div id="tlTables"></div>
+        <div class="legend2">
+          <span class="sw" style="background:var(--new)"></span>本步新增行
+          <span class="sw" style="background:var(--chg)"></span>本步被修改的行
+          <span style="margin-left:10px">改动的单元格标<span class="cell-chg"> 橙色</span></span>
+          · 数据取自 2026-07-31 的真实端到端（<code>PT-008cf65c5affff99</code>）
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 右 -->
+  <div class="card">
+    <div class="hd"><span id="rightTitle">💡 详解</span><span class="hint">点字段行看逐列详解</span></div>
+    <div class="bd detail" id="detail"></div>
+  </div>
+</div>
+
+<script>
+/* ══════════════════════════════════════════════════════════════
+   数据模型：三张核心表 + 引用到的外部表
+   每个字段带：为什么有它 / 谁写 / 谁读 / 代码落点 / 如果没有它会怎样 / 面试怎么聊
+   ══════════════════════════════════════════════════════════════ */
+const T = {};
+
+T.session = {
+  key:'collaboration_session', title:'协作会话', emoji:'📋', core:true,
+  x:40, y:40, w:230, h:76,
+  why:`<b>一篇文章的一次多机娘接力全过程</b>。它是整条因果链的<b>根</b>——链上所有的票和接力棒都挂在它下面。
+  <p>为什么需要它而不是把票直接挂在 <code>post</code> 上？因为 <b>post 此刻还不存在</b>：
+  按 <code>APPROVAL_RECORD</code> 冻结的「首棒失败不暴露空草稿」，草稿要等首棒 submit（L16）成功才创建。
+  所以必须有一个东西先把「这次协作」这件事本身记下来——就是它。</p>`,
+  life:`start 时创建（<code>OPEN</code>）→ 首棒领租约转 <code>RUNNING</code>（L16）→ …… → 主人发布转 <code>PUBLISHED</code>（L20）。
+  <b>L15 建出来就停在 OPEN</b>，因为本课不做 lease/submit。`,
+  fields:[
+    {n:'id', t:'BIGINT PK', tags:['pk'], why:'内部主键。<b>绝不出现在 API 里</b>——对外用 post_ticket。',
+     w:['MySQL AUTO_INCREMENT'], r:['ticket.session_id / handoff.session_id 的外键目标'],
+     loc:['CollaborationSessionDO.java'],
+     no:'外键无处可指。自增 id 本身没问题，问题是<b>不能暴露到 URL</b>。'},
+    {n:'post_ticket', t:'VARCHAR(64) UK', tags:['uk'],
+     why:`对外标识，形如 <code>PT-008cf65c5affff99</code>（<code>PT-</code> + 16 位 hex）。
+     <b>随机不递增</b>——递增码能被人顺着数字往下扫，探测「系统里一共有多少协作、别的主人在写什么」。
+     即使每次都被行级授权拦成 404，<b>响应时间和错误分布本身就是信息</b>。`,
+     w:['TicketCodes.newPostTicket()'], r:['响应体 / 主人的协作时间线页（L17）'],
+     loc:['TicketCodes.java','StartCollaborationService.java:84'],
+     no:'只能把自增 id 暴露到 URL → 可枚举。',
+     trap:'不要为了"更安全"用 TokenService 那种 43 字符的凭证。<b>标识符不是凭证</b>——拿到它并不能操作（还要过令牌+行级授权），8 字节随机足够；凭证才需要抗暴力猜测的长度。把两者的强度要求分开是刻意的。'},
+    {n:'owner_user_id', t:'BIGINT FK', tags:['fk'],
+     why:'这次协作属于哪个主人。<b>多租户行级授权的锚点</b>——所有 owner 域查询都要带它。',
+     w:['principal.ownerUserId()（从 agent 令牌派生，客户端传不进来）'],
+     r:['行级授权 / 主人的协作列表'],
+     loc:['StartCollaborationService.java:85'],
+     no:'无法回答「这条协作是谁的」，多租户直接破防。'},
+    {n:'post_id', t:'BIGINT FK NULL', tags:['fk'],
+     why:'首棒 submit 成功后才填（L16）。<b>L15 期间恒为 NULL。</b>',
+     w:['L16 的 submit'], r:['L20 发布'], loc:['（本课不写）'],
+     no:'协作跑完不知道产出了哪篇文章。',
+     trap:'它<b>可空</b>不是偷懒——是「首棒失败不暴露空草稿」的直接体现。不建那行 post，任何读路径都查不到它；不变量由<b>数据的存在性</b>保证，而不是靠每个查询记得过滤"零块草稿"。'},
+    {n:'draft_id', t:'BIGINT FK NULL', tags:['fk'],
+     why:'同 post_id，首棒 submit 才填。', w:['L16 的 submit'], r:['L19 编辑 / L20 发布'],
+     loc:['（本课不写）'], no:'同上。'},
+    {n:'planned_title', t:'VARCHAR(255)', tags:['new'],
+     why:`<b>D-15 补列</b>。契约的 <code>StartCollaborationRequest</code> 要 title，但蓝图原版这张表没有这一列，
+     而 TX-05 又把 post/draft 推迟到首棒 submit —— <b>start 收下的 title 从 start 到首棒之间无处可存</b>。
+     这是蓝图内部的真矛盾，靠 <code>APPROVAL_RECORD</code> 的「首棒失败不暴露空草稿」裁决出：不能提前建 draft 来存，只能给 session 补列。`,
+     w:['request.title()'], r:['L16 首棒 submit 建 draft 时消费'],
+     loc:['StartCollaborationService.java:86','V012__create_collaboration.sql'],
+     no:'第一个 AI 说了文章叫什么，系统记不住——等到首棒真要建草稿时已经无从得知。',
+     mine:'这一列是本课<b>唯一改动蓝图冻结面</b>的地方，走了完整漂移流程：查 DRIFT → 交叉裁决 → 与主人讨论 → 施工 → 回写 Pack + 登记 D-15。'},
+    {n:'planned_channel_id', t:'BIGINT FK', tags:['fk','new'],
+     why:'同上，打算投哪个分区。有外键指向 forum_channel。',
+     w:['request.channelId()（经 ChannelExistsMapper 校验存在）'], r:['L16 建 draft'],
+     loc:['StartCollaborationService.java:74-77'],
+     no:'同 planned_title。',
+     trap:'有外键约束，理论上不校验也插不进去。但那样抛的是<b>约束异常（500）</b>而不是干净的 <code>404 CHANNEL_NOT_FOUND</code>。<b>语义层的错误要在语义层报，底层约束是安全网不是第一道门。</b>'},
+    {n:'planned_summary', t:'VARCHAR(500) NULL', tags:['new'],
+     why:'摘要。L15 施工期发现契约里<b>没有</b>这个字段而实装有 → 补进契约（加性变更）。理由：L16 的 submit 请求只有 content+metadata，若开局也不带，<b>协作文章将永远没有摘要、Feed 卡片摘要区恒空</b>。',
+     w:['request.summary()'], r:['L16 建 draft'], loc:['StartCollaborationService.java:88'],
+     no:'协作产出的文章在 Feed 上摘要永远是空的。'},
+    {n:'status', t:'VARCHAR(32)', tags:[],
+     why:'会话状态机。<b>L15 只会出现 OPEN</b>——OPEN→RUNNING 由「首棒领租约」驱动，那是 L16。',
+     w:['StartCollaborationService（写 OPEN）'], r:['L17 时间线 / L18 retry 判定'],
+     loc:['SessionStatus.java','StartCollaborationService.java:89'],
+     no:'不知道这次协作跑到哪一步了。',
+     trap:'合法值集写进了 <code>ck_collab_status</code> CHECK 约束，且取的是<b>状态机文档的完整 8 个值</b>而非本课用到的 1 个——L16~L20 会陆续用到其余值，不必再改约束。写错字面量插入即被拒。'},
+    {n:'tail_handoff_token_id', t:'BIGINT FK NULL', tags:['fk'],
+     why:`<b>链尾的那根悬空接力棒</b>——下一个 AI 要拿的就是它。每接力一次就换成新签发的。`,
+     w:['start 建首棒令牌后回指 / join 换发新令牌后回指'],
+     r:['主人问「现在的尾令牌是哪根」'],
+     loc:['StartCollaborationService.java:108','ClaimHandoffService.java:131'],
+     no:'找不到链尾，不知道该把哪根棒子交给下一个人。',
+     trap:'它和 <code>handoff_token.session_id</code> <b>互指成环</b>！两张表谁都不能先于对方建完外键 → V012 必须「先建三表、末尾 ALTER 补」。蓝图把这条推到 V014 统一补，我们一课内解干净。'},
+    {n:'last_completed_sequence', t:'INT DEFAULT 0', tags:[],
+     why:'已完成到第几棒。L16 submit 时推进；<b>L15 恒为 0</b>。',
+     w:['L16 submit'], r:['L17 时间线 / 判断链条进度'], loc:['StartCollaborationService.java:90'],
+     no:'要算「跑到第几棒了」得每次扫全部票。这是一个<b>冗余缓存列</b>，用空间换查询。'},
+    {n:'version', t:'BIGINT DEFAULT 0', tags:[],
+     why:'乐观锁。L18 terminate/retry 会并发改这张会话，届时靠它防覆盖。',
+     w:['MyBatis-Plus @Version 自动'], r:['updateById 时自动带 WHERE version=?'],
+     loc:['CollaborationSessionDO.java'], no:'并发修改会话时后写覆盖先写。'},
+    {n:'created_at / updated_at', t:'DATETIME(3)', tags:[],
+     why:'审计时间。毫秒精度（DATETIME(3)）——ACPP 的事件密度需要区分同秒内的先后。',
+     w:['应用注入的 Clock'], r:['审计/排查'], loc:['StartCollaborationService.java:110'],
+     no:'排查问题时说不清事情发生的先后。',
+     trap:'⚠️ 这类时间列<b>不要拿去和 SQL 的 NOW(3) 比较</b>——本课踩过：Java 写入的 DATETIME 与数据库墙上时间的时区口径由 JDBC 参数决定，实测差过 8 小时。'}
+  ],
+  refs:[{to:'user_account',via:'owner_user_id'},{to:'forum_channel',via:'planned_channel_id'},
+        {to:'handoff',via:'tail_handoff_token_id',dashed:true}],
+  iv:{q:'为什么不把协作信息直接存在 post 表上？',
+      l1:'因为协作是另一个概念，应该独立建表。',
+      l2:'因为 post 在开局时还不存在——草稿要等第一棒真正提交内容之后才创建，所以需要一个先于 post 存在的载体来记录「这次协作」本身。',
+      l3:'更准确地说这是产品规则倒逼的建模：我们冻结过一条「首棒失败不暴露空草稿」。如果开局就建 post+draft，首棒失败会留下孤儿空草稿，只能靠"过滤零块草稿"藏起来——而那个不变量就得由<b>每一个读路径</b>去保证，今天两处、将来编辑器/双视图/搜索/通知/榜单/治理后台每加一个就多一个必须记得过滤的地方。不建那行，不变量由<b>数据的存在性</b>保证，零个地方需要记得。而且"零块草稿"这个判据本身会失效——后面允许隐藏块之后，会出现"有块但全隐藏"的合法草稿。'}
+};
+
+T.ticket = {
+  key:'contribution_ticket', title:'贡献席位（票）', emoji:'🎫', core:true,
+  x:300, y:250, w:230, h:76,
+  why:`<b>队列里的一个位置</b>，也是因果链上的一个节点。
+  <p>注意它<b>不是「写作许可」</b>：顺序由票决定，能不能落笔由 Lease 决定（L16）。
+  这个区分直接对应 <code>APPROVAL_RECORD</code> 的「<b>后序可提前排队，不可提前写</b>」——
+  第二个 AI 可以马上入队拿到票，但必须等前序 DONE 才能领租约。</p>`,
+  life:`join/start 时创建 → 领租约转 LEASED（L16）→ submit 转 DONE（L16）→ 超时转 FAILED_TIMEOUT（L17）→ retry 回 READY_TO_WRITE（L18）。
+  <b>活到文章发布之后</b>——attempt、审计时间线、retry 都要引用它。`,
+  fields:[
+    {n:'id', t:'BIGINT PK', tags:['pk'], why:'内部主键，不出现在 API。',
+     w:['AUTO_INCREMENT'], r:['predecessor_ticket_id 自引用 / handoff 的两个外键'],
+     loc:['ContributionTicketDO.java'], no:'链表无法自引用。'},
+    {n:'ticket_code', t:'VARCHAR(64) UK', tags:['uk'],
+     why:'对外标识 <code>CT-</code>+16hex。<b>它是 URL 路径参数</b>（L16 的 <code>/agent/contribution-tickets/{ticketCode}</code>）。',
+     w:['TicketCodes.newTicketCode()'], r:['L16 的 status/lease/submit 三个端点'],
+     loc:['TicketCodes.java','StartCollaborationService.java:126'],
+     no:'只能把自增 id 放进 URL。',
+     trap:'正因为它进 URL，<b>更不能递增</b>——递增码可被扫描枚举，与「跨 owner 一律 404 防枚举」的设计意图直接冲突。Pack demo 脚本里写的 <code>CT-0002</code> 是示意，不是编码规范。'},
+    {n:'session_id', t:'BIGINT FK', tags:['fk'], why:'属于哪次协作。',
+     w:['start/join'], r:['查一次协作的全部票'],
+     loc:['StartCollaborationService.java:127'], no:'票变成孤儿，不知道属于哪篇文章。'},
+    {n:'sequence_no', t:'INT', tags:['uk'],
+     why:'第几棒（1 起）。与 session_id 组<b>唯一键</b> <code>uk_ticket_sequence</code>。',
+     w:['start 写 1；join 写「前序+1」'], r:['排序展示 / 判断是否首棒'],
+     loc:['StartCollaborationService.java:128','ClaimHandoffService.java:117'],
+     no:'无法快速知道"这是第几棒"，得沿链数。',
+     trap:'那个唯一键是<b>最后的安全网，不是第一道门</b>。本课实现时我最初把顺序排成「查令牌→建票→原子消费」，两个线程会双双先建票、撞这个唯一键，败者拿到 <code>DuplicateKeyException</code>（500）而不是干净的 409。改成<b>闸门优先</b>后，正常路径永远不会触发它。'},
+    {n:'required_agent_id', t:'BIGINT FK NOT NULL', tags:['fk'],
+     why:`<b>这一棒只能由这个机娘来写。</b>
+     <p>它<b>不由客户端传入</b>——join 时由「谁成功消费了那张令牌」决定：服务端从 Chain 3 的
+     agent 令牌解出 <code>agentAccountId()</code>，同时写进 <code>handoff.consumed_by_agent_id</code> 与本列。</p>
+     <p>一句话记住：<b>令牌签发时是无记名的（谁拿到谁能用），被消费的那一刻实名化——
+     而实名化的那一刻同时决定了新席位的归属人。</b>服务端不需要预言，只需如实记录。</p>`,
+     w:['principal.agentAccountId()'], r:['L18 retry 时校验「必须原机娘」'],
+     loc:['StartCollaborationService.java:131','ClaimHandoffService.java:118'],
+     no:'retry 时无从要求「原机娘」回来——<b>这一列是为 L18 存在的，L15 只是把它填对</b>。',
+     trap:'若允许客户端传，就等于「我说我是哪个机娘我就是哪个机娘」。集成测试 <code>startDerivesAgentDimensionFromToken</code> 专门往 body 里塞 <code>requiredAgentId:999999</code> 验证它被完全忽略。'},
+    {n:'source_tool', t:'VARCHAR(64)', tags:[],
+     why:'用什么工具跑的（claude-code / codex / agentlog-cli）。同样来自令牌。',
+     w:['principal.sourceTool()'], r:['贡献视图展示「Queen · Codex」'],
+     loc:['StartCollaborationService.java:132'],
+     no:'不知道这一棒是哪个 AI 工具产出的，贡献视图缺一半信息。',
+     trap:'⚠️ <b>宽度审计</b>：值来自 <code>agent_acting_session.source_tool</code>（VARCHAR(64)），而蓝图这里写的是 <b>VARCHAR(32)</b>——比来源窄，严格模式下超长会直接报错。已改成 64。同类既存隐患：<code>contribution.source_tool</code> 也是 32，取值短所以从未触发，已登记备查。'},
+    {n:'client_run_id', t:'VARCHAR(128)', tags:[],
+     why:'哪一次运行。隔离粒度最细的一维（同一个机娘、同一个工具，不同次运行要分得开）。',
+     w:['principal.clientRunId()'], r:['审计追溯'], loc:['StartCollaborationService.java:133'],
+     no:'同一个机娘跑两次分不清哪次产出了什么。'},
+    {n:'predecessor_ticket_id', t:'BIGINT FK NULL', tags:['fk'],
+     why:`<b>★ 因果链的物化，本课的灵魂。</b>前一棒是谁；首棒为 NULL。
+     <p>为什么不用时间戳排序？时间戳是<b>观测</b>——第二个 AI 可能手更快、时钟更早、有人改过系统时间。
+     而它<b>只有拿到第一个交出的令牌之后</b>才可能入队，这个"之后"是<b>因果的</b>。
+     这就是 Lamport 1978 讲的 happens-before：<b>物理时钟不可信，因果链可信。</b></p>`,
+     w:['join 时填「令牌所指的那一棒」'], r:['判断前序是否 DONE / 沿链回溯'],
+     loc:['ClaimHandoffService.java:101-118'],
+     no:'顺序只能靠时间戳或 sequence_no 猜——前者不可信，后者只是<b>结果</b>不是<b>依据</b>。',
+     mine:'自引用外键 <code>fk_ticket_predecessor</code> 让数据库替你保证「前序必须真实存在」。链表在关系库里就是这么表达的。'},
+    {n:'status', t:'VARCHAR(32)', tags:[],
+     why:'席位状态机（7 个值）。L15 只会产生 <code>READY_TO_WRITE</code>（首棒，无前序）与 <code>WAITING_PREDECESSOR</code>（后续棒，前序未完成）。',
+     w:['start/join 按有无前序判定'], r:['L16 领租约前校验'],
+     loc:['TicketStatus.java','ClaimHandoffService.java:110-113'],
+     no:'不知道这一棒现在能不能写。',
+     trap:'它与 <code>handoff.status</code> <b>正交</b>：本列答「已经进来的人能不能写」，令牌那列答「还能不能有新人进来」。关键证据是 <code>LEASED + AVAILABLE</code> 这一格——第 N 棒正在写字的同时，第 N+1 个 AI 可以拿尾棒入队。'},
+    {n:'active_attempt_id', t:'BIGINT NULL', tags:[],
+     why:'当前进行中的 attempt。<b>L15 建列不建外键</b>——contribution_attempt 表是 L16 才建的。',
+     w:['L16'], r:['L16/L17'], loc:['V012（只建列）'],
+     no:'L16 要么改表要么另建关联表。',
+     mine:'「建列不建外键，等目标表出现再 ALTER 补」是本项目的既有做法——<code>contribution</code> 的 agent 三列 V005 就这么留的坑，L14 直接用上，零迁移。'},
+    {n:'version / created_at / updated_at', t:'—', tags:[], why:'乐观锁与审计时间，同 session。',
+     w:['框架/Clock'], r:['并发控制/审计'], loc:['ContributionTicketDO.java'], no:'同 session。'}
+  ],
+  refs:[{to:'session',via:'session_id'},{to:'agent_account',via:'required_agent_id'},
+        {to:'ticket',via:'predecessor_ticket_id',self:true}],
+  iv:{q:'你们怎么保证两个 AI 写文章的顺序不乱？',
+      l1:'按提交时间排序，先提交的排前面。',
+      l2:'用一个 sequence_no 记录第几棒，每次接力递增。',
+      l3:'关键不是记录顺序，而是<b>顺序从哪来</b>。这两个 AI 对话之间零共享上下文，唯一通道是人复制粘贴一串令牌。所以我没有用时间戳——时间戳表达的是观测，第二个 AI 完全可能手更快、时钟更早、甚至有人改过系统时间。真正可信的是：<b>它只有拿到第一个交出的令牌之后才可能入队</b>，这个"之后"是因果的。我把它物化成一列自引用外键 predecessor_ticket_id，链表式追加。sequence_no 只是这条链的<b>派生结果</b>，方便展示和唯一约束，不是顺序的<b>依据</b>。这其实就是 Lamport 那篇讲逻辑时钟的论文里的 happens-before。'}
+};
+
+T.handoff = {
+  key:'handoff_token', title:'接力棒', emoji:'🥢', core:true,
+  x:490, y:40, w:230, h:76,
+  why:`<b>一次性的「下一棒资格」凭证</b>。主人把它的明文粘给下一个 AI 对话。
+  <p>为什么它必须是<b>独立一张表</b>而不是 ticket 上的几个列？三条：
+  ① 状态空间本来是二维的（本表答「还能不能有新人进来」，ticket 答「已进来的人能不能写」）；
+  ② 生命周期差一个数量级（票活到发布之后，令牌消费即终态）；
+  ③ <b>基数未来会破 1:1</b>——令牌过期后的自愈动作是「重新生成」，同一棒之后会先后有多张令牌，一行装不下。</p>`,
+  life:`签发即 <code>AVAILABLE</code> → 被消费转 <code>CONSUMED</code>（终态）。
+  另有 <code>FROZEN</code>（L17 前序失败冻结）/ <code>REVOKED</code>（L18 终止、L20 发布吊销）/ <code>EXPIRED</code>（L17 清理标记）。`,
+  fields:[
+    {n:'id', t:'BIGINT PK', tags:['pk'], why:'内部主键。', w:['AUTO_INCREMENT'],
+     r:['session.tail_handoff_token_id 指向它'], loc:['HandoffTokenDO.java'], no:'链尾指针无处可指。'},
+    {n:'token_digest', t:'BINARY(32) UK', tags:['uk'],
+     why:`<b>HMAC-SHA256(服务端 pepper, 明文令牌)</b> 的 32 字节摘要。
+     <p><b>明文只在 HTTP 响应里出现一次</b>——必须出现，否则主人没东西可粘贴给下一个 AI；
+     之后服务端再也拿不出明文。脱库拿到的只是摘要，没有 pepper 算不出明文。</p>`,
+     w:['tokenService.digest(rawToken)'], r:['消费时按摘要点查（唯一索引）'],
+     loc:['StartCollaborationService.java:150-154','HandoffTokenMapper.xml'],
+     no:'只能存明文 → 一次脱库 = 全部协作可被劫持。',
+     trap:'为什么用 HMAC 而不是纯 SHA-256？HMAC 带密钥（pepper），防彩虹表/预计算撞库——纯哈希的短 token 可能被预计算。<br>⚠️ 对比 CLI 的 <code>credentials.json</code> 是<b>明文存盘</b>：两侧<b>爆炸半径</b>差几个数量级（服务端脱库=全部用户全部令牌；客户端泄漏=一个用户一台机器）。客户端不加密是因为<b>密钥没地方放</b>——放同一台机器等于没加密，真解法是系统 Keychain。'},
+    {n:'session_id', t:'BIGINT FK', tags:['fk'],
+     why:'属于哪次协作。<b>令牌自带上下文</b>——所以 join 请求体里只需要令牌，不必传 sessionId。',
+     w:['issueTailToken'], r:['消费后据此找会话'], loc:['StartCollaborationService.java:155'],
+     no:'客户端得额外传 sessionId，凭空多一个可篡改的输入和一条一致性校验分支。'},
+    {n:'owner_user_id', t:'BIGINT FK', tags:['fk'],
+     why:'冗余存主人（== session.owner_user_id）。<b>消费时一条查询就能做行级授权，不必 join 回 session。</b>',
+     w:['session.getOwnerUserId()'], r:['多租户校验：不等则 404'],
+     loc:['StartCollaborationService.java:157','ClaimHandoffService.java:88'],
+     no:'每次消费都要 join 一次会话表才知道该不该让你用。',
+     trap:'跨主人一律返 <b>404 而不是 403</b>。403 等于承认「它存在、只是不给你」——会泄漏资源存在性、给枚举者提供反馈信号。集成测试 <code>joinRejectsCrossTenantToken</code> 专门守这条，并断言<b>无副作用</b>。'},
+    {n:'predecessor_ticket_id', t:'BIGINT FK NOT NULL', tags:['fk'],
+     why:'我是「哪一棒之后」的资格。消费我建出的新票，它的 predecessor 就是这一列。',
+     w:['issueTailToken(session, 刚建的票id, now)'], r:['join 时确定新票的前序与棒次'],
+     loc:['StartCollaborationService.java:158','ClaimHandoffService.java:101'],
+     no:'消费了令牌也不知道该把新票接在哪个节点后面。'},
+    {n:'status', t:'VARCHAR(32)', tags:[],
+     why:'AVAILABLE / CONSUMED / FROZEN / REVOKED / EXPIRED（5 个值）。',
+     w:['签发写 AVAILABLE；消费的原子 UPDATE 写 CONSUMED'],
+     r:['<b>作为原子消费的 WHERE 条件</b>——这就是"一次性"的实现'],
+     loc:['HandoffStatus.java','HandoffTokenMapper.xml'],
+     no:'无法表达"这根棒子用过了"，一次性无从实现。',
+     trap:'⚠️ 消费路径<b>不依赖 EXPIRED 这个值</b>——过期判定直接写在原子 UPDATE 的 WHERE 里（<code>expires_at &gt;= ?</code>）。所以即使清理 Worker 还没把过期令牌标成 EXPIRED，消费也一定失败。<b>正确性不依赖 Worker 是否及时</b>，这正是 L15 能"不写 Worker"却依然安全的原因。'},
+    {n:'expires_at', t:'DATETIME(3)', tags:[],
+     why:'24 小时（<code>agentlog.token.handoff-ttl</code>）。因为它<b>要经过主人的手</b>（复制粘贴、可能贴进聊天记录），泄漏面比服务端内部凭证大，所以用短 TTL + 一次性消费对冲。',
+     w:['now + handoffTtl'], r:['原子 UPDATE 的 WHERE / L17 清理 Worker 的扫描'],
+     loc:['StartCollaborationService.java:151','HandoffTokenMapper.xml'],
+     no:'令牌永久有效——泄漏一次就永远可被劫持。',
+     trap:'🔴 <b>本课踩的最大的坑</b>：第一版把消费判定写成 <code>expires_at &gt;= NOW(3)</code>，测试红了——过期令牌被成功消费。探针量出<b>差整 8 小时</b>：这一列是 <b>Java 写的</b>，NOW(3) 是<b>数据库读的</b>，两侧时区口径由 JDBC 参数决定（主应用 URL 带 serverTimezone=UTC，Testcontainers 自建 URL 没带）。改成用应用传入的时刻比较后，写入与比较走同一条转换路径，正确性不再依赖任何配置。<b>⚠️ L17 的清理 Worker 按蓝图用的正是 NOW(3) 比较，那一课必须处理。</b>'},
+    {n:'consumed_by_agent_id', t:'BIGINT FK NULL', tags:['fk'],
+     why:'谁用了这根棒子。<b>与新票的 required_agent_id 是同一个值</b>——实名化的那一刻同时决定了新席位归属人。',
+     w:['原子 UPDATE 一次写入'], r:['审计 / L17 时间线'],
+     loc:['HandoffTokenMapper.xml','ClaimHandoffService.java:93'],
+     no:'不知道是谁接的棒，审计链断掉。'},
+    {n:'consumed_ticket_id', t:'BIGINT FK NULL', tags:['fk'],
+     why:'这根棒子换出了哪张新票。',
+     w:['linkConsumedTicket（<b>第二条语句</b>，闸门通过之后）'], r:['审计 / 时间线'],
+     loc:['ClaimHandoffService.java:125','HandoffTokenMapper.xml'],
+     no:'知道棒子被用了，但不知道换出了什么。',
+     trap:'为什么它不在闸门那条 UPDATE 里一起写？因为那样<b>必须先建票才有 id</b> → 两个线程会双双先建票、撞 uk_ticket_sequence。拆成两条语句是为了让<b>闸门排在最前面</b>——过了闸门就独占，回填按主键更新、零竞争。'},
+    {n:'consumed_at', t:'DATETIME(3) NULL', tags:[],
+     why:'什么时候被消费的。与 status=CONSUMED 一起在闸门那条 UPDATE 里写入。',
+     w:['原子 UPDATE'], r:['审计'], loc:['HandoffTokenMapper.xml'], no:'审计缺时间维度。'},
+    {n:'version / created_at', t:'—', tags:[], why:'版本号与创建时间。',
+     w:['原子 UPDATE 里手写 version=version+1'], r:['审计'],
+     loc:['HandoffTokenMapper.xml'], no:'—',
+     trap:'注意 <code>HandoffTokenDO</code> <b>刻意没有标 @Version</b>：本表的状态推进只走 XML 的原子 UPDATE。若标了，会让人误以为可以用 updateById 改状态——那正是本课要避免的「查-判-改」三步走。<b>把"只能这么改"体现在类型上，比写在注释里可靠。</b>'}
+  ],
+  refs:[{to:'session',via:'session_id'},{to:'user_account',via:'owner_user_id'},
+        {to:'ticket',via:'predecessor_ticket_id'},{to:'ticket',via:'consumed_ticket_id',dashed:true},
+        {to:'agent_account',via:'consumed_by_agent_id'}],
+  iv:{q:'同一根接力棒被两个人同时抢，你怎么保证只有一个成功？',
+      l1:'加个锁，或者先查一下状态再更新。',
+      l2:'用一条带条件的 UPDATE：WHERE status=\'AVAILABLE\'，affectedRows 是 1 就说明抢到了。',
+      l3:'先说为什么不能"查了再改"：那是三步，SELECT 一结束就放锁，if 判断和 UPDATE 之间有空窗，两个线程会都读到 AVAILABLE 然后双双改成 CONSUMED——经典的 TOCTOU。<br>正解是把判定塞进 WHERE，让<b>一条语句</b>内完成检查和修改：MySQL 扫到命中行立刻加排他锁，求值 WHERE，改或跳过，语句结束才放锁。affectedRows 就是裁决书。<br>不用 SELECT FOR UPDATE 是因为那要开事务持锁再发第二条语句，两条换一条的效果；不用 Redis 锁是因为锁是<b>外部约束</b>，进程崩了锁过期就破防，而 status=\'AVAILABLE\' 是<b>数据自身的约束</b>。<br>还有个细节：唯一键其实也能兜住一层，但我坚持不靠它——那等于<b>用异常控制业务流程</b>，客户端拿到的是 500 而不是干净的 409 加自愈提示，而且这个"兜住"还取决于你把 UPDATE 写在插入前还是插入后。<b>语义层的防线要在语义层建。</b>'}
+};
+
+/* 外部引用表（非本课新建，画出来看清关系） */
+T.user_account   = {key:'user_account',   title:'主人',   emoji:'👤', x:40,  y:250, w:150, h:56, ext:true,
+  why:'人类主人。协作、票、令牌的<b>租户锚点</b>。L11.5 起登录凭据是 email、username 是唯一展示名。', fields:[], refs:[]};
+T.agent_account  = {key:'agent_account',  title:'机娘',   emoji:'🤖', x:560, y:250, w:150, h:56, ext:true,
+  why:'AI 人格。<b>没有密码、从不登录</b>——它靠主人 <code>assume</code> 出来的 AgentActingToken 行动（L13）。删除时打墓碑不物理删，历史贡献仍可展示。', fields:[], refs:[]};
+T.forum_channel  = {key:'forum_channel',  title:'分区',   emoji:'📂', x:40,  y:400, w:150, h:56, ext:true,
+  why:'开发日志 / AI 协作 / 验收复盘。<b>collaboration 模块直查它但不 import content 的 Mapper</b>——跨模块只读走 SQL 投影，这是本项目的模块边界铁律（D-05）。', fields:[], refs:[]};
+T.contribution   = {key:'contribution',   title:'贡献（L16 起用）', emoji:'📝', x:300, y:400, w:230, h:56, ext:true,
+  why:'不可变的原始贡献。它的 <code>session_id</code>/<code>ticket_id</code> 两列 <b>V005（L06）就预留了</b>，V012 才把外键建上，L16 才真正写入——「接缝早埋，用时零迁移」。', fields:[], refs:[]};
+
+const ORDER=['session','ticket','handoff','user_account','agent_account','forum_channel','contribution'];
+
+/* ══════════ 生命周期（数据取自真实端到端 PT-008cf65c5affff99） ══════════ */
+const STEPS=[
+ {t:'① start',s:'机娘A 开局',
+  n:`机娘A（星梦）在 Claude Code 里执行 <code>collab start</code>。后端在<b>一个事务</b>里做四件事，顺序被外键钉死：
+     建会话 → 建首棒票 → 签发第一根接力棒 → 会话回指链尾。
+     <b>注意此刻 post_id/draft_id 都是 NULL</b>——草稿还不存在。`,
+  rows:{
+    session:[{op:'ins',d:{id:1,post_ticket:'PT-008cf65c…',owner:1,post_id:'NULL',draft_id:'NULL',planned_title:'L15 端到端…',status:'OPEN',tail_handoff:'→ 令牌1',last_seq:0}}],
+    ticket:[{op:'ins',d:{id:1,ticket_code:'CT-83bdb755…',seq:1,required_agent:'1 星梦',source_tool:'agentlog-cli',predecessor:'NULL',status:'READY_TO_WRITE'}}],
+    handoff:[{op:'ins',d:{id:1,digest:'0x9f3a…(32B)',pred_ticket:1,status:'AVAILABLE',expires_at:'+24h',consumed_by:'NULL',consumed_ticket:'NULL'}}]
+  }},
+ {t:'② 转交',s:'主人复制粘贴',
+  n:`CLI 把明文令牌 <code>handoff_g2qnmp…</code> 打到 stderr 给人看、同时写进 stdout 的 JSON 给 Skill 用。
+     <b>库里没有任何变化</b>——这一步纯粹发生在人类世界。<br>
+     这也是整个设计的原点：<b>两个 AI 对话之间零共享上下文，主人是唯一的传递媒介</b>。
+     令牌之所以是"可复制粘贴的字符串"，就是为了匹配这个物理动作。`,
+  rows:{}},
+ {t:'③ join',s:'机娘B 接力',
+  n:`机娘B（Queen）在 Codex 里执行 <code>collab join --handoff …</code>。五步，<b>闸门排在最前面</b>：
+     ①查令牌取上下文（不做判定）→ <b>②原子消费（闸门，唯一裁决者）</b> → ③建新票 → ④回填 consumed_ticket_id → ⑤签发新尾令牌+会话回指。
+     <br>看 ticket#2 的状态：<b>WAITING_PREDECESSOR</b>——前序还没写完，它已排上队但不能写。`,
+  rows:{
+    session:[{op:'upd',d:{id:1,post_ticket:'PT-008cf65c…',owner:1,post_id:'NULL',draft_id:'NULL',planned_title:'L15 端到端…',status:'OPEN',tail_handoff:'→ 令牌2',last_seq:0},chg:['tail_handoff']}],
+    ticket:[{op:'keep',d:{id:1,ticket_code:'CT-83bdb755…',seq:1,required_agent:'1 星梦',source_tool:'agentlog-cli',predecessor:'NULL',status:'READY_TO_WRITE'}},
+            {op:'ins',d:{id:2,ticket_code:'CT-8cc916d3…',seq:2,required_agent:'2 Queen',source_tool:'agentlog-cli',predecessor:1,status:'WAITING_PREDECESSOR'}}],
+    handoff:[{op:'upd',d:{id:1,digest:'0x9f3a…(32B)',pred_ticket:1,status:'CONSUMED',expires_at:'+24h',consumed_by:'2 Queen',consumed_ticket:2},chg:['status','consumed_by','consumed_ticket']},
+             {op:'ins',d:{id:2,digest:'0x71c4…(32B)',pred_ticket:2,status:'AVAILABLE',expires_at:'+24h',consumed_by:'NULL',consumed_ticket:'NULL'}}]
+  }},
+ {t:'④ 重放',s:'旧棒子再用一次',
+  n:`同一根令牌第二次消费。原子 UPDATE 的 <code>WHERE status='AVAILABLE'</code> 不再成立 → <b>affectedRows = 0</b> →
+     回查判定原因 → <code>409 ACPP_HANDOFF_CONSUMED</code> + 「向主人索取最新尾令牌」。
+     <br><b>库里一行都没变</b>——这正是"一次性"的含义。CLI 会把这个错误翻译成人能照做的下一步。`,
+  rows:{}},
+ {t:'⑤ L16 起',s:'后面会发生什么',
+  n:`<b>以下是预告，L15 没做</b>：<br>
+     · 机娘A <code>claim-turn</code> 领租约 → ticket#1 转 <code>LEASED</code>、session 转 <code>RUNNING</code>、建 attempt 行<br>
+     · 机娘A <code>submit</code> 提交正文 → <b>此刻才创建 post + draft + contribution + draft_block</b>，
+       session.post_id/draft_id 终于有值、ticket#1 转 <code>DONE</code>、ticket#2 转 <code>READY_TO_WRITE</code><br>
+     · 若超时（L17）→ attempt 转 FAILED_TIMEOUT、后序 BLOCKED、<b>尾令牌 FROZEN</b>（禁止新人进来）<br>
+     · 主人 retry（L18）→ 只允许<b>原机娘</b>（靠 required_agent_id 判定）、解冻尾令牌<br>
+     · 主人发布（L20）→ session 转 PUBLISHED、<b>吊销尾令牌</b>（REVOKED）<br>
+     <br>👉 现在回头看 §handoff.status 的五个值，你应该能说清每一个是被上面哪一步驱动的。`,
+  rows:{}}
+];
+const COLS={
+  session:['id','post_ticket','owner','post_id','draft_id','planned_title','status','tail_handoff','last_seq'],
+  ticket:['id','ticket_code','seq','required_agent','source_tool','predecessor','status'],
+  handoff:['id','digest','pred_ticket','status','expires_at','consumed_by','consumed_ticket']
+};
+const TNAME={session:'collaboration_session',ticket:'contribution_ticket',handoff:'handoff_token'};
+
+/* ══════════════════════ 渲染 ══════════════════════ */
+let mode='er', selTable='session', selField=null, selStep=0;
+const $=id=>document.getElementById(id);
+
+function drawEr(){
+  const s=$('er');
+  let defs=`<defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#3c3f43"/></marker>
+    <marker id="arrowLit" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#4fc3f7"/></marker></defs>`;
+  let edges='',nodes='',labels='';
+  // 标签沿曲线按 t 取点，同一对节点间的多条边用不同 t 错开，避免文字叠在一起
+  const T_BY_INDEX=[0.30,0.52,0.72,0.42];
+  ORDER.forEach(k=>{
+    const t=T[k];
+    (t.refs||[]).forEach((r,ri)=>{
+      const to=T[r.to]; if(!to)return;
+      const isLit = (k===selTable||r.to===selTable);
+      const cls='edge'+(isLit?' lit':(selTable?' dimmed':''));
+      let d,lx,ly;
+      if(r.self){ // 自引用：从右下角绕一圈回到底边
+        d=`M${t.x+t.w-40},${t.y+t.h} c26,40 -34,52 -70,52 c-36,0 -52,-18 -46,-52`;
+        lx=t.x+t.w-116; ly=t.y+t.h+66;
+      }else{
+        const x1=t.x+t.w/2, y1=t.y+t.h/2, x2=to.x+to.w/2, y2=to.y+to.h/2;
+        const bend=(ri%2?-1:1)*0.10;                       // 同源多条边交替左右弯，避免重合
+        const cx=(x1+x2)/2+(y2-y1)*bend, cy=(y1+y2)/2-(x2-x1)*bend;
+        d=`M${x1},${y1} Q${cx},${cy} ${x2},${y2}`;
+        // 二次贝塞尔曲线在 t 处的点，用于放标签
+        const tt=T_BY_INDEX[ri%T_BY_INDEX.length], mt=1-tt;
+        lx=mt*mt*x1+2*mt*tt*cx+tt*tt*x2;
+        ly=mt*mt*y1+2*mt*tt*cy+tt*tt*y2-4;
+      }
+      edges+=`<path class="${cls}" d="${d}" ${r.dashed?'stroke-dasharray="5,4"':''}/>`;
+      // 只给【与选中表相关】的边画列名标签——否则 12 条边的标签会互相叠、也会压在节点上。
+      // 这同时强化了交互本身：点一张表，就只看这张表的引用关系。
+      // ★ 标签攒到最后单独一层画（在节点之后），否则会被节点矩形盖住而看不全列名。
+      if(isLit){
+        labels+=`<text class="elabel lit" x="${lx}" y="${ly}" text-anchor="middle"
+          paint-order="stroke" stroke="#1e1f22" stroke-width="4">${r.via}</text>`;
+      }
+    });
+  });
+  ORDER.forEach(k=>{
+    const t=T[k]; const on=k===selTable;
+    const rel = !selTable || on || (T[selTable].refs||[]).some(r=>r.to===k) ||
+                (t.refs||[]).some(r=>r.to===selTable);
+    const cls='node'+(t.core?' core':'')+(on?' sel':'')+(rel?'':' dimmed');
+    nodes+=`<g class="${cls}" data-k="${k}">
+      <rect x="${t.x}" y="${t.y}" width="${t.w}" height="${t.h}"/>
+      <text x="${t.x+13}" y="${t.y+26}">${t.emoji} ${t.key}</text>
+      <text class="t2" x="${t.x+13}" y="${t.y+45}">${t.title}${t.ext?' · 非本课新建':''}</text>
+      <text class="t2" x="${t.x+13}" y="${t.y+62}">${t.fields.length?t.fields.length+' 个字段 · 点击查看':'外部引用'}</text>
+    </g>`;
+  });
+  s.innerHTML=defs+edges+nodes+labels;
+  s.querySelectorAll('.node').forEach(n=>n.onclick=()=>{selTable=n.dataset.k;selField=null;render();});
+}
+
+function fieldsHtml(t){
+  if(!t.fields.length) return '';
+  return `<div class="kv"><b>全部字段（点行看逐列详解）</b></div>
+  <table class="fields"><tr><th>列</th><th>类型</th><th>一句话</th></tr>`+
+  t.fields.map((f,i)=>`<tr data-i="${i}" class="${selField===i?'sel':''}">
+    <td class="fn">${f.n}${(f.tags||[]).map(x=>`<span class="tag ${x}">${
+      {pk:'PK',uk:'UK',fk:'FK',trap:'坑',new:'新增'}[x]}</span>`).join('')}</td>
+    <td class="ft">${f.t}</td>
+    <td>${f.why.replace(/<[^>]+>/g,'').slice(0,42)}…</td></tr>`).join('')+`</table>`;
+}
+
+function ivHtml(iv){
+  if(!iv)return'';
+  return `<div class="iv"><div class="q">💬 面试官可能这么问：${iv.q}</div>
+    <details><summary>▸ 三档答案对照（先自己说一遍再点开）</summary>
+      <div class="lv l1"><b>新手：</b>${iv.l1}</div>
+      <div class="lv l2"><b>合格：</b>${iv.l2}</div>
+      <div class="lv l3"><b>加分：</b>${iv.l3}</div>
+    </details></div>`;
+}
+
+function renderDetail(){
+  const t=T[selTable]; const d=$('detail');
+  if(selField!==null && t.fields[selField]){
+    const f=t.fields[selField];
+    d.innerHTML=`<h3>${t.key} <span style="color:var(--dim)">·</span> ${f.n}</h3>
+      <div style="color:var(--dim);font-size:12px;margin-bottom:10px" class="mono">${f.t}</div>
+      <div class="kv"><b>为什么有这一列</b>${f.why}</div>
+      <div class="kv"><b>谁写它</b>${(f.w||[]).map(x=>`<div>· ${x}</div>`).join('')}</div>
+      <div class="kv"><b>谁读它</b>${(f.r||[]).map(x=>`<div>· ${x}</div>`).join('')}</div>
+      <div class="kv"><b>代码落点</b>${(f.loc||[]).map(x=>`<span class="loc">${x}</span>`).join('')}</div>
+      <div class="counter"><b>🤔 如果没有这一列会怎样：</b>${f.no||'—'}</div>
+      ${f.trap?`<div class="trapbox"><b>⚠️ 这里有坑：</b>${f.trap}</div>`:''}
+      ${f.mine?`<div class="mine"><b>📌 补充：</b>${f.mine}</div>`:''}
+      <div style="margin-top:14px"><a href="#" id="backT">← 回到「${t.key}」整表说明</a></div>`;
+    const b=$('backT'); if(b)b.onclick=e=>{e.preventDefault();selField=null;render();};
+  }else{
+    d.innerHTML=`<h3>${t.emoji} ${t.key}</h3>
+      <div style="color:var(--dim);font-size:12px;margin-bottom:10px">${t.title}${t.ext?' · 非本课新建，画出来看清关系':''}</div>
+      <div class="kv"><b>这张表为什么存在</b>${t.why}</div>
+      ${t.life?`<div class="kv"><b>生命周期</b>${t.life}</div>`:''}
+      ${fieldsHtml(t)}${ivHtml(t.iv)}`;
+    d.querySelectorAll('.fields tr[data-i]').forEach(tr=>
+      tr.onclick=()=>{selField=+tr.dataset.i;render();});
+  }
+}
+
+function renderLife(){
+  $('tlBar').innerHTML=STEPS.map((s,i)=>
+    `<button data-i="${i}" class="${i===selStep?'on':''}${i>=4?' future':''}">${s.t}<small>${s.s}</small></button>`).join('');
+  $('tlBar').querySelectorAll('button').forEach(b=>b.onclick=()=>{selStep=+b.dataset.i;render();});
+  const st=STEPS[selStep];
+  $('tlNarr').innerHTML=st.n;
+  let h='';
+  ['session','ticket','handoff'].forEach(k=>{
+    const rows=st.rows[k];
+    // 没有本步数据时，沿用最近一次有数据的快照
+    let use=rows, from=selStep;
+    if(!use){ for(let j=selStep;j>=0;j--){ if(STEPS[j].rows[k]){use=STEPS[j].rows[k];from=j;break;} } }
+    h+=`<div class="tname">${TNAME[k]}<span class="op">${
+      rows? (Object.values(rows).some(r=>r.op==='ins')?'本步有新增':'本步有修改')
+          : (use?`本步无变化（沿用 ${STEPS[from].t} 的状态）`:'本步尚无数据')}</span></div>`;
+    if(!use){h+='<div class="empty">（还没有任何行）</div>';return;}
+    h+=`<table class="rows"><tr>${COLS[k].map(c=>`<th>${c}</th>`).join('')}</tr>`+
+       use.map(r=>`<tr class="${rows?(r.op==='ins'?'ins':(r.op==='upd'?'upd':'')):''}">`+
+         COLS[k].map(c=>`<td class="${rows&&r.chg&&r.chg.includes(c)?'cell-chg':''}">${r.d[c]??''}</td>`).join('')+
+       `</tr>`).join('')+`</table>`;
+  });
+  $('tlTables').innerHTML=h;
+}
+
+function render(){
+  $('tabEr').className = mode==='er'?'on':'';
+  $('tabLife').className = mode==='life'?'on':'';
+  $('erPane').style.display = mode==='er'?'':'none';
+  $('lifePane').style.display = mode==='life'?'':'none';
+  $('leftTitle').textContent = mode==='er'?'🗺 表关系网':'⏱ 生命周期时间轴';
+  $('leftHint').textContent = mode==='er'
+    ? '点任意表 → 右侧看它的存在缘由与全部字段（蓝线=与选中表相关的引用）'
+    : '点步骤 → 看三张表在那一刻的真实行数据（绿=新增 黄=被改）';
+  if(mode==='er'){drawEr();renderDetail();}else{renderLife();renderDetail();}
+}
+$('tabEr').onclick=()=>{mode='er';render();};
+$('tabLife').onclick=()=>{mode='life';render();};
+document.addEventListener('keydown',e=>{
+  if(mode!=='life')return;
+  if(e.key==='ArrowRight'){selStep=Math.min(STEPS.length-1,selStep+1);render();}
+  if(e.key==='ArrowLeft'){selStep=Math.max(0,selStep-1);render();}
+});
+render();
+</script>
+</body>
+</html>
