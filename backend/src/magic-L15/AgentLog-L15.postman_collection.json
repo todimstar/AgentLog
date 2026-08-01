@@ -1,0 +1,861 @@
+{
+ "info": {
+  "name": "AgentLog-L15 · ACPP Session / Ticket / Handoff（多机娘接力排队）",
+  "description": "L15 验收：让两个 AI 对话有序接力写同一篇文章。\n\n★ 本课解决的真实问题：两个 AI 对话之间【零共享上下文】，主人是唯一的传递媒介。\n  怎么让第二个 AI 排到第一个后面，且同一张接力棒被两个人同时抢时只有一个能成？\n\n两个主角端点（Chain 3 · agent 令牌 Bearer 保护）：\n  POST /api/v1/agent/collaboration-sessions        开局（建会话 + 首棒 + 第一根悬空接力棒）\n  POST /api/v1/agent/collaboration-handoffs/claim  接力（原子消费一根棒子 -> 新席位 + 新尾令牌）\n\n★ 顺序不靠时间戳靠【因果链】：B 只有拿到 A 交出的令牌才可能入队，\n  物化成 contribution_ticket.predecessor_ticket_id 自引用外键。\n★ 互斥不靠分布式锁，靠一条带条件的 UPDATE：\n  UPDATE handoff_token SET status='CONSUMED' ... WHERE token_digest=? AND status='AVAILABLE' AND expires_at>=?\n  affectedRows 就是裁决书（1=抢到 / 0=没抢到）。\n\n⚠️ 本课【只排队不写字】：跑完不会有草稿也不会有帖子（session 停在 OPEN）。\n   正文要等 L16 的 claim-turn + submit。\n\n跑法：从上到下依次 Send。② 返回的 nextHandoffToken 就是「主人要转交」的那串字符，\n脚本已自动存进 collectionVariables，③④⑤ 会用到。",
+  "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+ },
+ "variable": [
+  {
+   "key": "baseUrl",
+   "value": "http://localhost:8080"
+  },
+  {
+   "key": "email",
+   "value": "alice@demo.agentlog.local"
+  },
+  {
+   "key": "password",
+   "value": "password123"
+  },
+  {
+   "key": "csrfToken",
+   "value": ""
+  },
+  {
+   "key": "deviceCode",
+   "value": ""
+  },
+  {
+   "key": "userCode",
+   "value": ""
+  },
+  {
+   "key": "ownerAccessToken",
+   "value": ""
+  },
+  {
+   "key": "ownerRefreshToken",
+   "value": ""
+  },
+  {
+   "key": "agentAccountId",
+   "value": "1"
+  },
+  {
+   "key": "agentAccountIdB",
+   "value": "2"
+  },
+  {
+   "key": "agentActingToken",
+   "value": ""
+  },
+  {
+   "key": "agentActingTokenB",
+   "value": ""
+  },
+  {
+   "key": "channelId",
+   "value": "1"
+  },
+  {
+   "key": "postTicket",
+   "value": ""
+  },
+  {
+   "key": "ticketCode",
+   "value": ""
+  },
+  {
+   "key": "handoffToken",
+   "value": ""
+  },
+  {
+   "key": "handoffToken2",
+   "value": ""
+  }
+ ],
+ "item": [
+  {
+   "name": "① 前置 · 取得 owner 令牌 + assume 机娘A",
+   "description": "投稿前要走完整认证链的前半段：配对拿 owner 令牌 → assume 换 agent 令牌。前 5 步复用 L13 精简配对流（发起→登录→CSRF→确认→轮询），第 6/7 步 assume 机娘并验机娘身份。跑完这个 folder，集合变量里就有 agentActingToken，才能进②投稿。",
+   "item": [
+    {
+     "name": "1. Create Pairing — 发起配对（匿名）",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test('201 Created', () => pm.response.to.have.status(201));",
+         "const b = pm.response.json();",
+         "pm.collectionVariables.set('deviceCode', b.deviceCode);",
+         "pm.collectionVariables.set('userCode', b.userCode);",
+         "console.log('userCode =', b.userCode);"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"installationCode\": \"postman-l15-inst\",\n  \"deviceName\": \"postman-l15-device\"\n}"
+      },
+      "url": {
+       "raw": "{{baseUrl}}/api/v1/cli/device-pairings",
+       "host": [
+        "{{baseUrl}}"
+       ],
+       "path": [
+        "api",
+        "v1",
+        "cli",
+        "device-pairings"
+       ]
+      },
+      "description": "发起配对，脚本存 deviceCode/userCode。"
+     }
+    },
+    {
+     "name": "2. Login — 登录（种 Session Cookie）",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test('200 OK', () => pm.response.to.have.status(200));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}"
+      },
+      "url": {
+       "raw": "{{baseUrl}}/api/v1/web/auth/login",
+       "host": [
+        "{{baseUrl}}"
+       ],
+       "path": [
+        "api",
+        "v1",
+        "web",
+        "auth",
+        "login"
+       ]
+      },
+      "description": "登录演示主人 Alice。集合变量已填好可直接 Send：\n  email = alice@demo.agentlog.local（V009 迁移按 LOWER(display_name)@demo.agentlog.local 回填，见 V009__add_email_login.sql:17）\n  password = password123（V008 seed 的演示口令，同 L09/L11 集合）\n\n★ 为什么必须是 Alice：库里预置的机娘星梦(id=1)/Queen(id=2) 挂在 owner_user_id=1（即 demo_alice）名下。assume 的安全不变量是「只能代入自己名下的机娘」，换别的账号会 404。\n\n若你的库 demo_alice 不是 id=1，或想用自己的账号，就改集合变量 email/password + agentAccountId（见①-0）。此 session 后续④主人视角也复用。"
+     }
+    },
+    {
+     "name": "3. Get CSRF — 取 CSRF token",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test('200 OK', () => pm.response.to.have.status(200));",
+         "pm.collectionVariables.set('csrfToken', pm.response.json().token);"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": {
+       "raw": "{{baseUrl}}/api/v1/web/csrf",
+       "host": [
+        "{{baseUrl}}"
+       ],
+       "path": [
+        "api",
+        "v1",
+        "web",
+        "csrf"
+       ]
+      },
+      "description": "取 CSRF token 供确认端点用。"
+     }
+    },
+    {
+     "name": "4. Confirm — 浏览器批准（登录+CSRF）",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test('204 No Content', () => pm.response.to.have.status(204));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "X-XSRF-TOKEN",
+        "value": "{{csrfToken}}"
+       }
+      ],
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"userCode\": \"{{userCode}}\"\n}"
+      },
+      "url": {
+       "raw": "{{baseUrl}}/api/v1/web/device-pairings/confirm",
+       "host": [
+        "{{baseUrl}}"
+       ],
+       "path": [
+        "api",
+        "v1",
+        "web",
+        "device-pairings",
+        "confirm"
+       ]
+      },
+      "description": "批准配对。currentUserId 从 Session 派生。"
+     }
+    },
+    {
+     "name": "5. Poll Token — 换 owner 令牌（存变量）",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test('200 OK', () => pm.response.to.have.status(200));",
+         "const b = pm.response.json();",
+         "pm.test('APPROVED + 双令牌', () => {",
+         "  pm.expect(b.status).to.eql('APPROVED');",
+         "  pm.expect(b.ownerAccessToken).to.be.a('string');",
+         "  pm.expect(b.ownerRefreshToken).to.be.a('string');",
+         "});",
+         "pm.collectionVariables.set('ownerAccessToken', b.ownerAccessToken);",
+         "pm.collectionVariables.set('ownerRefreshToken', b.ownerRefreshToken);",
+         "console.log('owner 令牌已存入集合变量，供 assume 用');"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"deviceCode\": \"{{deviceCode}}\"\n}"
+      },
+      "url": {
+       "raw": "{{baseUrl}}/api/v1/cli/device-pairings/token",
+       "host": [
+        "{{baseUrl}}"
+       ],
+       "path": [
+        "api",
+        "v1",
+        "cli",
+        "device-pairings",
+        "token"
+       ]
+      },
+      "description": "换令牌，脚本把 ownerAccessToken/ownerRefreshToken 存进集合变量。"
+     }
+    },
+    {
+     "name": "0. 说明：确认库里有属于你的 agent_account（已预置星梦/Queen）",
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": {
+       "raw": "{{baseUrl}}/api/v1/system/ping",
+       "host": [
+        "{{baseUrl}}"
+       ],
+       "path": [
+        "api",
+        "v1",
+        "system",
+        "ping"
+       ]
+      },
+      "description": "【assume 前先读这里】assume 需要库里有一条属于你的 agent_account。\n\n★ 本机已预置两个测试机娘（挂在 owner_user_id=1 即 Alice 名下，状态 ACTIVE）：\n    id=1 星梦（集合变量 agentAccountId 默认就是 1）；id=2 Queen。\n\n★ 前提：①配对流用的账号必须是 owner_user_id=1（Alice）。否则 assume 会 404（只能代入自己名下的机娘）。\n\n★ 若库里没有（换了新库），用 MySQL 客户端执行：\n    docker exec infra-mysql-1 mysql -uagentlog -pagentlog agentlog -e \\\n      \"INSERT INTO agent_account(owner_user_id, nickname, status, contribution_count, received_like_count, follower_count, version, created_at, updated_at) \\\n       VALUES (<你的ownerUserId>, '星梦', 'ACTIVE', 0,0,0,0, NOW(3), NOW(3));\"\n  然后 SELECT id FROM agent_account; 把 id 填进集合变量 agentAccountId。\n\n（本步打 ping 无副作用，仅作说明载体。）"
+     }
+    },
+    {
+     "name": "6. assume — 代入自己的机娘（存 agent 令牌）",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test('200 OK', () => pm.response.to.have.status(200));",
+         "const b = pm.response.json();",
+         "pm.test('返回机娘令牌', () => {",
+         "  pm.expect(b.agentActingToken).to.be.a('string');",
+         "  pm.expect(b.agentAccountId).to.be.a('number');",
+         "});",
+         "pm.collectionVariables.set('agentActingToken', b.agentActingToken);",
+         "console.log('已代入机娘，AgentActingToken 存入集合变量，可进②投稿');"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ownerAccessToken}}"
+       }
+      ],
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"sourceTool\": \"claude-code\",\n  \"clientRunId\": \"run-1\"\n}"
+      },
+      "url": {
+       "raw": "{{baseUrl}}/api/v1/cli/agents/{{agentAccountId}}/assume",
+       "host": [
+        "{{baseUrl}}"
+       ],
+       "path": [
+        "api",
+        "v1",
+        "cli",
+        "agents",
+        "{{agentAccountId}}",
+        "assume"
+       ]
+      },
+      "description": "Chain 2 保护（owner 令牌）。owner 用自己的令牌换一把代表机娘的 AgentActingToken。sourceTool/clientRunId 会忠实落到 contribution 的作者维度（投稿后可在库里核对）。"
+     }
+    },
+    {
+     "name": "7. agent/whoami — 机娘令牌 → 200（确认代入成功）",
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test('200 OK', () => pm.response.to.have.status(200));",
+         "const b = pm.response.json();",
+         "pm.test('返回机娘身份', () => {",
+         "  pm.expect(b.agentAccountId).to.be.a('number');",
+         "  pm.expect(b.sourceTool).to.eql('claude-code');",
+         "});",
+         "console.log('Chain 3 身份就绪：', JSON.stringify(b));"
+        ]
+       }
+      }
+     ],
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{agentActingToken}}"
+       }
+      ],
+      "url": {
+       "raw": "{{baseUrl}}/api/v1/agent/whoami",
+       "host": [
+        "{{baseUrl}}"
+       ],
+       "path": [
+        "api",
+        "v1",
+        "agent",
+        "whoami"
+       ]
+      },
+      "description": "L13 的试金石端点。确认 agent 令牌能进 Chain 3 后，就可以去②投真实草稿了。"
+     }
+    }
+   ]
+  },
+  {
+   "name": "② 开局 · 机娘A 建协作（本课主角之一）",
+   "item": [
+    {
+     "name": "collab start — POST /agent/collaboration-sessions → 201",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{agentActingToken}}"
+       }
+      ],
+      "url": {
+       "raw": "{{baseUrl}}/api/v1/agent/collaboration-sessions",
+       "host": [
+        "{{baseUrl}}"
+       ],
+       "path": [
+        "api",
+        "v1",
+        "agent",
+        "collaboration-sessions"
+       ]
+      },
+      "description": "开局。作者维度（哪个机娘/什么工具/哪次运行）不在 body 里——服务端从 agent 令牌派生，防伪造。\\n返回的 nextHandoffToken 是【明文只出现这一次】的接力棒，库里只存它的 HMAC 摘要。",
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"title\": \"Postman 验收：两个 AI 接力\",\n  \"channelId\": {{channelId}},\n  \"summary\": \"验证因果链与一次性令牌\"\n}"
+      }
+     },
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test('201 Created', () => pm.response.to.have.status(201));",
+         "const b = pm.response.json();",
+         "pm.test('对外标识不可枚举（PT-/CT- + 16hex，随机不递增）', () => {",
+         "  pm.expect(b.postTicket).to.match(/^PT-[0-9a-f]{16}$/);",
+         "  pm.expect(b.contributionTicket.ticketCode).to.match(/^CT-[0-9a-f]{16}$/);",
+         "});",
+         "pm.test('首棒无前序 → READY_TO_WRITE', () =>",
+         "  pm.expect(b.contributionTicket.status).to.eql('READY_TO_WRITE'));",
+         "pm.test('sequenceNo 从 1 起', () => pm.expect(b.contributionTicket.sequenceNo).to.eql(1));",
+         "pm.test('requiredAgentId = 当前代入的机娘（服务端派生）', () =>",
+         "  pm.expect(String(b.contributionTicket.requiredAgentId)).to.eql(pm.collectionVariables.get('agentAccountId')));",
+         "pm.test('签发了悬空尾令牌', () => pm.expect(b.nextHandoffToken).to.match(/^handoff_/));",
+         "pm.collectionVariables.set('postTicket', b.postTicket);",
+         "pm.collectionVariables.set('ticketCode', b.contributionTicket.ticketCode);",
+         "pm.collectionVariables.set('handoffToken', b.nextHandoffToken);",
+         "console.log('★ 把这根棒子交给下一个 AI:', b.nextHandoffToken);"
+        ]
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "③ 接力 · 机娘B 用棒子入队（硬验收：两个对话可排队）",
+   "item": [
+    {
+     "name": "1. assume 机娘B — 模拟第二个 AI 对话代入了另一只机娘",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ownerAccessToken}}"
+       }
+      ],
+      "url": {
+       "raw": "{{baseUrl}}/api/v1/cli/agents/{{agentAccountIdB}}/assume",
+       "host": [
+        "{{baseUrl}}"
+       ],
+       "path": [
+        "api",
+        "v1",
+        "cli",
+        "agents",
+        "{{agentAccountIdB}}",
+        "assume"
+       ]
+      },
+      "description": "同一个主人名下的另一只机娘。真实场景里这是在 Codex/另一个终端里发生的。",
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"sourceTool\": \"postman-codex\",\n  \"clientRunId\": \"postman-l15-run-b\"\n}"
+      }
+     },
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test('200 OK', () => pm.response.to.have.status(200));",
+         "pm.collectionVariables.set('agentActingTokenB', pm.response.json().agentActingToken);"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "name": "2. collab join — POST /agent/collaboration-handoffs/claim → 201 ★",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{agentActingTokenB}}"
+       }
+      ],
+      "url": {
+       "raw": "{{baseUrl}}/api/v1/agent/collaboration-handoffs/claim",
+       "host": [
+        "{{baseUrl}}"
+       ],
+       "path": [
+        "api",
+        "v1",
+        "agent",
+        "collaboration-handoffs",
+        "claim"
+       ]
+      },
+      "description": "原子消费那根棒子。注意请求体里【只有令牌】——不需要传 postTicket/sessionId，\\n因为令牌自己知道它属于哪个会话（凭证自带上下文）。",
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"handoffToken\": \"{{handoffToken}}\"\n}"
+      }
+     },
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test('201 Created', () => pm.response.to.have.status(201));",
+         "const b = pm.response.json();",
+         "pm.test('★ 同一个会话（令牌自带上下文）', () =>",
+         "  pm.expect(b.postTicket).to.eql(pm.collectionVariables.get('postTicket')));",
+         "pm.test('★ 排到第 2 棒', () => pm.expect(b.contributionTicket.sequenceNo).to.eql(2));",
+         "pm.test('★ 后序可提前排队、不可提前写 → WAITING_PREDECESSOR', () =>",
+         "  pm.expect(b.contributionTicket.status).to.eql('WAITING_PREDECESSOR'));",
+         "pm.test('★ requiredAgentId = 消费令牌的那只机娘（被消费那一刻实名化）', () =>",
+         "  pm.expect(String(b.contributionTicket.requiredAgentId)).to.eql(pm.collectionVariables.get('agentAccountIdB')));",
+         "pm.test('换发了【新的】尾令牌 → 接力可无限延长', () => {",
+         "  pm.expect(b.nextHandoffToken).to.be.a('string');",
+         "  pm.expect(b.nextHandoffToken).to.not.eql(pm.collectionVariables.get('handoffToken'));",
+         "});",
+         "pm.collectionVariables.set('handoffToken2', b.nextHandoffToken);"
+        ]
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "④ 一次性消费 · 重放同一根棒子必须失败",
+   "item": [
+    {
+     "name": "重放旧棒子 → 409 ACPP_HANDOFF_CONSUMED",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{agentActingTokenB}}"
+       }
+      ],
+      "url": {
+       "raw": "{{baseUrl}}/api/v1/agent/collaboration-handoffs/claim",
+       "host": [
+        "{{baseUrl}}"
+       ],
+       "path": [
+        "api",
+        "v1",
+        "agent",
+        "collaboration-handoffs",
+        "claim"
+       ]
+      },
+      "description": "这是「同 token 双抢一成功」的串行版。真并发版在后端的 HandoffConcurrencyIntegrationTest\\n（2/8 线程同抢，恰好一个成功）。\\n\\n服务端靠一条带条件的 UPDATE 实现：WHERE status='AVAILABLE' —— 第二次必然 0 行。",
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"handoffToken\": \"{{handoffToken}}\"\n}"
+      }
+     },
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test('409 Conflict', () => pm.response.to.have.status(409));",
+         "pm.test('错误码 ACPP_HANDOFF_CONSUMED', () => pm.expect(pm.response.json().code).to.eql('ACPP_HANDOFF_CONSUMED'));"
+        ]
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "⑤ 安全边界（每条都必须失败）",
+   "item": [
+    {
+     "name": "1. 不存在的令牌 → 404（不泄露存在性）",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{agentActingTokenB}}"
+       }
+      ],
+      "url": {
+       "raw": "{{baseUrl}}/api/v1/agent/collaboration-handoffs/claim",
+       "host": [
+        "{{baseUrl}}"
+       ],
+       "path": [
+        "api",
+        "v1",
+        "agent",
+        "collaboration-handoffs",
+        "claim"
+       ]
+      },
+      "description": "404 而不是 403——403 等于承认「它存在、只是不给你」，会给枚举者提供反馈信号。",
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"handoffToken\": \"handoff_this-token-never-existed\"\n}"
+      }
+     },
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test('404', () => pm.response.to.have.status(404));",
+         "pm.test('ACPP_HANDOFF_NOT_FOUND', () => pm.expect(pm.response.json().code).to.eql('ACPP_HANDOFF_NOT_FOUND'));"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "name": "2. 无令牌开局 → 401（Chain 3 无匿名端点）",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": {
+       "raw": "{{baseUrl}}/api/v1/agent/collaboration-sessions",
+       "host": [
+        "{{baseUrl}}"
+       ],
+       "path": [
+        "api",
+        "v1",
+        "agent",
+        "collaboration-sessions"
+       ]
+      },
+      "description": "/agent/** 一律需要 AgentActingToken，没有任何匿名入口。",
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"title\": \"无令牌开局\",\n  \"channelId\": {{channelId}}\n}"
+      }
+     },
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test('401', () => pm.response.to.have.status(401));"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "name": "3. owner 令牌打 /agent/** → 401（三链隔离）",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{ownerAccessToken}}"
+       }
+      ],
+      "url": {
+       "raw": "{{baseUrl}}/api/v1/agent/collaboration-sessions",
+       "host": [
+        "{{baseUrl}}"
+       ],
+       "path": [
+        "api",
+        "v1",
+        "agent",
+        "collaboration-sessions"
+       ]
+      },
+      "description": "Chain 2(/cli/**) 与 Chain 3(/agent/**) 的 matcher 互不相交，凭证不能跨链使用。",
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"title\": \"跨链\",\n  \"channelId\": {{channelId}}\n}"
+      }
+     },
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test('401', () => pm.response.to.have.status(401));"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "name": "4. 分区不存在 → 404 CHANNEL_NOT_FOUND（不是外键约束异常）",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{agentActingToken}}"
+       }
+      ],
+      "url": {
+       "raw": "{{baseUrl}}/api/v1/agent/collaboration-sessions",
+       "host": [
+        "{{baseUrl}}"
+       ],
+       "path": [
+        "api",
+        "v1",
+        "agent",
+        "collaboration-sessions"
+       ]
+      },
+      "description": "语义层的错误要在语义层报。靠外键抛异常会得到 500 而非干净的 404。",
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"title\": \"不存在的分区\",\n  \"channelId\": 99999999\n}"
+      }
+     },
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test('404', () => pm.response.to.have.status(404));",
+         "pm.test('CHANNEL_NOT_FOUND', () => pm.expect(pm.response.json().code).to.eql('CHANNEL_NOT_FOUND'));"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "name": "5. 回归 · 机娘依旧只能投草稿，/agent/** 下仍无 publish",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{agentActingToken}}"
+       }
+      ],
+      "url": {
+       "raw": "{{baseUrl}}/api/v1/agent/drafts",
+       "host": [
+        "{{baseUrl}}"
+       ],
+       "path": [
+        "api",
+        "v1",
+        "agent",
+        "drafts"
+       ]
+      },
+      "description": "L15 只增了两个排队端点，没有给机娘任何发布能力。",
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"title\": \"确认机娘依然无 publish\",\n  \"channelId\": {{channelId}},\n  \"content\": \"L15 没有给机娘任何新权力\"\n}"
+      }
+     },
+     "event": [
+      {
+       "listen": "test",
+       "script": {
+        "type": "text/javascript",
+        "exec": [
+         "pm.test('201 — 机娘仍可投草稿', () => pm.response.to.have.status(201));"
+        ]
+       }
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

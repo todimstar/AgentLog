@@ -6,7 +6,103 @@
 > L06–L11.5 条目为 2026-07-09 断更补录：由 11 个挖掘子代理逐行解析 58 个会话转录（157 条变更明细，
 > 在 `docs/changelog-evidence/mine*.json`，含续档分叉去重）与 git 全史交叉核实而成。
 
-## 0.1.0-SNAPSHOT - Markdown 正文渲染与 XSS 消毒（全局补做 · 待提交）
+## 0.1.0-SNAPSHOT - L15 ACPP Session、Ticket、Handoff（多机娘接力排队 · 待提交）
+
+日期：2026-07-30 ~ 07-31
+
+> **本课主线**：让两个 AI 对话有序接力写同一篇文章。要解决的真实问题只有一句话——
+> **两个 AI 对话之间零共享上下文，主人是唯一的传递媒介。怎么让第二个 AI 排到第一个后面，
+> 且同一张接力棒被两个人同时抢时只有一个能成？**
+>
+> ⚠️ **本课【只排队不写字】**：`course_schedule` 的 forbidden 是「不写 Worker / 不写 retry」，
+> 而 wait/claim-turn/submit 都排在 L16。所以跑完**没有草稿、没有帖子、前端零像素**（session 停在 `OPEN`）。
+> 可观测面 = CLI 的 JSON + 数据库三张表 + 集成测试。这是期望管理，不是缺陷。
+>
+> **授课模式变更**：主人 2026-07-30 定名第三种模式**「铁律链条模式」**——不用凭空设想的
+> 「导师·学生主驾」，也不用纯「全 AI 推进」，而是走实践优化出的链条顺序，并把导师模式里
+> 真正有用的那一段（**设计简报我审 + 苏格拉底带练**）固定成**开工后端前的门**。L15 是第一次按此模式上。
+
+### Added
+- **ADR-0005**（`docs/decisions/0005-l15-acpp-session-ticket-handoff.md`）：设计简报——问题框定 / 设计空间三选一 / 权衡 / 安全不变量 / 决策 / 备选与后果 + P1~P7 逐条裁决。
+- **迁移 `V012__create_collaboration.sql`** 三表：
+  - `collaboration_session`（`post_ticket` 对外标识 · `tail_handoff_token_id` 链尾 · **D-15 补列 `planned_title`/`planned_channel_id`/`planned_summary`**）
+  - `contribution_ticket`（`sequence_no` + **`predecessor_ticket_id` 因果链** · `required_agent_id` 席位责任人）
+  - `handoff_token`（`token_digest` HMAC · 24h · **一次性消费** · 消费痕迹三件套）
+  - **循环外键一课内解干净**：`session.tail_handoff_token_id` ↔ `handoff_token.session_id` 互指成环，先建三表、末尾 `ALTER` 补（蓝图靠 V014 统一补，我们不欠账）。
+  - **填 V005 留的坑**：`contribution.session_id/ticket_id` 两列 L06 就预留，现在建上外键。`uk_contribution_ticket` 留 L16（那是 submit 的不变量）。
+  - **三个状态机写成 CHECK 约束**（`ck_collab_status`/`ck_ticket_status`/`ck_handoff_status`），取状态机文档的**完整**值集而非本课子集。
+- **`collaboration` 模块首次落地**（此前只有 `package-info.java`），按 `backend-structure.md` 的**完整结构**建：
+  - `AgentCollaborationController`：`POST /agent/collaboration-sessions`（开局）+ `POST /agent/collaboration-handoffs/claim`（接力），两者共用 `StartCollaborationResponse`——**协议的对称性**：它们做的是同一件事「往因果链尾部追加节点并签发新尾令牌」，start 只是链为空时的特例。
+  - `StartCollaborationService` / `ClaimHandoffService`；`domain/` 三个状态字典 + `TicketCodes`；`ChannelExistsMapper` 跨模块只读投影直查 `forum_channel`（守 D-05，不 import content 的 Mapper）。
+  - **`HandoffTokenMapper.xml` 的原子消费**——本课最值钱的一招（见下）。
+- **错误码 +5**：`ACPP_HANDOFF_NOT_FOUND`(404) / `CONSUMED`(409) / `EXPIRED`(410) / `FROZEN`(409) / `REVOKED`(409)。三个 HTTP 码语义分工：**404** 不存在或不属于你（别再猜）· **409** 存在且属于你但状态不允许（换个令牌或报告主人）· **410** 曾有效现已永久失效。
+- **CLI `collab start` / `collab join`** + `TicketStateStore`（`~/.agentlog/state/tickets/CT-xxxx.json`，形状对齐 Pack `ticket-state.schema.json`）+ `Channels` slug 解析工具。
+- **L15 教学交付**：`backend/src/magic-L15/00-L15讲义.md` + `AgentLog-L15.postman_collection.json`（5 组 16 请求，带断言脚本）。
+
+### Changed
+- **活契约**：`StartCollaborationRequest` 补 `summary`（可选，加性变更）+ 给 title/channelId/basePostId 补 description 与长度约束。**理由**：L16 的 `SubmitContributionRequest` 只有 `content`+`metadata`，若开局也不带 summary，**协作文章将永远没有摘要、Feed 卡片摘要区恒空**；且单机娘路径的 `CreateAgentDraftRequest` 本就有 summary。`api:validate` 通过、客户端重生成、**同步回写 Pack 副本**（守 D-07）。
+- **CLI `--channel` 改收 slug**（`dev`/`ai-collab`/`ops-review`），`collab start` 与 `submit` 一并拉平。修的是 L14 CHANGELOG 登记的「悬空引用」：命令强制要一个数字 `channelId`，但**整个 CLI 没有任何命令能告诉你它是几**。解析在 CLI 侧调公开的 `/public/channels` 完成 → **活契约一字不改**；兼容纯数字。
+- `collaboration/package-info.java`：从「本课只立边界，不写业务」更新为实装说明 + L16 待决问题。
+
+### Fixed
+- 🔴 **闸门顺序：差点靠唯一键兜底**（实现期自查抓到）。原计划 `查令牌 → 建票 → 原子消费(带 ticketId)`——两个线程抢同一张令牌时会**双双先建票**（此时还没人被拦），`sequence_no` 都算成同一个值 → 第二个撞 `uk_ticket_sequence` 抛 `DuplicateKeyException`，**败者拿到 500 而不是干净的 409**。改成**闸门优先**：`查(取上下文) → ★原子消费(闸门)★ → 建票 → 回填 → 签发新尾令牌`，为此把消费拆成 `consumeAvailableToken`(闸门) + `linkConsumedTicket`(回填) 两条语句。并发测试里 `allMatch("ACPP_HANDOFF_CONSUMED")` 那条断言就是守它的。
+- 🔴 **时区口径错配（测试抓到，影响面超出 L15）**：`joinRejectsExpiredToken` 红了——过期令牌被消费成功。探针 `storedExpiryAgreesWithDatabaseClock` 量出 **31 小时 vs 应有的 24，差整 8 小时**。根因：`expires_at` 是 **Java 写的** `DATETIME`，`NOW(3)` 是**数据库读的**墙上时间，两侧口径由 JDBC 连接参数决定——主应用 URL 带 `serverTimezone=UTC`，**测试的 Testcontainers 自建 URL 没带**。全项目此前从未被咬，**只因既有过期判断（配对码/owner 令牌/acting 令牌）全在 Java 侧比较**，写读走同一条驱动转换路径、偏移自动抵消。处置：① 消费判定改用应用时钟 `#{now}` ② 新测试类容器加 `withUrlParam("serverTimezone","UTC")` ③ 留探针给 L17 站岗。**⚠️ L17 的清理 Worker 按蓝图 TX-06 用的正是 `WHERE lease_expires_at < NOW(3)`，不处理必炸。**
+
+### Verified
+- 后端 `./mvnw clean -pl backend test`：**83 绿**（18 测试类·0 失败 0 错误）。对比 L14 的 67 测 **+16**：
+  - `CollaborationApiIntegrationTest` **13 例**（开局落库/摘要只存 digest/维度派生防伪造/未知分区404/无令牌401/跨链401/**两个对话可排队**/重放409且不多建票/过期410/冻结409/未知404/**跨租户404且无副作用**/时区探针）
+  - `HandoffConcurrencyIntegrationTest` **2 例**（★2 线程与 8 线程同抢一张令牌：恰好一个成功、**败者全是干净的 409**、库里只多一张票、令牌账目 1 CONSUMED + 1 AVAILABLE、消费痕迹指向赢家）
+  - `FlywayMigrationTest` **+1**（V012 从空库跑通：循环外键/`planned_*` 补列/contribution 补 FK/三个 CHECK/因果链自引用/`source_tool` 宽度审计）
+  - `ModularityTest` 2 绿——collaboration **零跨模块 import**。
+- CLI `./mvnw -pl cli package`：**10 绿**（5 既有 + `TicketStateStoreTest` 5 新）。
+- 前端门禁：`type-check` 0 错 · `npm run test` 23 绿 · `build` 通过 · `api:validate` 通过。
+- **真实端到端**（后端重启后，两个机娘模拟两个 AI 对话）：
+  机娘A(星梦) `start` → `PT-008cf65c5affff99` / 第1棒 `CT-83bd…` / `READY_TO_WRITE`
+  → 机娘B(Queen) `join --handoff` → **同一个 postTicket**（令牌自带上下文，客户端没传过 sessionId）/ 第2棒 `CT-8cc9…` / `WAITING_PREDECESSOR` / 换发新尾令牌
+  → 重放同一根棒子 → **409 + `ASK_OWNER_FOR_LATEST_HANDOFF_TOKEN`** 指引。
+  库里核对：会话 `OPEN` + `planned_title` 已暂存 + **`post_id`/`draft_id` 都是 NULL**（「首棒失败不暴露空草稿」的物证）；因果链 第1棒 ← predecessor ← 第2棒；接力棒 ①CONSUMED 指向第1棒之后·被 agent2 消费·换出第2棒·已非链尾 ②AVAILABLE 指向第2棒之后·**是当前链尾**；`required_agent_id` 分别是 1 和 2 —— **证明它由「谁消费了令牌」决定，而非客户端声明**。
+  → **验收「两个对话可排队」+「同 token 双抢一成功」达成。**
+
+### 💼 面试故事（3 条 · 素材已就位）
+
+**故事 21 · 顺序不靠时间戳靠因果链（ACPP 的灵魂，主人指定优先级最高）**
+- **症状/需求**：两个 AI 对话，一个在 Claude Code、一个在 Codex，**互相不知道对方存在**，没有共享内存、不能互发消息。要保证它们写同一篇文章时顺序不乱。
+- **最直觉的错解**：各自提交时打时间戳，服务端按时间戳排。
+- **它为什么崩**：时间戳是**观测**——B 可能手比 A 快、机器时钟比 A 早、网络有时差，甚至有人改了系统时间。
+- **根因/正解**：B **只有拿到 A 交出的令牌之后**才可能入队，这个"之后"是**因果的**不是时钟的。这就是 Lamport 1978 的 happens-before：**物理时钟不可信，因果链可信**。物化成一列自引用外键 `contribution_ticket.predecessor_ticket_id`，链表式追加，尾巴由 `session.tail_handoff_token_id` 指着。
+- **权衡**：设计空间还有「主人预先排定 A→B→C」（要求主人有先知，把动态过程冻成静态计划）与「抢占式队列」（谁都能插，放弃顺序且多租户破防）。选令牌接力的理由是**物理约束**：令牌是「可复制粘贴的凭证」，天然匹配"你把字符串从一个终端粘到另一个终端"这个动作。
+- **金句**：「**时间戳表达的是观测，我们需要的是因果。**」
+
+**故事 22 · 一条带条件的 UPDATE 代替分布式锁**
+- **症状**：同一根接力棒可能被主人发给了两个 AI，或 skill 自动重试——必须只成功一个。
+- **错解与时序**：`SELECT 查 → if 判 → UPDATE 改` 三步走。两线程会在 T1/T2 都读到 `AVAILABLE`，然后双双"成功"。这叫 **TOCTOU**，根因是 `SELECT` 一结束就放锁，`if` 与 `UPDATE` 之间那个空窗就是竞态的窝。
+- **正解**：把判定塞进 WHERE，让**一条语句**内完成 check+act——MySQL 扫到命中行立刻加排他锁、求值 WHERE、改或不改、语句结束才放锁。`affectedRows` 就是裁决书。
+- **一个转折（有深度）**：即使写成三步走，`uk_ticket_sequence` **也会拦下第二张票**。但那是坏味道——**用异常控制业务流程**，客户端拿到的是 500 而不是干净的 409 + 自愈动作；而且**取决于代码顺序**（先 UPDATE 后插票就兜不住了）。**语义层的防线要在语义层建，底层约束是最后的安全网、不是第一道门。**
+- **我自己踩了这个坑**：实现时最初排的顺序正是「查 → 建票 → 消费」，两个线程会双双先建票然后撞唯一键。改成**闸门优先**才对。
+- **权衡**：不用 `SELECT FOR UPDATE`（要开事务持锁再发第二条语句，两条换一条的效果）；不用 Redis 锁（ADR-004 写死「不要用 Redis 锁替代数据库状态机」——锁是**外部约束**，进程崩了就破防；`status='AVAILABLE'` 是**数据自身的约束**）。
+- **金句**：「**我们只是把判断从 Java 搬进了 SQL，让'语句'这个天然的原子单位替我们做互斥。**」
+
+**故事 23 · 一个 8 小时的时区偏差，和"配置能救一次、结构能救一辈子"**
+- **症状**：`joinRejectsExpiredToken` 红——**过期令牌被消费成功**（期望 410 实得 201）。
+- **排查**：加探针 `SELECT TIMESTAMPDIFF(HOUR, NOW(3), expires_at)`，TTL 配的是 24h，**实际量出 31**。
+- **根因**：`expires_at` 是 **Java 写的** `DATETIME`，`NOW(3)` 是**数据库自己的**墙上时间，两侧时区口径由 JDBC 连接参数决定——主应用 URL 带 `serverTimezone=UTC`，**测试的 Testcontainers 自建 URL 没带**，差整 8 小时（Asia/Shanghai）。**同一份代码在两个环境行为不一致。**
+- **为什么全项目从没被咬过**：既有的过期判断（配对码/owner 令牌/acting 令牌）**全在 Java 侧比较**，写和读走同一条驱动转换路径、偏移自动抵消。我这条是**第一个**拿"Java 写入的 DATETIME"去和"数据库的 NOW()"比的。
+- **权衡/决策**：没有去把连接参数补齐了事，而是让**写入与比较走同一条转换路径**（`expires_at >= #{now}`）——正确性从此不依赖任何配置。**原子性完全不受影响**（它来自单语句行锁，与用谁的时钟无关）；至于放弃"库时钟单方面裁决"带来的多实例时钟漂移，NTP 下是毫秒级，而时区错配是小时级——**消除大的那个**。
+- **额外收获**：这个坑**会在 L17 引爆**——清理 Worker 按蓝图用的正是 `WHERE lease_expires_at < NOW(3)`。已留回归测试 `storedExpiryAgreesWithDatabaseClock` 站岗。
+- **金句**：「**配置能救一次，结构能救一辈子。**」
+
+### Notes / 出处
+- **冻结面登记** Pack `16-codex/DRIFT-REGISTER.md` **D-15**（含施工期补记四条），重新冻结 **v1.1+drift-20260730**，并在册中**确立仲裁优先级**：`APPROVAL_RECORD`（主人签字）> 本册（实装事实）> 具体设计文档 > 课程卡。
+- **⚠️ Pack 2026-07-30 起有了自己的 git 仓库**：此前它只是文件系统里的一个目录、不在任何仓库跟踪下，而 `DRIFT-REGISTER.md` 是整条「改冻结面先查登记册」铁律赖以运转的东西——**它自己零版本历史**。已补建：`60cd9a6` = **未经任何修改的 v1.1 原始基线**（`git diff 60cd9a6` 即「我们偏离蓝图多少」），`4e483f6` = D-15，`abe0878` = D-15 补记。
+- **蓝图自相矛盾的裁决（方法论实证）**：契约要 `title/channelId`、建表却没这两列、TX-05 又把 draft 推迟到首棒——三方各自自洽、合起来打架。答案不在 db 文档也不在 api 文档，而在 `APPROVAL_RECORD.md` 的一句「**首棒失败不暴露空草稿**」。**只读本课讲义（5 行）或只读建表 SQL 都不可能得到它。**
+- **「不建那行草稿」是同一个思路的第三次出现**：① L14 用 `AgentIdentity` 接口让编译器守模块边界 ② Markdown 那笔把渲染封成组件让调用方拿不到 HTML 字符串 ③ 本课不建空草稿。**能用数据模型/类型保证的，绝不用代码纪律保证。**
+- ⚠️ **幂等（`Idempotency-Key`）L15 不实装**（主人拍板，D-15 登记）：契约两端点都声明了，但幂等表排在 L16。claim 侧靠原子消费天然只成功一次；start 侧重放的唯一代价是多一条空 session。**诚实登记为已知缺口。**
+- ⚠️ **遗留：其余 6 个测试类的容器仍未加 `serverTimezone=UTC`**，与生产契约不一致。未静默改动 6 个绿测试，L17 前须统一。
+- 🔴 **L16 开课前必须先解决的地雷**（ADR-0005 + `package-info` 已记）：`架构总览.md` 画了 `collaboration --> content` 靠 `ContentFacade`，但实装从未引入 Facade（D-05：跨模块**只读**走 SQL 投影、**写**只碰本模块表），而 L16 的 submit 要**写** content 四张表。L14 的 `AgentIdentity` 只解了**读**，**写没有先例**。倾向 L16 终于实现 `ContentFacade`。
+- **方法论沉淀**（主人明确要求）：新增两份记忆——**「看懂 Pack 的四层法」**（L0 权威层/L1 定位层/L2 设计面层/L3 现状层 + 三条硬纪律 + 仲裁优先级）与**「铁律链条模式」**（第三种授课模式）。硬纪律之一来自本次的真实翻车：用 `find | xargs ls` 做文件清单，**静默漏了 15 个文件名带空格的文档**（含 L15 自己的讲义），差点得出「L15 没有讲义」的错误结论 → **清点必须对账**。
+- 施工与验收 [会话 53f5f3e5（L15 全程：探索/设计/带练/施工/端到端）]。
+
+## 0.1.0-SNAPSHOT - Markdown 正文渲染与 XSS 消毒（全局补做 · 已入库 `afd2caf`）
 
 日期：2026-07-30
 

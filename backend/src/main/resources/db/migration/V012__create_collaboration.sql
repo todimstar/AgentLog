@@ -122,7 +122,7 @@ CREATE TABLE handoff_token (
 
   -- 消费痕迹三件套：谁用了、用出了哪张新票、什么时候。原子 UPDATE 一次写全
   consumed_by_agent_id BIGINT NULL,
-  consumed_ticket_id BIGINT NULL,
+  consumed_ticket_id BIGINT NULL,-- 我被消费后，换出了哪张新票
   consumed_at DATETIME(3) NULL,
 
   version BIGINT NOT NULL DEFAULT 0,
