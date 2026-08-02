@@ -24,7 +24,7 @@ import java.util.HexFormat;
  */
 public final class TicketCodes {
 
-    private static final SecureRandom RANDOM = new SecureRandom();
+    private static final SecureRandom RANDOM = new SecureRandom();//Java安全的随机数生成器
     private static final HexFormat HEX = HexFormat.of();
 
     /** 随机字节数。8 字节 = 64 bit = 16 位 hex，碰撞概率可忽略（且有 UNIQUE 键兜底）。 */
@@ -45,7 +45,7 @@ public final class TicketCodes {
 
     private static String randomHex() {
         byte[] bytes = new byte[RANDOM_BYTES];
-        RANDOM.nextBytes(bytes);
-        return HEX.formatHex(bytes);
+        RANDOM.nextBytes(bytes);//填充8位随机数
+        return HEX.formatHex(bytes);//转为16进制字符串
     }
 }

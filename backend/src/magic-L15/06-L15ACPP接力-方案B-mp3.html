@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>L15 ACPP Session、Ticket、Handoff · 方案B（真音频）</title>
+<style>
+:root{--bg:#1e1f22;--panel:#2b2d30;--panel2:#232528;--line:#3c3f43;--txt:#dfe1e5;--dim:#9aa0a6;
+  --acc:#7f6fff;--acc2:#4fc3f7;--ok:#57c597;--warn:#e0a14c;--bad:#e06c75;--hl:#3a3f52}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--txt);
+  font:14px/1.7 "Segoe UI","PingFang SC","Microsoft YaHei",system-ui,sans-serif}
+code{font-family:"JetBrains Mono",Consolas,Menlo,monospace}
+.top{display:flex;align-items:center;gap:12px;padding:9px 16px;background:var(--panel);
+  border-bottom:1px solid var(--line);position:sticky;top:0;z-index:30}
+.top b{font-size:14px}
+.top .sub{font-size:11px;color:var(--dim)}
+.actbadge{font-size:11px;font-weight:700;padding:3px 10px;border-radius:99px;margin-left:8px}
+.actbadge.a1{background:#3a3050;color:#c9bfff}
+.actbadge.a2{background:#2f3a45;color:#9ad8f5}
+.spacer{flex:1}
+.voice{font-size:11px;color:var(--dim)}
+.main{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(300px,.75fr);gap:12px;padding:12px}
+.pane{background:var(--panel);border:1px solid var(--line);border-radius:11px;overflow:hidden}
+.th{padding:8px 13px;background:var(--panel2);border-bottom:1px solid var(--line);
+  font-size:11.5px;font-weight:700;color:var(--dim)}
+.crumb{padding:7px 13px;font-size:12px;color:var(--acc2);border-bottom:1px solid var(--line);
+  background:#26282c;font-family:"JetBrains Mono",Consolas,monospace}
+.stage{padding:14px 16px;min-height:390px}
+/* 黑板 */
+.board{font-family:"JetBrains Mono",Consolas,monospace;font-size:13px;line-height:1.95;white-space:pre}
+.board .ln{opacity:.18;transition:opacity .45s}
+.board .ln.on{opacity:1}
+.board .k{color:var(--acc2)}     /* 结构/表名 */
+.board .g{color:var(--ok)}       /* 对/推荐 */
+.board .r{color:var(--bad)}      /* 错/否决 */
+.board .y{color:var(--warn)}     /* 强调 */
+.board .d{color:var(--dim)}      /* 注释 */
+/* 代码 */
+.code{font-family:"JetBrains Mono",Consolas,monospace;font-size:12.5px;line-height:1.72;
+  white-space:pre;overflow-x:auto}
+.code .row{display:block;padding:0 6px;border-radius:3px}
+.code .row.on{background:var(--hl);box-shadow:inset 3px 0 0 var(--acc)}
+.code .no{display:inline-block;width:38px;text-align:right;color:#5c6066;margin-right:12px;user-select:none}
+.kw{color:#cf8e6d}.str{color:#6aab73}.cm{color:#7a7e85;font-style:italic}
+.fn{color:#56a8f5}.num{color:#2aacb8}.ann{color:#b3ae60}
+/* 右栏 */
+.flow{padding:11px 13px;border-bottom:1px solid var(--line)}
+.fitem{display:block;width:100%;text-align:left;background:transparent;border:1px solid transparent;
+  color:var(--dim);border-radius:8px;padding:5px 9px;font-size:12px;cursor:pointer;margin:2px 0}
+.fitem:hover{background:#33363a}
+.fitem.on{background:#343a52;color:var(--txt);border-color:var(--acc)}
+.fitem small{color:#6f757c;margin-left:5px}
+.detail{padding:13px}
+.detail-body{font-size:13px}
+.detail-body b{color:var(--acc2)}
+.detail-body .warnb{background:#3a2b2b;border-left:3px solid var(--bad);padding:8px 11px;
+  border-radius:0 7px 7px 0;margin:9px 0}
+.detail-body .okb{background:#2b3a33;border-left:3px solid var(--ok);padding:8px 11px;
+  border-radius:0 7px 7px 0;margin:9px 0}
+/* 字幕 */
+.sub-bar{margin:0 12px;padding:11px 15px;background:var(--panel);border:1px solid var(--line);
+  border-radius:11px;display:flex;gap:11px;align-items:flex-start;min-height:56px}
+.sub-bar.right{margin-left:52%}
+.sub-bar.left{margin-right:38%}
+.fbadge{font-size:10px;font-weight:700;color:#fff;background:var(--acc);padding:2px 8px;
+  border-radius:99px;white-space:nowrap;margin-top:2px}
+.sub-txt{font-size:14px;line-height:1.75}
+/* 控制条 */
+.ctrl{padding:11px 12px 18px}
+.prog{position:relative;height:9px;background:#33363a;border-radius:5px;cursor:pointer;overflow:hidden}
+.fill{position:absolute;left:0;top:0;bottom:0;background:linear-gradient(90deg,#7f6fff,#4fc3f7);width:0}
+.mk{position:absolute;top:0;bottom:0;width:1px;background:#565a60}
+.mk.step{width:2px;background:#8a8f96}
+.btns{display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap}
+button{background:var(--panel2);color:var(--txt);border:1px solid var(--line);border-radius:8px;
+  padding:6px 13px;font-size:13px;cursor:pointer}
+button.primary{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:700}
+button:hover{border-color:var(--acc2)}
+.time,.meta{font-size:12px;color:var(--dim)}
+label{font-size:12px;color:var(--dim);display:flex;align-items:center;gap:6px}
+input[type=range]{width:110px}
+.hint{font-size:11px;color:#6f757c;margin-top:8px;line-height:1.6}
+.missing{display:none;background:#3a2b2b;border:1px solid var(--bad);color:#ffb3b3;
+  padding:9px 12px;border-radius:9px;font-size:12.5px;margin-bottom:10px}
+kbd{background:var(--panel2);border:1px solid var(--line);border-radius:4px;padding:0 5px;font-size:11px}
+</style>
+</head>
+<body>
+
+<div class="top">
+  <b>🎬 L15 ACPP Session、Ticket、Handoff</b>
+  <span class="actbadge a1" id="actBadge">第一幕 · 黑板</span>
+  <span class="sub" id="topSub">两个 AI 对话怎么有序接力写同一篇文章</span>
+  <span class="spacer"></span>
+  <span class="voice">🎧 预生成 mp3 · 云健（edge-tts）· 41 句 / 9.1 分钟</span>
+</div>
+
+<div class="main">
+  <div class="pane">
+    <div class="th" id="leftTh">🖍 黑板 · 架构推演（不出代码）</div>
+    <div class="crumb" id="crumb">— 点 ▶ 开始 —</div>
+    <div class="stage"><div id="stageIn"></div></div>
+  </div>
+  <div class="pane">
+    <div class="th">🧭 十一步 · 点可跳转</div>
+    <div class="flow" id="flow"></div>
+    <div class="detail"><div class="th" style="background:none;border:0;padding:0 0 7px">💡 深入详解</div>
+      <div class="detail-body" id="detail">
+        方案B（预生成 mp3）：旁白是 edge-tts 离线生成的一整条音频，所以这是<b>真·进度条</b>——
+        任意位置点击秒级跳转、暂停从当前字续播、语速实时调（0.6×~2.0×，变速不变调）。
+        <div class="okb"><b>本课分两幕</b>：<b>第一幕黑板</b>讲推演（约束 → 设计空间 → 因果链 → 为什么两张表 → 怎么互斥），
+        全程不出代码；<b>第二幕代码</b>按真实源文件行号走查。</div>
+        快捷键：<kbd>空格</kbd> 播放/暂停，<kbd>←</kbd><kbd>→</kbd> 上/下一句，<kbd>Shift</kbd>+<kbd>←</kbd><kbd>→</kbd> 上/下一步。
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="sub-bar" id="subBar">
+  <span class="fbadge" id="fbadge">👀 焦点</span>
+  <span class="sub-txt" id="subTxt">准备好了吗？点 ▶ 开始。本课讲：两个跑在不同 AI 对话里、互相看不见的机娘，怎么有序接力写同一篇文章。</span>
+</div>
+
+<div class="ctrl">
+  <div class="missing" id="missing">⚠ 找不到 <code>06-assets/L15-session.mp3</code> 或 <code>timeline.js</code> ——
+    在仓库根目录运行 <code>.venv-tts/Scripts/python backend/src/magic-L15/06-make-audio.py</code> 生成后刷新本页。</div>
+  <div class="prog" id="prog"><div class="fill" id="fill"></div></div>
+  <div class="btns">
+    <button id="playBtn" class="primary">▶ 开始播放</button>
+    <button id="prevBtn" title="上一句（Shift=上一步）">⏮ 句</button>
+    <button id="nextBtn" title="下一句（Shift=下一步）">句 ⏭</button>
+    <span class="time" id="timeLabel">0:00 / 0:00</span>
+    <label>语速 <input type="range" id="speed" min="0.6" max="2.0" step="0.1" value="1.0"><span id="speedVal">1.0×</span></label>
+    <span class="meta" id="counter">步 0/11 · 句 0/41</span>
+  </div>
+  <div class="hint">进度条上细线=句边界、粗线=步边界，点任意位置精确跳转。
+    第一幕左面板是<b>分步显现的示意图</b>（不是源码）；第二幕是<b>真实源文件行号</b>的代码走查。字幕自动待在该注视的一侧下方。</div>
+</div>
+
+<audio id="au" src="06-assets/L15-session.mp3" preload="auto"></audio>
+
+<script src="06-assets/timeline.js"></script>
+<script>
+/* ═══════════════ MODEL：句子必须与 06-make-audio.py 的 SENTENCES 同文同序 ═══════════════ */
+const B=(s)=>s;  // 黑板文本原样
+const MODEL={steps:[
+/* ───────── 第一幕 · 黑板 ───────── */
+{act:1,mode:'board',title:'0 · 悬念：从一个人到两个人',crumb:'黑板 / 问题从哪来',
+ board:
+`  L14 已经做到的：
+     <span class="k">[Claude Code]</span> ──→ 机娘A ──→ <span class="g">投一篇草稿</span> ──→ 主人审稿发布
+
+  L15 要做的：
+     <span class="k">[Claude Code]</span> ──→ 机娘A ─┐
+                                  ├──→ <span class="y">同一篇文章，有序接力</span>
+     <span class="k">[Codex]</span>       ──→ 机娘B ─┘
+
+  <span class="r">难点不是"多一个人"。</span>
+  <span class="d">难点是：这两个机娘跑在两个【互不相通】的 AI 对话里。</span>`,
+ detail:`L14 让<b>一个</b>机娘能投稿。L15 的问题变了：让<b>两个</b>机娘接力写<b>同一篇</b>文章。
+   <div class="okb">这一课我们<b>先不碰表结构</b>。先看清楚约束是什么——后面所有设计都是从约束推出来的。</div>`,
+ sentences:[
+  "上一课，一个机娘学会了把开发过程写成草稿投进论坛。这一课的问题变了：怎么让两个机娘，接力写同一篇文章。",
+  "听起来只是多一个人的事，其实完全不是。因为这两个机娘，跑在两个互不相通的 AI 对话里。",
+  "先别急着想表怎么建。这一课我们从一个更根本的地方开始：先看清楚约束是什么。"]},
+
+{act:1,mode:'board',title:'1 · 约束：主人是唯一的通道',crumb:'黑板 / 先认清约束',
+ board:
+`   <span class="k">[Claude Code 对话]</span>              <span class="k">[Codex 对话]</span>
+          │                              │
+          │   <span class="r">✗ 没有共享内存</span>              │
+          │   <span class="r">✗ 读不到同一个文件</span>          │
+          │   <span class="r">✗ 不能互相发消息</span>            │
+          │                              │
+          └────────  <span class="y">👤 你</span>  ────────────┘
+             <span class="y">复制一串字符，从一个终端粘到另一个终端</span>
+
+  <span class="g">▶ 这就是唯一的通道。</span>
+  <span class="d">记住它——后面每一个决定都从这里推出来。</span>`,
+ detail:`<b>先认清约束，再谈方案。</b>
+   <div class="warnb">两个 AI 对话之间<b>零共享上下文</b>。它们唯一的连接是<b>人</b>——你复制粘贴一串字符。
+   这个约束直接决定了：接力的凭证必须是<b>一串可以被复制粘贴的字符</b>。</div>`,
+ sentences:[
+  "一个机娘在 Claude Code 里，另一个在 Codex 里。它们没有共享内存，读不到同一个文件，也不能互相发消息。",
+  "它们之间唯一的通道，是你——你复制一串字符，从一个终端粘到另一个终端。",
+  "记住这句话，这一课后面所有的设计，都是从这个约束推出来的。先认清约束，再谈方案。"]},
+
+{act:1,mode:'board',title:'2 · 设计空间：三条路选一条',crumb:'黑板 / 设计空间与权衡',
+ board:
+` <span class="r">① 主人预先排定 A→B→C</span>
+     要求你【事先知道】请谁、请几个
+     <span class="d">现实是：写完一段才决定要不要再叫一个人</span>
+     <span class="r">→ 把动态过程冻成静态计划</span>
+
+ <span class="g">② 令牌接力  ← 选它</span>
+     每入队一人，签发一张新接力棒；谁拿到谁能接
+     <span class="y">令牌 = 一串可复制粘贴的字符 ← 天然匹配你的物理动作</span>
+     <span class="d">代价：要过主人的手 → 用 24h 短命 + 一次性消费对冲</span>
+
+ <span class="r">③ 抢占式队列</span>
+     谁想插就插 → <span class="r">放弃顺序</span>；别人家的机娘也能插 → <span class="r">多租户破防</span>`,
+ detail:`三条路的取舍。<b>选②不是因为它好看，是因为它匹配物理约束。</b>
+   <div class="okb">令牌是「可复制粘贴的凭证」——你把一串字符从一个终端粘到另一个终端，接力就发生了。
+   方案①要求你有先知，方案③放弃了顺序。</div>`,
+ sentences:[
+  "有了约束，我们来看有哪几种做法。第一种：主人提前排好队，说这篇文章先 A 写、再 B 写、最后 C 写。",
+  "这要求你有先知——可现实是，你往往写完一段才决定要不要再叫一个人。预先排定，等于把动态的过程冻成了静态的计划。",
+  "第二种：抢占式队列，谁想插就插。这个更不行——放弃了顺序，而且别人家的机娘也能插进来，多租户直接破防。",
+  "第三种，也是我们选的：令牌接力。每入队一个人，就签发一张新的接力棒。谁拿到棒子，谁就能接下一棒。选它不是因为好看，是因为令牌是一串可以复制粘贴的字符——它天然匹配你刚才那个物理动作。"]},
+
+{act:1,mode:'board',title:'3 · 顺序：因果链，不是时间戳',crumb:'黑板 / 本课灵魂',
+ board:
+` <span class="r">✗ 按时间戳排序</span>
+     时间戳是【观测】：
+       · B 可能手比 A 快          · B 的时钟可能比 A 早
+       · 网络有时差              · 有人手工改过系统时间
+
+ <span class="g">✓ 按因果链排序</span>
+     铁的事实：<span class="y">B 只有拿到 A 交出的令牌之后，才可能入队</span>
+     这个「之后」是<span class="y">因果的</span>，不是时钟的
+
+     物化成一列自引用外键：
+       票#1 ←──<span class="k">predecessor_ticket_id</span>──── 票#2 ←──── 票#3
+       <span class="d">链表式追加，后来的必然在链尾</span>
+
+ <span class="d">这就是 Lamport 1978《Time, Clocks, and the Ordering of Events》</span>
+ <span class="d">的核心：物理时钟不可信，因果链可信。</span>`,
+ detail:`<b>本课的灵魂。</b>时间戳表达的是<b>观测</b>，我们需要的是<b>因果</b>。
+   <div class="okb"><b>可迁移</b>：分布式场景里凡是"按时间排"的直觉，先问一句——<b>这个时间是谁测的？</b></div>
+   落到代码上就是 <code>contribution_ticket.predecessor_ticket_id</code> 这一列自引用外键。
+   <code>sequence_no</code> 只是这条链的<b>派生结果</b>（方便展示和唯一约束），不是顺序的<b>依据</b>。`,
+ sentences:[
+  "顺序怎么定？最偷懒的做法是打时间戳，谁先提交谁在前。这个做法会崩。",
+  "因为时间戳表达的是观测：第二个机娘完全可能手比第一个快、机器时钟比它早、网络有时差，甚至有人手工改过系统时间。",
+  "但有一件事是铁的：第二个机娘，只有拿到第一个交出的令牌之后，才可能入队。这个之后，是因果的，不是时钟的。",
+  "所以我们把因果关系直接物化成一列外键，叫 predecessor ticket id，前一棒是谁。链表式追加，后来的必然在链尾。这就是分布式系统里说的因果序，Lamport 一九七八年那篇论文的核心：物理时钟不可信，因果链可信。"]},
+
+{act:1,mode:'board',title:'4 · 为什么是两张表',crumb:'黑板 / 状态空间是二维的',
+ board:
+` 它们看起来一一对应，为什么不合成一张？
+
+ <span class="y">理由一：状态空间本来就是二维的</span>
+   <span class="k">ticket.status</span>   答：<span class="g">已经进来的人能不能【写】</span>
+   <span class="k">handoff.status</span>  答：<span class="g">还能不能有【新人】进来</span>
+
+   关键的一格 ↓
+   ┌────────────────┬──────────────────┐
+   │ 第1棒 <span class="y">LEASED</span>    │ 尾令牌 <span class="y">AVAILABLE</span> │
+   │ （正在写字）    │ （别人可以排队）  │
+   └────────────────┴──────────────────┘
+   <span class="d">两个维度同时在动，谁也决定不了谁</span>
+
+ <span class="y">理由二（决定性）：基数未来会破 1:1</span>
+   令牌过期后的自愈动作是<span class="r">「重新生成」</span>
+   → 同一棒之后会先后有<span class="r">多张</span>令牌 → 一行装不下`,
+ detail:`一个很容易被质疑的建模决定，值得讲透。
+   <div class="okb"><b>合表并没有减少状态列</b>——状态空间是二维的，你还是要两个列，
+   只是从「两张表各一个」变成「一张表两个」，同时失去了外键/生命周期/清理策略的分离。</div>
+   <div class="warnb"><b>决定性的是基数</b>：错误码表里写着 <code>ACPP_HANDOFF_EXPIRED</code> 的动作是「重新生成」
+   ——同一棒之后会先后有多张令牌。<b>一行只能存一张。</b></div>
+   <b>可迁移的四问判据</b>：外键能否被一方吸收？活多久一样吗？状态机答的是同一个问题吗？
+   <b>基数未来会不会破 1:1？</b>（最后一条最致命也最容易被忽略）`,
+ sentences:[
+  "接下来一个容易被质疑的决定：席位和接力棒，为什么是两张表？它们看起来是一一对应的。",
+  "第一个理由，状态空间本来就是二维的。席位的状态回答：已经进来的人能不能写。接力棒的状态回答：还能不能有新人进来。",
+  "看这一格你就懂了：第一棒正在写字的时候，第二个机娘可以拿着尾棒入队。一个 LEASED，一个 AVAILABLE，两个维度同时在动，谁也决定不了谁。",
+  "第二个理由更硬：基数在未来会破一比一。令牌过期之后的自愈动作是重新生成——同一棒之后会先后有好几张令牌。一行只能存一张，合表就装不下了。"]},
+
+{act:1,mode:'board',title:'5 · 互斥：一条带条件的 UPDATE',crumb:'黑板 / 本课最值钱的一招',
+ board:
+` <span class="r">✗ 三步走：查 → 判 → 改</span>
+   T1 线程A  SELECT → AVAILABLE
+   T2 线程B  SELECT → AVAILABLE   <span class="r">← 命门：B 也读到了可用</span>
+   T3 线程A  判定通过
+   T4 线程B  判定通过
+   T5 线程A  UPDATE → CONSUMED
+   T6 线程B  UPDATE → CONSUMED    <span class="r">← 双双"成功"，一根棒子出了两个席位</span>
+   <span class="d">根因：SELECT 一结束就放锁，if 与 UPDATE 之间那个空窗就是竞态的窝（TOCTOU）</span>
+
+ <span class="g">✓ 一条 UPDATE，把判定塞进 WHERE</span>
+   MySQL 扫到命中行 → <span class="y">加排他锁</span> → 求值 WHERE → 改或跳过 → <span class="y">语句结束才放锁</span>
+                      └──────── 全程持锁，没有任何缝隙 ────────┘
+
+   <span class="y">affectedRows = 1 → 抢到    affectedRows = 0 → 没抢到</span>`,
+ detail:`<b>本课最值钱的一招。</b>没有任何魔法——我们只是把判断从 Java 搬进 SQL，
+   让「语句」这个天然的原子单位替我们做互斥。
+   <div class="okb"><b>同族手法第二次出现</b>：L09 点赞 toggle 的 <code>INSERT IGNORE</code> + <code>affectedRows</code>。
+   本质一样——把互斥交给数据库的唯一性/条件判定，而不是应用代码的 if。</div>
+   <b>为什么不用别的</b>：<code>SELECT FOR UPDATE</code> 要开事务持锁再发第二条语句（锁持有到事务结束）；
+   Redis 锁是<b>外部约束</b>，进程崩了锁过期就破防，而 <code>status='AVAILABLE'</code> 是<b>数据自身的约束</b>。`,
+ sentences:[
+  "最后一个问题，也是这一课最值钱的地方：同一根棒子，被两个人同时抢，怎么保证只有一个成功？",
+  "最自然的写法是三步：查一下状态、判断能不能用、然后改成已消费。这个写法是错的。",
+  "错在哪？两个线程会在同一时刻都读到可用，然后都判断通过，最后双双改成已消费——同一根棒子，产出了两个席位。这叫 TOCTOU，检查和使用之间有个空窗。",
+  "正解是把判断塞进 WHERE：一条 UPDATE，条件里带上状态必须是可用。数据库在这一条语句内加行锁、求值、修改、放锁，中间没有任何缝隙。影响行数就是裁决书：一等于抢到，零等于没抢到。",
+  "我们没有做任何魔法，只是把判断从 Java 搬进了 SQL，让语句这个天然的原子单位，替我们做互斥。黑板讲完了，下面看代码。"]},
+
+/* ───────── 第二幕 · 代码 ───────── */
+{act:2,mode:'code',title:'6 · V012 建三表',crumb:'backend/src/main/resources/db/migration/V012__create_collaboration.sql',
+ from:36,hl:[[45,46],[141,145]],lang:'sql',
+ code:
+`CREATE TABLE collaboration_session (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  post_ticket VARCHAR(64) NOT NULL,       -- 对外标识 PT-16hex，随机不递增（防枚举）
+  owner_user_id BIGINT NOT NULL,          -- 多租户行级授权的锚点
+
+  -- post/draft 在【首棒 submit 时】才创建（L16），故此处可空。
+  -- 「首棒失败不暴露空草稿」——不建那一行，任何读路径都查不到它。
+  post_id BIGINT NULL,
+  draft_id BIGINT NULL,
+
+  planned_title VARCHAR(255) NOT NULL,    -- ★ D-15 补列：契约要 title 但蓝图表里没有
+  planned_channel_id BIGINT NOT NULL,
+  status VARCHAR(32) NOT NULL,            -- L15 只会出现 OPEN
+  tail_handoff_token_id BIGINT NULL,      -- 链尾的悬空接力棒
+  ...
+);
+
+-- ④ 补那条【成环】的外键：session.tail → handoff.id
+-- 与 handoff_token.session_id → session.id 互指，两张表谁都不能先于对方建完外键，
+-- 所以必须「先建表、后 ALTER」。
+ALTER TABLE collaboration_session
+  ADD CONSTRAINT fk_collab_tail_handoff FOREIGN KEY (tail_handoff_token_id) REFERENCES handoff_token(id);`,
+ detail:`<div class="warnb"><b>迁移编号是 V012 不是蓝图写的 V009</b>——主线 V009 早被邮箱登录占用，
+   照抄蓝图编号会让 Flyway 直接拒绝启动（DRIFT D-02/D-15）。</div>
+   <b>两个可空列</b>是「首棒失败不暴露空草稿」的直接体现：不变量由<b>数据的存在性</b>保证，
+   而不是靠每个读路径记得过滤"零块草稿"。
+   <div class="okb"><b>循环外键</b>：会话指向链尾令牌，令牌又指回会话。谁都不能先于对方建完外键
+   → 先建三表、末尾 ALTER 补。蓝图把这条推到 V014 统一补，我们一课内解干净。</div>`,
+ sentences:[
+  "先看建表。V012 建三张表：协作会话、贡献席位、接力棒。注意迁移编号是 V012 不是蓝图写的 V009——主线的 V009 早被邮箱登录占用了，照抄蓝图编号会让 Flyway 直接拒绝启动。",
+  "会话表里，post id 和 draft id 都是可空的，因为草稿要等首棒真正提交内容之后才创建。这条来自一份主人签过字的产品规则：首棒失败，不暴露空草稿。",
+  "还有一个细节值得看：会话指向链尾令牌，而令牌又指回会话，两张表互相引用成环。谁都不能先于对方建完外键，所以必须先建三张表，最后再用 ALTER 补上那条成环的外键。"]},
+
+{act:2,mode:'code',title:'7 · 原子消费（本课核心 SQL）',crumb:'backend/src/main/resources/mapper/collaboration/HandoffTokenMapper.xml',
+ from:42,hl:[[42,50]],lang:'sql',
+ code:
+`<update id="consumeAvailableToken">
+    UPDATE handoff_token
+    SET status               = 'CONSUMED',     -- 逗号分隔的是【列清单】
+        consumed_by_agent_id = #{agentId},
+        consumed_at          = #{now},
+        version              = version + 1
+    WHERE token_digest = #{tokenDigest}        -- ① 按摘要定位（唯一索引点查）
+      AND status       = 'AVAILABLE'           -- ② 一次性消费的实现
+      AND expires_at  >= #{now}                -- ③ 时效惰性判定
+</update>                                      -- 分号才是语句边界`,
+ detail:`<b>整块是一条 UPDATE。</b><code>SET</code> 里的逗号跟 <code>SELECT a, b, c</code> 里的逗号一个意思。
+   <div class="okb"><b>判定条件全写在 WHERE 里，一个都不许挪到 Java。</b>
+   ③ 写在 WHERE 里做<b>惰性判定</b>——正确性完全不依赖清理 Worker 是否及时。
+   这正是本课能「不写 Worker」却依然安全的原因。</div>
+   <div class="warnb">⚠️ 时效比较用的是<b>应用传入的 <code>#{now}</code></b>，不是数据库的 <code>NOW(3)</code>。
+   第一版就是写的 <code>NOW(3)</code>，被测试打红了——原因下一幕最后讲。</div>`,
+ sentences:[
+  "这就是刚才在黑板上说的那条原子消费。整块是一条 UPDATE，SET 里的逗号只是列清单分隔符，分号才是语句边界。",
+  "判定条件全写在 WHERE 里，一个都不许挪到 Java：按摘要定位、状态必须可用、并且没有过期。",
+  "特别看过期这一条。它写在 WHERE 里做惰性判定，意味着正确性完全不依赖清理任务是否及时——即使过期的令牌还挂着可用状态，也一定抢不到。这正是这一课能够不写任何后台任务，却依然安全的原因。",
+  "还有一个坑藏在这里：这个时间比较，用的是应用传进来的时刻，不是数据库的 NOW 函数。为什么，等下讲。"]},
+
+{act:2,mode:'code',title:'8 · 闸门必须排在最前面',crumb:'backend/src/main/java/com/agentlog/collaboration/application/ClaimHandoffService.java',
+ from:81,hl:[[92,99]],lang:'java',
+ code:
+`        // ① 取上下文。注意：这一步【不做状态判定】，判定全交给 ② 那条 UPDATE。
+        HandoffTokenDO token = handoffTokenMapper.selectByDigest(digest);
+        if (token == null) throw new ApiException(ApiStatus.ACPP_HANDOFF_NOT_FOUND);
+        // 多租户：这张令牌不属于我的主人 → 一律 404（不是 403，403 会泄漏存在性）
+        if (!Objects.equals(token.getOwnerUserId(), principal.ownerUserId())) {
+            throw new ApiException(ApiStatus.ACPP_HANDOFF_NOT_FOUND);
+        }
+
+        // ② ★ 闸门：一条带条件的 UPDATE 完成 check + act。affectedRows 就是裁决书。
+        int affected = handoffTokenMapper.consumeAvailableToken(digest, principal.agentAccountId(), now);
+        if (affected == 0) {
+            // 没抢到。此时才回查判定【为什么】——先原子改、改不动才问原因。
+            throw rejectionFor(digest, now);
+        }
+        // ——— 走到这里，这张令牌已经独占归我。下面所有步骤没有任何竞争者。———
+
+        // ③ 建新席位  ④ 回填 consumed_ticket_id  ⑤ 签发新尾令牌 + 会话链尾回指`,
+ detail:`<b>五步，顺序是这一课我真正踩过坑的地方。</b>
+   <div class="warnb"><b>我最初写的顺序是「查 → 建票 → 消费」。</b>两个线程会双双先建票（此时还没人被拦），
+   <code>sequence_no</code> 都算成同一个值 → 第二个撞 <code>uk_ticket_sequence</code>，
+   拿到的是 <code>DuplicateKeyException</code>（500）而不是干净的 409 + 自愈提示。</div>
+   <div class="okb">①的 SELECT 会不会又变成三步走？<b>不会</b>——区别在<b>判定权归谁</b>：
+   它只是<b>取数据</b>，判定 100% 由②那条 UPDATE 完成。即使①到②之间令牌被别人抢走，②一定返回 0。</div>
+   <b>唯一键守的是另一个不变量</b>（"一个会话不能有两个第 N 棒"），只是碰巧相关。
+   靠它兜底 = <b>用异常控制业务流程</b>。`,
+ sentences:[
+  "接力的服务方法一共五步，顺序是这一课我真正踩过坑的地方。",
+  "第一步查令牌，只取上下文，不做任何判定。第二步才是闸门——那条原子消费，唯一的裁决者。过了闸门，这张令牌就独占归我了，后面每一步都没有竞争者。",
+  "我最初把顺序写成了：查令牌、建票、再消费。结果是两个线程会双双先去建票，撞上席位的唯一键，输的那个拿到的是数据库的重复键异常，也就是五百错误，而不是干净的四百零九加上一句该去要新令牌的提示。",
+  "这正是我刚在黑板上讲过的反面教材，我自己差点写出来。唯一键守的是另一个不变量，只是碰巧相关——靠它兜底，等于用异常控制业务流程。"]},
+
+{act:2,mode:'code',title:'9 · 并发测试守住这条防线',crumb:'backend/src/test/java/com/agentlog/collaboration/HandoffConcurrencyIntegrationTest.java',
+ from:88,hl:[[148,154]],lang:'java',
+ code:
+`    @Test void twoThreadsClaimingSameTokenOnlyOneWins()      { runContention(2); }
+    @Test void eightThreadsClaimingSameTokenStillOnlyOneWins(){ runContention(8); }
+    // 2 个线程有可能"侥幸错开"，线程数越多越容易命中那个窗口
+
+        // ① 恰好一个赢家
+        assertThat(winners).as("同一张接力棒，%d 个线程同抢，必须恰好一个成功", threads).hasSize(1);
+
+        // ② 所有败者都拿到干净的 409 ACPP_HANDOFF_CONSUMED——【不是】约束冲突。
+        //    这一条正是「闸门必须在建票之前」的守卫：
+        //    若把顺序写成「查 → 建票 → 消费」，败者会先撞 uk_ticket_sequence，这里就会红。
+        assertThat(outcomes.stream().filter(o -> !o.won()).map(Outcome::code))
+                .as("败者必须拿到语义清晰的 409，而不是底层约束异常")
+                .isNotEmpty()
+                .allMatch("ACPP_HANDOFF_CONSUMED"::equals);`,
+ detail:`<b>被测的不是某个函数的返回值，而是一条 SQL 的并发语义。</b>
+   单线程跑一万遍都证明不了它——把三步走换上来，其余所有测试依然会绿。
+   <div class="warnb"><b>这个测试类不能加 <code>@Transactional</code></b>——加了所有线程会共享同一个
+   测试事务和连接，根本形成不了两个独立事务的竞争。测试会"绿"，但绿得毫无意义。</div>
+   六条断言：恰好 1 赢家 / 败者全是干净 409 / 席位总数 2 / 第 2 棒只有 1 张 /
+   令牌账目 1 CONSUMED + 1 AVAILABLE / 消费痕迹指向赢家那张票。`,
+ sentences:[
+  "这条防线由并发测试守。两个线程和八个线程各跑一次，断言恰好一个赢家。为什么要加压到八个？因为两个线程有可能侥幸错开，看起来测过了其实没测到。",
+  "最关键的是这一条断言：所有输家拿到的必须是干净的四百零九，而不是数据库约束异常。顺序一旦写回去，这里立刻变红。",
+  "还有一个很容易写错的地方：这个测试类不能加事务注解。加了的话所有线程共享同一个事务和连接，根本形成不了竞争——测试会绿，但绿得毫无意义。"]},
+
+{act:2,mode:'code',title:'10 · 时区那一课 + 收束',crumb:'backend/src/test/java/com/agentlog/collaboration/CollaborationApiIntegrationTest.java',
+ from:430,hl:[[437,444]],lang:'java',
+ code:
+`    /**
+     * ★ 时区口径探针：Java 写进去的 expires_at，用【数据库自己的时钟】看也该是「约 24 小时后」。
+     * 消费路径已改用 #{now} 规避，但这个口径差本身仍要盯住——
+     * 因为 L17 的清理 Worker 会用 WHERE expires_at < NOW(3) 扫过期令牌。
+     */
+    @Test
+    void storedExpiryAgreesWithDatabaseClock() throws Exception {
+        // 用数据库自己的时钟去量：TTL 配的是 PT24H，差值应当≈24 小时
+        Integer hoursFromDbClock = jdbcTemplate.queryForObject(
+                "SELECT TIMESTAMPDIFF(HOUR, NOW(3), expires_at) FROM handoff_token "
+                        + "WHERE session_id = ? AND status = 'AVAILABLE'", Integer.class, sessionId);
+        assertThat(hoursFromDbClock)
+                .as("若差出整数个小时，说明 JDBC 时区参数没对齐——L17 的清理 Worker 会因此扫错")
+                .isBetween(23, 24);
+    }`,
+ detail:`<b>一条测试红了：过期令牌被成功消费。</b>探针量出 <b>31 小时 vs 应有的 24——差整 8 小时</b>。
+   <div class="warnb"><b>根因</b>：<code>expires_at</code> 由 Java 写入，<code>NOW(3)</code> 是数据库的墙上时间，
+   两侧时区口径由 JDBC 连接参数决定——生产 URL 带 <code>serverTimezone=UTC</code>，
+   测试的 Testcontainers 自建 URL 没带。<b>同一份代码两个环境行为不一致。</b></div>
+   <div class="okb"><b>修法：改结构不改配置</b>——让写入与比较走同一条转换路径，
+   正确性从此不依赖任何连接参数。<b>配置能救一次，结构能救一辈子。</b></div>
+   <b>三句话收尾</b>：顺序不靠时间戳靠因果链；互斥不靠分布式锁靠一条带条件的 UPDATE；
+   而蓝图自相矛盾时，靠的是主人签过字的那份产品规则。`,
+ sentences:[
+  "最后说那个时区的坑。有一条测试红了：过期的令牌居然被成功消费。我加了个探针直接问数据库，这令牌还有多久过期，配的是二十四小时，实际量出三十一。",
+  "差整整八小时。根因是过期时间由 Java 写入，而 NOW 函数是数据库自己的墙上时间，两边的时区口径由 JDBC 连接参数决定——生产的连接串带了时区参数，测试用的容器连接串没带。",
+  "修的时候我没有只是把参数补齐了事，而是改成用应用传入的时刻比较，让写入和比较走同一条转换路径。配置能救一次，结构能救一辈子。",
+  "这一课三句话收尾：顺序不靠时间戳靠因果链；互斥不靠分布式锁靠一条带条件的 UPDATE；而蓝图自相矛盾的时候，靠的是主人签过字的那份产品规则。"]}
+]};
+
+/* ═══════════════ 引擎 ═══════════════ */
+const $=id=>document.getElementById(id);
+const au=$('au');
+const FLAT=[];
+MODEL.steps.forEach((s,si)=>s.sentences.forEach((t,k)=>FLAT.push({si,k,text:t})));
+const TL=window.AUDIO_TIMELINE||null;
+if(!TL||TL.length!==FLAT.length){$('missing').style.display='block';
+  console.warn('timeline 句数',TL&&TL.length,'≠ MODEL 句数',FLAT.length);}
+let cur=-1,curStep=-1;
+
+function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function hl(raw,lang){
+  let s=esc(raw);
+  if(lang==='sql'){
+    s=s.replace(/(--[^\n]*)/g,'<span class="cm">$1</span>')
+       .replace(/\b(UPDATE|SET|WHERE|AND|OR|CREATE|TABLE|ALTER|ADD|CONSTRAINT|FOREIGN|KEY|REFERENCES|PRIMARY|NOT|NULL|DEFAULT|SELECT|FROM|AUTO_INCREMENT)\b/g,'<span class="kw">$1</span>')
+       .replace(/(&#39;|')([^']*)(&#39;|')/g,'<span class="str">\'$2\'</span>')
+       .replace(/(#\{\w+\})/g,'<span class="ann">$1</span>');
+  }else{
+    s=s.replace(/(\/\/[^\n]*)/g,'<span class="cm">$1</span>')
+       .replace(/(\/\*\*?[\s\S]*?\*\/)/g,'<span class="cm">$1</span>')
+       .replace(/\b(public|private|int|void|if|throw|new|return|class|final|static|boolean|import)\b/g,'<span class="kw">$1</span>')
+       .replace(/@(Test|Transactional|Override)\b/g,'<span class="ann">@$1</span>')
+       .replace(/(&quot;[^&]*?&quot;)/g,'<span class="str">$1</span>');
+  }
+  return s;
+}
+function renderStage(si){
+  const st=MODEL.steps[si];
+  $('crumb').textContent=st.crumb;
+  $('actBadge').textContent=st.act===1?'第一幕 · 黑板':'第二幕 · 代码';
+  $('actBadge').className='actbadge '+(st.act===1?'a1':'a2');
+  $('leftTh').innerHTML=st.act===1?'🖍 黑板 · 架构推演（不出代码）':'💻 IDE · 真实源文件行号';
+  $('topSub').textContent=st.title;
+  $('detail').innerHTML=st.detail;
+  if(st.mode==='board'){
+    // 黑板：按行分段，随句子推进逐行显现
+    $('stageIn').innerHTML='<div class="board">'+
+      st.board.split('\n').map((l,i)=>`<span class="ln" data-l="${i}">${l||' '}</span>`).join('\n')+'</div>';
+  }else{
+    const lines=st.code.split('\n');
+    $('stageIn').innerHTML='<div class="code">'+lines.map((l,i)=>{
+      const no=st.from+i;
+      const on=(st.hl||[]).some(([a,b])=>no>=a&&no<=b);
+      return `<span class="row${on?' on':''}"><span class="no">${no}</span>${hl(l,st.lang)||' '}</span>`;
+    }).join('')+'</div>';
+  }
+  buildFlow(si);
+}
+function revealBoard(si,localIdx){
+  const st=MODEL.steps[si]; if(st.mode!=='board')return;
+  const total=st.board.split('\n').length, n=st.sentences.length;
+  const upto=Math.ceil(total*(localIdx+1)/n);
+  document.querySelectorAll('.board .ln').forEach((el,i)=>el.classList.toggle('on',i<upto));
+}
+function buildFlow(si){
+  $('flow').innerHTML=MODEL.steps.map((s,i)=>
+    `<button class="fitem${i===si?' on':''}" data-i="${i}">${s.act===1?'🖍':'💻'} ${s.title}
+      <small>${s.sentences.length} 句</small></button>`).join('');
+  $('flow').querySelectorAll('.fitem').forEach(b=>b.onclick=()=>{
+    const first=FLAT.findIndex(f=>f.si===+b.dataset.i); if(first>=0)seekTo(first);});
+}
+function fmt(s){const m=Math.floor(s/60);return m+':'+String(Math.floor(s%60)).padStart(2,'0');}
+function showSentence(k){
+  if(k<0||k>=FLAT.length)return;
+  const f=FLAT[k];
+  if(f.si!==curStep){curStep=f.si;renderStage(f.si);}
+  cur=k;
+  const local=k-FLAT.findIndex(x=>x.si===f.si);
+  revealBoard(f.si,local);
+  $('subTxt').textContent=f.text;
+  const st=MODEL.steps[f.si];
+  // 字幕待在该注视的一侧：黑板/代码在左 → 字幕靠左；详解在右 → 每步最后一句靠右
+  const last=local===st.sentences.length-1;
+  $('subBar').className='sub-bar '+(last?'right':'left');
+  $('fbadge').textContent=last?'👀 看右侧详解':'👀 看左侧'+(st.mode==='board'?'黑板':'代码');
+  $('counter').textContent=`步 ${f.si+1}/${MODEL.steps.length} · 句 ${k+1}/${FLAT.length}`;
+  if(st.mode==='code'){
+    const on=document.querySelector('.code .row.on'); if(on)on.scrollIntoView({block:'nearest'});
+  }
+}
+function seekTo(k){if(!TL)return;au.currentTime=TL[k][0];showSentence(k);if(au.paused)au.play();}
+au.addEventListener('timeupdate',()=>{
+  if(!TL)return;
+  const t=au.currentTime;
+  let k=FLAT.length-1; for(let i=0;i<TL.length;i++){if(t<TL[i][1]){k=i;break;}}
+  if(k!==cur)showSentence(k);
+  $('fill').style.width=(t/(au.duration||1)*100)+'%';
+  $('timeLabel').textContent=fmt(t)+' / '+fmt(au.duration||0);
+});
+au.addEventListener('ended',()=>{$('playBtn').textContent='▶ 重播';});
+$('playBtn').onclick=()=>{if(au.paused){au.play();$('playBtn').textContent='⏸ 暂停';
+  if(cur<0)showSentence(0);}else{au.pause();$('playBtn').textContent='▶ 继续';}};
+$('prevBtn').onclick=e=>seekTo(e.shiftKey?FLAT.findIndex(f=>f.si===Math.max(0,curStep-1)):Math.max(0,cur-1));
+$('nextBtn').onclick=e=>seekTo(e.shiftKey?FLAT.findIndex(f=>f.si===Math.min(MODEL.steps.length-1,curStep+1)):Math.min(FLAT.length-1,cur+1));
+$('prog').onclick=e=>{const r=e.currentTarget.getBoundingClientRect();
+  au.currentTime=(e.clientX-r.left)/r.width*(au.duration||0);if(au.paused)au.play();};
+$('speed').oninput=e=>{au.playbackRate=+e.target.value;$('speedVal').textContent=(+e.target.value).toFixed(1)+'×';};
+document.addEventListener('keydown',e=>{
+  if(e.code==='Space'){e.preventDefault();$('playBtn').click();}
+  if(e.key==='ArrowLeft'){e.preventDefault();$('prevBtn').onclick(e);}
+  if(e.key==='ArrowRight'){e.preventDefault();$('nextBtn').onclick(e);}
+});
+// 进度条刻度
+au.addEventListener('loadedmetadata',()=>{
+  if(!TL)return;
+  const d=au.duration,p=$('prog');
+  FLAT.forEach((f,i)=>{
+    const m=document.createElement('div');
+    m.className='mk'+(i>0&&FLAT[i-1].si!==f.si?' step':'');
+    m.style.left=(TL[i][0]/d*100)+'%';p.appendChild(m);
+  });
+  $('timeLabel').textContent='0:00 / '+fmt(d);
+});
+renderStage(0);
+</script>
+</body>
+</html>
