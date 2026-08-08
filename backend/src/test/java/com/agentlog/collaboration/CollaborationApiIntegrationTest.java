@@ -106,7 +106,11 @@ class CollaborationApiIntegrationTest {
                 .andExpect(jsonPath("$.contributionTicket.status").value("READY_TO_WRITE"))
                 .andExpect(jsonPath("$.contributionTicket.requiredAgentId").value(f.agentId.intValue()))
                 .andExpect(jsonPath("$.nextHandoffToken").exists())
-                .andExpect(jsonPath("$.nextHandoffExpiresAt").exists())
+                // ★ L16 改（DRIFT D-16）：接力棒默认【永不过期】，故本字段为 null。
+                //   「能不能再来人」没有时间维度的需求，只有生命周期维度的需求——
+                //   由发布（TX-02 第 11 步吊销尾令牌）与终止（L18）来终结，不由时钟。
+                //   判据：独占（lease）必须有期限，资格（handoff）不必有期限。
+                .andExpect(jsonPath("$.nextHandoffExpiresAt").doesNotExist())
                 .andReturn();
         JsonNode body = objectMapper.readTree(res.getResponse().getContentAsString());
 
@@ -423,31 +427,36 @@ class CollaborationApiIntegrationTest {
     }
 
     /**
-     * ★ 时区口径探针：Java 写进去的 expires_at，用【数据库自己的时钟】看也该是「约 24 小时后」。
+     * ★ L16 改（DRIFT D-16）：接力棒默认<b>不签发过期时刻</b>。
      *
-     * 由来：consumeAvailableToken 的第一版把时效比较写成 {@code expires_at >= NOW(3)}，
-     * 被 joinRejectsExpiredToken 打红——因为 expires_at 是 Java 写的、NOW(3) 是数据库读的，
-     * 两侧的时区口径由 JDBC 连接参数决定（主库 URL 带 serverTimezone=UTC，Testcontainers 的没带）。
-     * 消费路径已改用 {@code #{now}} 规避，但这个口径差本身仍然值得盯住——
-     * 因为 <b>L17 的清理 Worker 会用 {@code WHERE expires_at < NOW(3)} 扫过期令牌</b>，
-     * 一旦口径偏了，Worker 要么提前清掉有效令牌、要么永远清不掉过期的。
-     * 这条测试就是给 L17 提前埋的守卫：口径一偏，这里先红。
+     * <p>原测试名 {@code storedExpiryAgreesWithDatabaseClock}，是一条时区口径探针：
+     * Java 写进去的 expires_at，用数据库自己的时钟看也该是「约 24 小时后」。
+     * L16 把 handoff 的 TTL 默认关掉之后，这里没有 expires_at 可量了，
+     * <b>探针搬到了仍然必须有 TTL 的那一侧</b>——见
+     * {@code LeaseAndSubmitIntegrationTest#leaseExpiryAgreesWithDatabaseClock}（量 lease_expires_at）。
+     * 那正是 L17 清理 Worker 要扫的列（{@code WHERE lease_expires_at < NOW(3)}），盯它比盯这里更对症。
+     *
+     * <p>本测试保留下来，守的是新的不变量：<b>默认配置下接力棒永不过期</b>。
+     * 若哪天有人把 {@code agentlog.token.handoff-ttl} 又配回去而没走漂移流程，这里会先红。
      */
     @Test
-    void storedExpiryAgreesWithDatabaseClock() throws Exception {
+    void tailTokenHasNoExpiryByDefault() throws Exception {
         Fixture f = setup("tz");
         Started s = start(f, "claude-code", "run-tz");
 
         Long sessionId = jdbcTemplate.queryForObject(
                 "SELECT id FROM collaboration_session WHERE post_ticket = ?", Long.class, s.postTicket);
-        // 用数据库自己的时钟去量：TTL 配的是 PT24H，所以差值应当≈24 小时。
-        Integer hoursFromDbClock = jdbcTemplate.queryForObject(
-                "SELECT TIMESTAMPDIFF(HOUR, NOW(3), expires_at) FROM handoff_token "
-                        + "WHERE session_id = ? AND status = 'AVAILABLE'", Integer.class, sessionId);
-        Assertions.assertThat(hoursFromDbClock)
-                .as("Java 写入的 expires_at 与数据库 NOW(3) 的口径必须一致（差值≈TTL 24h）；"
-                        + "若差出整数个小时，说明 JDBC 时区参数没对齐——L17 的清理 Worker 会因此扫错")
-                .isBetween(23, 24);
+        Map<String, Object> token = jdbcTemplate.queryForMap(
+                "SELECT status, expires_at FROM handoff_token "
+                        + "WHERE session_id = ? AND status = 'AVAILABLE'", sessionId);
+
+        Assertions.assertThat(token.get("expires_at"))
+                .as("接力棒默认永不过期（D-16）：资格不必有期限，因为它不挡任何人。"
+                        + "终结它的是发布/终止时的吊销，不是时钟")
+                .isNull();
+        // 惰性判定的另一半仍然有效：配了 TTL 时照样拦得住过期令牌 —— 见 joinRejectsExpiredToken，
+        // 那条测试手动把 expires_at 改到过去，验证消费路径的 WHERE 仍然会拒绝。
+        Assertions.assertThat(token.get("status")).isEqualTo("AVAILABLE");
     }
 
     // —— 辅助 ——
