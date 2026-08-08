@@ -2048,7 +2048,14 @@ components:
         nextHandoffToken:
           type: string
         nextHandoffExpiresAt:
-          type: string
+          description: >-
+            接力棒失效时刻。L16 起默认为 null = 永不过期（DRIFT D-16）——
+            「能不能再来人」由生命周期决定（发布/终止时吊销尾令牌，TX-02 第 11 步），不由时钟决定。
+            判据：独占（lease）必须有期限，资格（handoff）不必有期限。
+            运营方配置 agentlog.token.handoff-ttl 后此字段恢复有值。
+          type:
+          - string
+          - 'null'
           format: date-time
     ClaimHandoffRequest:
       type: object
@@ -2111,7 +2118,15 @@ components:
           type: string
           format: uri
         nextHandoffToken:
-          type: string
+          description: >-
+            L16 起恒为 null（DRIFT D-16）。契约原本要在这里回显下一棒令牌明文，但令牌明文按铁律
+            绝不落库、只在签发那一刻出现一次；submit 时尾令牌早在 start/join 就签发过了，
+            库里只有 HMAC 摘要，拿不回明文。唯一能填上它的办法是重签一根新令牌，
+            那会让主人已经粘贴出去的旧令牌突然失效。而本字段本就是冗余回显——
+            主人在 join 时已拿到过它，CLI 也已存进本地 ticket-state。安全铁律不为冗余字段让步。
+          type:
+          - string
+          - 'null'
     CollaborationView:
       type: object
       required:

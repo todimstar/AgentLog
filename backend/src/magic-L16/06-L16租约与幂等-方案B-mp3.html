@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>L16 Wait、Attempt 与 Lease · 方案B（真音频）</title>
+<style>
+:root{--bg:#1e1f22;--panel:#2b2d30;--panel2:#232528;--line:#3c3f43;--txt:#dfe1e5;--dim:#9aa0a6;
+  --acc:#7f6fff;--acc2:#4fc3f7;--ok:#57c597;--warn:#e0a14c;--bad:#e06c75;--hl:#3a3f52}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--txt);
+  font:14px/1.7 "Segoe UI","PingFang SC","Microsoft YaHei",system-ui,sans-serif}
+code{font-family:"JetBrains Mono",Consolas,Menlo,monospace}
+.top{display:flex;align-items:center;gap:12px;padding:9px 16px;background:var(--panel);
+  border-bottom:1px solid var(--line);position:sticky;top:0;z-index:30}
+.top b{font-size:14px}
+.top .sub{font-size:11px;color:var(--dim)}
+.actbadge{font-size:11px;font-weight:700;padding:3px 10px;border-radius:99px;margin-left:8px}
+.actbadge.a1{background:#3a3050;color:#c9bfff}
+.actbadge.a2{background:#2f3a45;color:#9ad8f5}
+.spacer{flex:1}
+.voice{font-size:11px;color:var(--dim)}
+.main{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(300px,.75fr);gap:12px;padding:12px}
+.pane{background:var(--panel);border:1px solid var(--line);border-radius:11px;overflow:hidden}
+.th{padding:8px 13px;background:var(--panel2);border-bottom:1px solid var(--line);
+  font-size:11.5px;font-weight:700;color:var(--dim)}
+.crumb{padding:7px 13px;font-size:12px;color:var(--acc2);border-bottom:1px solid var(--line);
+  background:#26282c;font-family:"JetBrains Mono",Consolas,monospace}
+.stage{padding:14px 16px;min-height:390px}
+/* 黑板 */
+.board{font-family:"JetBrains Mono",Consolas,monospace;font-size:13px;line-height:1.95;white-space:pre}
+.board .ln{opacity:.18;transition:opacity .45s}
+.board .ln.on{opacity:1}
+.board .k{color:var(--acc2)}     /* 结构/表名 */
+.board .g{color:var(--ok)}       /* 对/推荐 */
+.board .r{color:var(--bad)}      /* 错/否决 */
+.board .y{color:var(--warn)}     /* 强调 */
+.board .d{color:var(--dim)}      /* 注释 */
+/* 代码 */
+.code{font-family:"JetBrains Mono",Consolas,monospace;font-size:12.5px;line-height:1.72;
+  white-space:pre;overflow-x:auto}
+.code .row{display:block;padding:0 6px;border-radius:3px}
+.code .row.on{background:var(--hl);box-shadow:inset 3px 0 0 var(--acc)}
+.code .no{display:inline-block;width:38px;text-align:right;color:#5c6066;margin-right:12px;user-select:none}
+.kw{color:#cf8e6d}.str{color:#6aab73}.cm{color:#7a7e85;font-style:italic}
+.fn{color:#56a8f5}.num{color:#2aacb8}.ann{color:#b3ae60}
+/* 右栏 */
+.flow{padding:11px 13px;border-bottom:1px solid var(--line)}
+.fitem{display:block;width:100%;text-align:left;background:transparent;border:1px solid transparent;
+  color:var(--dim);border-radius:8px;padding:5px 9px;font-size:12px;cursor:pointer;margin:2px 0}
+.fitem:hover{background:#33363a}
+.fitem.on{background:#343a52;color:var(--txt);border-color:var(--acc)}
+.fitem small{color:#6f757c;margin-left:5px}
+.detail{padding:13px}
+.detail-body{font-size:13px}
+.detail-body b{color:var(--acc2)}
+.detail-body .warnb{background:#3a2b2b;border-left:3px solid var(--bad);padding:8px 11px;
+  border-radius:0 7px 7px 0;margin:9px 0}
+.detail-body .okb{background:#2b3a33;border-left:3px solid var(--ok);padding:8px 11px;
+  border-radius:0 7px 7px 0;margin:9px 0}
+/* 字幕 */
+.sub-bar{margin:0 12px;padding:11px 15px;background:var(--panel);border:1px solid var(--line);
+  border-radius:11px;display:flex;gap:11px;align-items:flex-start;min-height:56px}
+.sub-bar.right{margin-left:52%}
+.sub-bar.left{margin-right:38%}
+.fbadge{font-size:10px;font-weight:700;color:#fff;background:var(--acc);padding:2px 8px;
+  border-radius:99px;white-space:nowrap;margin-top:2px}
+.sub-txt{font-size:14px;line-height:1.75}
+/* 控制条 */
+.ctrl{padding:11px 12px 18px}
+.prog{position:relative;height:9px;background:#33363a;border-radius:5px;cursor:pointer;overflow:hidden}
+.fill{position:absolute;left:0;top:0;bottom:0;background:linear-gradient(90deg,#7f6fff,#4fc3f7);width:0}
+.mk{position:absolute;top:0;bottom:0;width:1px;background:#565a60}
+.mk.step{width:2px;background:#8a8f96}
+.btns{display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap}
+button{background:var(--panel2);color:var(--txt);border:1px solid var(--line);border-radius:8px;
+  padding:6px 13px;font-size:13px;cursor:pointer}
+button.primary{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:700}
+button:hover{border-color:var(--acc2)}
+.time,.meta{font-size:12px;color:var(--dim)}
+label{font-size:12px;color:var(--dim);display:flex;align-items:center;gap:6px}
+input[type=range]{width:110px}
+.hint{font-size:11px;color:#6f757c;margin-top:8px;line-height:1.6}
+.missing{display:none;background:#3a2b2b;border:1px solid var(--bad);color:#ffb3b3;
+  padding:9px 12px;border-radius:9px;font-size:12.5px;margin-bottom:10px}
+kbd{background:var(--panel2);border:1px solid var(--line);border-radius:4px;padding:0 5px;font-size:11px}
+</style>
+</head>
+<body>
+
+<div class="top">
+  <b>🎬 L16 Wait、Attempt 与 Lease</b>
+  <span class="actbadge a1" id="actBadge">第一幕 · 黑板</span>
+  <span class="sub" id="topSub">两个 AI 对话怎么有序接力写同一篇文章</span>
+  <span class="spacer"></span>
+  <span class="voice">🎧 预生成 mp3 · 云健（edge-tts）· 47 句 / 11.1 分钟</span>
+</div>
+
+<div class="main">
+  <div class="pane">
+    <div class="th" id="leftTh">🖍 黑板 · 架构推演（不出代码）</div>
+    <div class="crumb" id="crumb">— 点 ▶ 开始 —</div>
+    <div class="stage"><div id="stageIn"></div></div>
+  </div>
+  <div class="pane">
+    <div class="th">🧭 十一步 · 点可跳转</div>
+    <div class="flow" id="flow"></div>
+    <div class="detail"><div class="th" style="background:none;border:0;padding:0 0 7px">💡 深入详解</div>
+      <div class="detail-body" id="detail">
+        方案B（预生成 mp3）：旁白是 edge-tts 离线生成的一整条音频，所以这是<b>真·进度条</b>——
+        任意位置点击秒级跳转、暂停从当前字续播、语速实时调（0.6×~2.0×，变速不变调）。
+        <div class="okb"><b>本课分两幕</b>：<b>第一幕黑板</b>讲推演（约束 → 设计空间 → 因果链 → 为什么两张表 → 怎么互斥），
+        全程不出代码；<b>第二幕代码</b>按真实源文件行号走查。</div>
+        快捷键：<kbd>空格</kbd> 播放/暂停，<kbd>←</kbd><kbd>→</kbd> 上/下一句，<kbd>Shift</kbd>+<kbd>←</kbd><kbd>→</kbd> 上/下一步。
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="sub-bar" id="subBar">
+  <span class="fbadge" id="fbadge">👀 焦点</span>
+  <span class="sub-txt" id="subTxt">准备好了吗？点 ▶ 开始。本课讲：两个跑在不同 AI 对话里、互相看不见的机娘，怎么有序接力写同一篇文章。</span>
+</div>
+
+<div class="ctrl">
+  <div class="missing" id="missing">⚠ 找不到 <code>06-assets/L16-lease.mp3</code> 或 <code>timeline.js</code> ——
+    在仓库根目录运行 <code>.venv-tts/Scripts/python backend/src/magic-L16/06-make-audio.py</code> 生成后刷新本页。</div>
+  <div class="prog" id="prog"><div class="fill" id="fill"></div></div>
+  <div class="btns">
+    <button id="playBtn" class="primary">▶ 开始播放</button>
+    <button id="prevBtn" title="上一句（Shift=上一步）">⏮ 句</button>
+    <button id="nextBtn" title="下一句（Shift=下一步）">句 ⏭</button>
+    <span class="time" id="timeLabel">0:00 / 0:00</span>
+    <label>语速 <input type="range" id="speed" min="0.6" max="2.0" step="0.1" value="1.0"><span id="speedVal">1.0×</span></label>
+    <span class="meta" id="counter">步 0/11 · 句 0/41</span>
+  </div>
+  <div class="hint">进度条上细线=句边界、粗线=步边界，点任意位置精确跳转。
+    第一幕左面板是<b>分步显现的示意图</b>（不是源码）；第二幕是<b>真实源文件行号</b>的代码走查。字幕自动待在该注视的一侧下方。</div>
+</div>
+
+<audio id="au" src="06-assets/L16-lease.mp3" preload="auto"></audio>
+
+<script src="06-assets/timeline.js"></script>
+<script>
+/* ═══════════════ MODEL：句子必须与 06-make-audio.py 的 SENTENCES 同文同序 ═══════════════ */
+const B=(s)=>s;  // 黑板文本原样
+const MODEL={steps:[
+/* ───────── 第一幕 · 黑板 ───────── */
+{act:1,mode:'board',title:'0 · 悬念：排好了队，却一个字没写',crumb:'黑板 / 问题从哪来',
+ board:
+`  L15 结束时，数据库里是这样：
+
+     <span class="k">collaboration_session</span>   1 条   status = <span class="y">OPEN</span>
+     <span class="k">contribution_ticket</span>     2 条   #1 机娘A  #2 机娘B
+     <span class="k">handoff_token</span>           1 条   悬空的尾棒
+
+     <span class="k">draft</span>                    <span class="r">0 条</span>
+     <span class="k">post</span>                     <span class="r">0 条</span>
+     前端                      <span class="r">零像素</span>
+
+  <span class="g">排队</span> 和 <span class="g">写字</span>，是两件事。
+  <span class="d">这一课解决第二件——而它藏着一个前面十五课都没出现过的东西。</span>`,
+ detail:`L15 把<b>队列</b>建好了：两个 AI 对话能排出因果顺序。但队列里的人<b>还不能写字</b>。
+   <div class="okb">这一课结束时，你第一次能在浏览器里看见成品：<b>两段正文、两个作者</b>的草稿。</div>`,
+ sentences:[
+  "上一课结束的时候，两个机娘已经排好了队。但你去数据库里看，一个字都没有——没有草稿，没有帖子，前端零像素。",
+  "因为排队和写字，是两件事。这一课要解决的是：排到了之后，怎么写。",
+  "听起来简单，但这里藏着一个前面十五课都没出现过的东西。先看它是什么。"]},
+
+{act:1,mode:'board',title:'1 · 新东西：一段「进行中」的时间',crumb:'黑板 / 先看清变化',
+ board:
+`  前面几课的操作，有一个共同点：
+
+     L14  机娘投稿：建草稿 + 写正文      <span class="g">一个请求，200 毫秒</span>
+     L15  消费接力棒、建席位、签新棒      <span class="g">一个请求，200 毫秒</span>
+
+  L16 不一样：
+
+     claim-turn ────────── <span class="y">3 ~ 15 分钟</span> ────────→ submit
+         ↑                     ↑                        ↑
+      「该我了」          机娘在读、在想、在写        「写完了」
+
+  <span class="r">第一次出现了一段【进行中】的时间。</span>
+  <span class="d">关键问题：这几分钟里，这个席位处于什么状态？</span>`,
+ detail:`L14 的机娘是<b>想好了才发请求</b>——内容在请求体里，服务端只管存。
+   L16 的机娘先说「该我了」，几分钟后才回来提交。
+   <div class="warnb">「一段进行中的时间」是本课所有设计的<b>源头</b>。没有它，就不需要租约、不需要尝试表。</div>`,
+ sentences:[
+  "回看前面几课，所有的操作都有一个共同点：它们都是瞬时的。机娘投稿，一个请求两百毫秒做完；消费接力棒建席位，也是两百毫秒。",
+  "这一课不一样。机娘先说一句该我了，然后去读上一棒写了什么、思考、生成几百字，几分钟之后才回来提交。",
+  "于是第一次出现了一段进行中的时间。可能是三分钟，也可能是十五分钟，你事先不知道。",
+  "关键问题就是：这几分钟里，这个席位处于什么状态？"]},
+
+{act:1,mode:'board',title:'2 · 设计空间：锁，还是租约',crumb:'黑板 / 三条路选一条',
+ board:
+`  <span class="r">① 不管它</span>
+     第二个机娘也能同时开写同一棒 → 两份内容撞车，后者覆盖前者。<span class="r">排除。</span>
+
+  <span class="r">② 加锁</span>（数据库行锁 / Redis 分布式锁）
+     听起来最自然。但 <span class="y">锁需要有人来解</span>。
+     对话崩了 / 进程被杀 / 终端被关 → 持有者<span class="r">永远不回来解锁</span>
+     → 这一棒<span class="r">永久卡死</span>，整条链断在这里。  <span class="d">（锁泄漏）</span>
+
+  <span class="g">③ 租约（Lease）</span>  ← 我们选它
+     给的不是锁，是<span class="y">有到期时间的独占权</span>：15 分钟。
+     <span class="g">到期自动失效，不需要任何人来解。</span>
+
+  ┌────────────┬──────────────┬──────────────┐
+  │            │ 锁            │ 租约          │
+  │ 怎么释放    │ 持有者主动解   │ <span class="g">到期自动失效</span>  │
+  │ 持有者失联  │ <span class="r">永久卡死</span>      │ <span class="g">到点自愈</span>      │
+  │ 生活类比    │ 借书不还       │ 租房到期收回   │
+  └────────────┴──────────────┴──────────────┘`,
+ detail:`<b>租约不是"更好的锁"，它解决的是另一个问题</b>：对付「持有者可能永远不回来」。
+   <div class="okb">这就是为什么这一课能<b>不引入 Redis 分布式锁</b>，也不会有死锁——
+   独占权自带失效时刻，系统靠时钟自愈，不靠任何一方守规矩。</div>`,
+ sentences:[
+  "第一种做法：不管它。那第二个机娘也能同时开写同一棒，两份内容撞车，后提交的覆盖先提交的。直接排除。",
+  "第二种：加锁。数据库行锁也好，Redis 分布式锁也好。这个听起来最自然，但有一个致命问题——锁需要有人来解。",
+  "机娘的对话可能崩掉、进程被杀、你把终端关了。持有锁的那一方永远不会回来解锁，这一棒就永久卡死，整条接力链断在这里。这在分布式系统里叫锁泄漏。",
+  "第三种，也是我们选的：租约。给的不是锁，是一份有到期时间的独占权。十五分钟后自动失效，不需要任何人来解。锁要有人解，租约到点自愈。"]},
+
+{act:1,mode:'board',title:'3 · 租约放哪张表？',crumb:'黑板 / 为什么不能挂票上',
+ board:
+`  最省事的想法：票上直接加几个字段。
+
+     <span class="k">contribution_ticket</span>
+       + lease_token_digest
+       + lease_expires_at ...        <span class="r">← 不行</span>
+
+  因为<span class="y">一张票可能被写好几次</span>：
+
+     机娘A 领了票#2 的租约 ──→ 写到一半，对话崩了 ──→ 15 分钟后租约过期
+        ──→ 主人点 <span class="k">retry</span>（L18）──→ 机娘A 换个新对话再来一次 ──→ 写完了
+
+     <span class="g">票还是那张票</span>：位置、前序、归属，全没变
+     <span class="y">但写作过程是全新的一次</span>：新租约、新开始时间、新结局
+
+  挂在票上 → 第二次<span class="r">覆盖</span>第一次的痕迹
+  <span class="d">谁几点领的、什么时候超时的、为什么失败 —— 全没了。</span>
+  <span class="d">而 L17 的审计、L18 的重试决策，都要读这段历史。</span>
+
+     <span class="k">contribution_ticket</span>  ①————————N  <span class="k">contribution_attempt</span>
+        一个席位（长寿）                  一次写作尝试（短命）`,
+ detail:`<b>Attempt = 一个席位上的「一次写作过程」。</b>
+   票是你排到的位置，attempt 是你这次坐下来写的那段过程。
+   <div class="warnb">这个拆分不是为了好看——是因为<b>基数真的会破 1:1</b>。retry 一次就多一条。</div>`,
+ sentences:[
+  "接下来一个容易忽略的决定：租约放在哪张表？最省事的想法是，票上直接加几个字段不就完了。",
+  "不行，因为一张票可能被写好几次。想象这个场景：机娘写到一半崩了，租约过期，主人点重试，它换个新对话再来一次。",
+  "这时候票还是那张票——它在链表里的位置、前序是谁、归属哪个机娘，全都没变。但写作过程是全新的一次。",
+  "如果租约直接挂在票上，第二次会把第一次的痕迹覆盖掉：谁几点领的、什么时候超时的，全没了。而后面两课的审计和重试，都要读这段历史。所以拆出一张尝试表，票和尝试是一对多。"]},
+
+{act:1,mode:'board',title:'4 · 合与分的判据',crumb:'黑板 / 一课里的正反两例',
+ board:
+`  注意：租约本身我<span class="y">没有</span>再单开一张表，
+        而是把五个字段<span class="g">直接内嵌</span>在尝试表里。
+
+  同样是两个概念，为什么上一个该<span class="r">分</span>、这一个该<span class="g">合</span>？
+
+  ┌──────────────────────┬────────────┬──────────────┬───────┐
+  │ 关系                  │ 基数        │ 生命周期      │ 结论   │
+  ├──────────────────────┼────────────┼──────────────┼───────┤
+  │ ticket ↔ handoff (L15)│ <span class="r">会破 1:1</span>    │ 不同          │ <span class="r">分表</span>   │
+  │ ticket ↔ attempt      │ <span class="r">1 : N</span>       │ 不同          │ <span class="r">分表</span>   │
+  │ attempt ↔ lease       │ <span class="g">恒 1 : 1</span>    │ <span class="g">同生共死</span>      │ <span class="g">合表</span>   │
+  └──────────────────────┴────────────┴──────────────┴───────┘
+
+  <span class="y">判据两条</span>：① 基数会不会破 1:1   ② 生命周期是否同生共死
+  <span class="g">两个都满足才合表；任何一个不满足就分表。</span>`,
+ detail:`一次尝试<b>有且仅有</b>一个租约，租约失效<b>就等于</b>这次尝试失败——恒 1:1、同生共死，所以合。
+   <div class="okb">同一个协议里给出<b>该分</b>与<b>该合</b>的两个例子，这条判据才立得住——
+   否则它只是一句"看情况"。</div>`,
+ sentences:[
+  "但是注意，租约本身我并没有再单开一张表，而是把它的五个字段直接内嵌在尝试表里。同样是两个概念，为什么上一个该分、这一个该合？",
+  "判据只有两条：第一，基数会不会破一比一；第二，生命周期是不是同生共死。两个都满足才合表。",
+  "票和尝试，基数是一对多，而且票活到文章发布之后，尝试是短命的——两条都不满足，必须分。尝试和租约，一次尝试有且仅有一个租约，租约失效就等于这次尝试失败——恒定一比一，同生共死，所以合。",
+  "上一课的席位和接力棒是该分的例子，这一课的尝试和租约是该合的例子。同一个协议里给出正反两例，这条判据才立得住。"]},
+
+{act:1,mode:'board',title:'5 · 唯一键的两副面孔',crumb:'黑板 / 本课最值钱的一段',
+ board:
+`  上一课我说过：<span class="r">靠唯一键兜底是反模式</span>（用异常控制业务流程）。
+  这一课的幂等<span class="g">恰恰相反</span>：主动 INSERT，就指望撞键来告诉自己"有人先来了"。
+
+  同样是撞唯一键，为什么一个错一个对？<span class="y">判据两条</span>：
+
+  <span class="y">① 那个唯一键守的不变量，是不是【就是】你此刻要判定的那件事？</span>
+
+     幂等要判定：<span class="k">这个 key 来过没有</span>
+     uk 守的是：  <span class="k">这个 key 来过没有</span>        <span class="g">✓ 同一件事</span>
+
+     领租约要判定：<span class="k">这张票能不能领</span>（状态+归属+时效）
+     uk 守的是：   <span class="k">第 N 次尝试唯一</span>          <span class="r">✗ 只是碰巧相关</span>
+
+  <span class="y">② 它覆盖不覆盖【全部】失败情形？</span>
+
+     两个人抢同一张票    → <span class="g">✓ 撞键，能挡</span>
+     票根本不是你的      → <span class="r">✗ 没人跟你抢 → 建成功 → 返回 201</span>
+     前序还没写完        → <span class="r">✗ 建成功 → 201</span>
+     协作已终止/被冻结   → <span class="r">✗ 建成功 → 201</span>
+
+  <span class="g">唯一键是最后一道安全网，不是闸门。</span>`,
+ detail:`<b>唯一键只挡得住"撞车"，挡不住"你本来就没资格上路"。</b>
+   <div class="warnb">还有两个工程上的麻烦：<code>DuplicateKeyException</code> <b>不告诉你撞的是哪个键</b>；
+   而且撞键之后事务已被标记 rollback-only，你想在 catch 里回查状态给个友好提示<b>都做不到</b>。</div>`,
+ sentences:[
+  "现在讲这一课最值钱的一段。上一课我说过一句话：靠唯一键兜底是反模式，叫用异常控制业务流程。",
+  "但这一课的幂等，恰恰相反——它主动去插入一条记录，就指望唯一键冲突来告诉自己，有人先来了。这是正解。",
+  "同样是撞唯一键，为什么一个是反模式、一个是正解？判据有两条。",
+  "第一条：那个唯一键守的不变量，是不是就是你此刻要判定的那件事。幂等要判定的全部内容就是这个键来过没有，而唯一键守的正是这件事；而领租约要判定的是这张票能不能领，唯一键守的却是第几次尝试唯一——只是碰巧相关。",
+  "第二条更狠：它覆盖不覆盖全部失败情形。唯一键只挡得住两个人抢同一张票，挡不住票根本不是你的、前序还没写完、协作已经终止——那些情况下没人跟你抢，票会建成功，服务端会返回二零一。唯一键是最后一道安全网，不是闸门。"]},
+
+{act:1,mode:'board',title:'6 · 幂等：让「重发」变安全',crumb:'黑板 / 最后一个概念',
+ board:
+`  场景很具体：
+
+     CLI ──── submit ────→ 服务端    <span class="d">（收到了，正在处理）</span>
+     CLI ←──── <span class="r">✗ 超时</span> ────  网络断了
+          ↑
+       现在怎么办？
+
+     <span class="r">不重发</span> → 可能真的丢了，这一棒白写
+     <span class="r">重发</span>   → 可能写出两段一模一样的正文
+
+  <span class="g">幂等 = 同一个请求发两次，效果与发一次【完全一致】。</span>
+
+     客户端带一个自己生成的随机 <span class="k">Idempotency-Key</span>
+     服务端记一笔流水账：<span class="k">这个 key 我处理过没有、处理成什么样了</span>
+     重复请求来了 → <span class="g">查账即可，不必重新执行</span>`,
+ detail:`注意幂等的定义是「<b>效果</b>与执行一次完全一致」——所以验收要去<b>数据里</b>查，
+   不能只看两次都返回 201。
+   <div class="okb">黑板讲完了。下面看代码：两张表、两条闸门 SQL、一层切面、一条并发测试。</div>`,
+ sentences:[
+  "最后一个概念，幂等。场景很具体：提交的时候网络超时了，客户端根本不知道服务端收到没有。",
+  "不重发，可能这一棒白写；重发，可能写出两段一模一样的正文。幂等就是让重发这个动作变得安全——同一个请求发两次，效果和发一次完全一样。",
+  "做法是给每个请求带一个客户端生成的随机键，服务端记一笔流水账。黑板讲完了，下面看代码。"]},
+
+/* ───────── 第二幕 · 代码 ───────── */
+{act:2,mode:'code',title:'7 · V013 建两张表',crumb:'backend/src/main/resources/db/migration/V013__create_attempt_and_idempotency.sql',
+ from:33,hl:[[45,47],[66,69]],lang:'sql',
+ code:
+`CREATE TABLE contribution_attempt (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  ticket_id BIGINT NOT NULL,                       -- 哪个席位
+  attempt_no INT NOT NULL,                         -- 第几次尝试（L16 恒为 1；retry 才有 2、3）
+  status VARCHAR(32) NOT NULL,                     -- ACTIVE / SUCCEEDED / FAILED_TIMEOUT ...
+
+  -- ↓↓↓ 这五列就是【内嵌的租约】↓↓↓
+  lease_token_digest BINARY(32) NULL,              -- HMAC 摘要，明文只在签发时给一次
+  lease_issued_at DATETIME(3) NULL,
+  lease_expires_at DATETIME(3) NULL,               -- ★ 本课最重要的一列
+  last_heartbeat_at DATETIME(3) NULL,              -- 建列不用（L17 续租）
+  max_lease_expires_at DATETIME(3) NULL,           -- 建列不用（L18）
+  ...
+  UNIQUE KEY uk_attempt_ticket_no (ticket_id, attempt_no),      -- 最后的安全网
+  UNIQUE KEY uk_attempt_lease_digest (lease_token_digest),      -- 也是 submit 的查找键
+  KEY idx_attempt_expiry (status, lease_expires_at)             -- 供 L17 Worker 扫超时
+);
+
+-- 填 L15 留的两个坑（V012 建列时目标表还不存在，注释写着「留 L16」）
+ALTER TABLE contribution_ticket
+  ADD CONSTRAINT fk_ticket_active_attempt FOREIGN KEY (active_attempt_id) ...;
+ALTER TABLE contribution
+  ADD CONSTRAINT uk_contribution_ticket UNIQUE (ticket_id);     -- 一票一贡献`,
+ detail:`<div class="warnb"><b>迁移编号是 V013 不是蓝图写的 V010</b>——主线 V010 早被设备配对占用
+   （DRIFT D-02 / D-09 / D-15 一脉，第四次踩同一个坑）。</div>
+   <b>两个唯一键各守一件事</b>：<code>uk_attempt_ticket_no</code> 是安全网（正常路径永不触发）；
+   <code>uk_attempt_lease_digest</code> 同时还是 submit 的<b>点查键</b>。`,
+ sentences:[
+  "先看建表。V013 建两张表：贡献尝试和幂等台账。注意编号是 V013 不是蓝图写的 V010，主线的 V010 早被设备配对占用了。",
+  "尝试表里，中间这五列就是内嵌的租约。其中最重要的是租约到期时刻这一列，等下你会看到整节课的安全都压在它身上。",
+  "还有两个唯一键，各守一件事：一张票的第几次尝试只能有一条，这是最后的安全网；租约令牌摘要唯一，它同时还是提交时的查找键。",
+  "顺手还填了上一课留的两个坑：席位表指向当前尝试的那个外键，还有一张票只能产出一条贡献的唯一约束——上一课建表时目标表还不存在，注释里写着留给这一课补。"]},
+
+{act:2,mode:'code',title:'8 · 领租约：闸门必须排在最前面',crumb:'backend/src/main/resources/mapper/collaboration/ContributionTicketMapper.xml + ClaimLeaseService.java',
+ from:52,hl:[[52,63]],lang:'sql',
+ code:
+`<update id="claimForLease">
+    UPDATE contribution_ticket
+    SET status     = 'LEASED',
+        updated_at = #{now},
+        version    = version + 1
+    WHERE ticket_code       = #{ticketCode}      -- 是这张票吗
+      AND status            = 'READY_TO_WRITE'   -- 轮到它了吗
+      AND required_agent_id = #{agentId}         -- 是你这个机娘的席位吗
+</update>
+
+<!-- ClaimLeaseService.claim() 的执行顺序 —— 全部难点都在这里 -->
+①  查票 + 查会话        只取上下文、做 404 行级授权，【不做任何状态判定】
+②  ★闸门★              affectedRows: 1 = 领到 / 0 = 没领到（回查翻译错误码）
+③  建 Attempt + 签租约   到这里已独占，零竞争
+④  回填 active_attempt_id  按主键更新，无竞争
+⑤  首棒: session OPEN → RUNNING`,
+ detail:`<div class="warnb"><b>反面写法</b>：查票 → 建 attempt → 改状态。
+   两个线程会<b>双双先建 attempt</b>，撞 <code>uk_attempt_ticket_no</code>，
+   败者拿 <b>500</b> 而不是干净的 <b>409</b>。</div>
+   <b>① 的 SELECT 会不会又是「查-判-改」三步走？</b>不会——区别在<b>判定权归谁</b>：
+   这里的 SELECT 只是取数据，判定 100% 由 ② 那条 UPDATE 的 WHERE 完成。
+   <div class="okb">③ 里算 attempt_no 用了「查最大值 +1」，它是<b>安全的</b>——票已被闸门锁成 LEASED。
+   <b>判据不是"用没用 SELECT"，而是"SELECT 到 INSERT 之间，别人还能不能插进来"。</b></div>`,
+ sentences:[
+  "领租约的核心是这一条 UPDATE。它一句话同时回答三个问题：是这张票吗、轮到它了吗、是你这个机娘的席位吗。影响行数就是裁决书。",
+  "注意执行顺序：闸门必须排在建尝试记录之前。如果写成先查票、再建尝试、最后改状态，两个线程会双双先建尝试，撞上唯一键，输的那个拿到的是数据库异常也就是五百错误，而不是干净的四百零九。",
+  "更要命的是覆盖面。唯一键只挡得住撞车，挡不住你本来就没资格上路——票不是你的、前序没写完、协作已终止，这些情况下没人跟你抢，票会建成功。",
+  "这里还有个细节：闸门之后我用了一句查最大值再加一来算尝试序号。这看起来又是查了再写，但它是安全的——因为票已经被闸门锁成已租出，没有第二个线程能走到这一步。判据不是用没用查询，而是查询到写入之间别人还能不能插进来。"]},
+
+{act:2,mode:'code',title:'9 · 提交：过期靠 WHERE，不靠 Worker',crumb:'backend/src/main/resources/mapper/collaboration/ContributionAttemptMapper.xml',
+ from:58,hl:[[58,70]],lang:'sql',
+ code:
+`<update id="consumeActiveLease">
+    UPDATE contribution_attempt
+    SET status      = 'SUCCEEDED',
+        finished_at = #{now},
+        updated_at  = #{now}
+    WHERE lease_token_digest = #{leaseTokenDigest}   -- 按摘要定位（明文从不落库）
+      AND status             = 'ACTIVE'              -- 天然防重放：已 SUCCEEDED 抢不到
+      AND lease_expires_at  >= #{now}                -- ★ 时效惰性判定
+</update>
+
+<!-- submit 的执行顺序 -->
+② ★闸门★  消费租约 —— 排在写内容【之前】
+③ 三重身份校验（票 / 机娘 / 主人）
+④ contentFacade.appendAgentContribution(...)   跨模块写，【同一事务】
+⑥ 席位 → DONE
+⑦ ★唤醒直接后继：WAITING_PREDECESSOR → READY_TO_WRITE`,
+ detail:`<div class="warnb"><b>本课 forbidden 明写「不写超时 Worker」</b>。所以一个早已过期的租约，
+   它在库里的 status <b>仍然是 ACTIVE</b>——没有任何后台任务去改它。
+   但因为过期判定写在这条 WHERE 里做<b>惰性执行</b>，它一定提交不进来。</div>
+   <b>正确性完全不依赖后台任务是否及时</b>。Worker 只负责把状态刷得好看，它<b>不是</b>安全防线。
+   <div class="okb"><b>状态不准 ≠ 行为不对。</b></div>
+   ⑦ 是接力真正"接上"的那一刻：第二个机娘一直卡在 WAITING，<b>没有任何人主动通知它</b>——
+   是前一棒的 submit 顺手把它放行的。`,
+ sentences:[
+  "提交的闸门同样是一条 UPDATE，三个条件：按摘要定位、状态必须是进行中、并且租约没有过期。",
+  "特别看过期这一条。这一课的禁止项明写着不许写超时清理任务。也就是说，一个十五分钟前领的、早就过期的租约，它在数据库里的状态仍然是进行中，没有任何后台任务去改它。",
+  "但因为过期判定写在这条 WHERE 里做惰性执行，它一定提交不进来。正确性完全不依赖后台任务是否及时——后台任务只负责把状态刷得好看，它不是安全防线。状态不准，不等于行为不对。",
+  "还有一个坑：这个时间比较用的是应用传进来的时刻，不是数据库的 NOW 函数。上一课我在这里被打红过，两边的时区口径差了整整八小时。"]},
+
+{act:2,mode:'code',title:'10 · 幂等：AOP 第一次出场',crumb:'backend/src/main/java/com/agentlog/shared/idempotency/IdempotencyAspect.java',
+ from:70,hl:[[70,100]],lang:'java',
+ code:
+`@Around("@annotation(idempotent)")
+public Object around(ProceedingJoinPoint pjp, Idempotent idempotent) throws Throwable {
+    String key = request.getHeader("Idempotency-Key");
+    if (!StringUtils.hasText(key)) return pjp.proceed();   // 宽松：没带就当普通请求
+
+    String requestHash = hashOf(pjp.getArgs());            // 路径参数+请求体一起进 hash
+
+    IdempotencyRecordDO acquired;
+    try {
+        acquired = store.begin(...);                       // ★ 抢占式 INSERT，独立事务
+    } catch (DuplicateKeyException conflict) {
+        return replayOrReject(store.find(...), requestHash, pjp);   // 有人先来了
+    }
+
+    try {
+        Object result = pjp.proceed();                     // 执行业务
+        store.complete(acquired.getId(), ..., json(result));        // 缓存响应
+        return result;
+    } catch (Throwable businessFailure) {
+        store.abandon(acquired.getId());                   // 失败就删掉，允许同 key 重试
+        throw businessFailure;
+    }
+}`,
+ detail:`<b>为什么用 AOP 而不是 L13 那两层 Filter</b>：Filter 拿到的是<b>字节流</b>，
+   缓存响应体得包 <code>ContentCachingResponseWrapper</code>；切面直接拿到<b>返回值对象</b>，
+   Jackson 序列化存库、重放时反序列化 return 出去，客户端拿到的东西<b>字节级一致</b>。
+   <div class="warnb"><b>台账必须跑在独立事务（REQUIRES_NEW）里</b>。共用事务的话，
+   A 的 INSERT 尚未提交 → B 撞键后<b>被行锁挂住干等</b>，最后拿到锁等待超时而不是干净的 409。</div>
+   <div class="okb">「处理中」这个状态必须对<b>并发者立刻可见</b>，幂等才成立。
+   藏在未提交的事务里，它等于不存在。</div>
+   <b>catch 为什么写在切面里</b>：撞键时那个事务已被标记 rollback-only，
+   在方法内部 catch 之后再碰数据库一律失败——捕获必须发生在<b>事务边界之外</b>。`,
+ sentences:[
+  "幂等我做成了一层横切，用的是环绕切面，这也是这个项目里第一次出现 AOP。为什么不用之前学过的过滤器？因为过滤器拿到的是字节流，要缓存响应体得包一层包装类；而切面直接拿到方法的返回值对象。",
+  "流程是这样：先抢占式插入一条台账，撞了唯一键就说明有人先来了，回查那条记录——内容一样且已完成，直接把上次的响应还回去，业务一行都不执行。",
+  "有一个地方极容易写错：台账必须跑在独立事务里。如果和业务共用一个事务，第一个请求的台账还没提交，第二个同键请求会被行锁挂住干等，最后拿到的是锁等待超时，而不是干净的四百零九。处理中这个状态必须对并发者立刻可见，幂等才成立。",
+  "还有一个窗口我诚实登记了：业务已经提交、但台账还没标记完成的时候进程崩了，客户端重试会拿到冲突，可事情其实已经做成了。这是单机事务消不掉的固有窗口，客户端的自愈路径是去查席位状态。"]},
+
+{act:2,mode:'code',title:'11 · 并发测试打红了我 · 收束',crumb:'backend/src/test/java/com/agentlog/collaboration/LeaseConcurrencyIntegrationTest.java',
+ from:130,hl:[[139,146]],lang:'java',
+ code:
+`// ① 恰好一个赢家
+Assertions.assertThat(winners)
+        .as("同一张席位的租约，%d 个线程同领，必须恰好一个成功", threads)
+        .hasSize(1);
+
+// ② ★★ 本类最关键的一条断言 ★★
+//    所有败者拿到的必须是干净的 409 ACPP_LEASE_ALREADY_CLAIMED，
+//    【不是】DuplicateKeyException 之类的底层约束异常（那会变成 HTTP 500）。
+//    这正是「闸门必须排在建 attempt 之前」的守卫：
+//    若把顺序写成「查票 → 建 attempt → 改票」，败者会先撞 uk_attempt_ticket_no，这里立刻红。
+Assertions.assertThat(outcomes.stream().filter(o -> !o.won()).map(Outcome::code))
+        .as("败者必须拿到语义清晰的 409，而不是底层约束异常")
+        .isNotEmpty()
+        .allMatch("ACPP_LEASE_ALREADY_CLAIMED"::equals);`,
+ detail:`<div class="warnb"><b>施工时这条测试真的把我打红了</b>，但错的不是闸门，
+   是闸门失败之后的那次<b>回查</b>：8 个败者全部拿到 <code>ACPP_TICKET_NOT_WRITABLE</code>。</div>
+   <b>根因</b>：回查读到的是<b>事务快照</b>。MySQL 默认 REPEATABLE READ，
+   赢家的 UPDATE 尚未提交时，败者看到的那一行<b>仍然是 READY_TO_WRITE</b>——
+   「看起来明明能领，却领不到」，于是所有判断分支落空。
+   <div class="okb"><b>它还顺带揪出了 L15 的一处错误注释</b>：那里写着「极罕见」，
+   其实<b>在并发下是必然</b>；只因兜底值恰好等于期望值，L15 的测试没发现理由写错了。
+   <b>结论对，理由错——这类更正必须当面说，不许悄悄改掉。</b></div>`,
+ sentences:[
+  "这些防线由并发测试守。两个线程和八个线程各跑一次，断言恰好一个赢家，而且所有输家拿到的必须是干净的四百零九。",
+  "施工的时候这条测试真的把我打红了，但错的不是闸门，是闸门失败之后的那次回查。八个输家全部拿到了错误的错误码。",
+  "根因是我没想到的一层：回查读到的是事务快照。默认隔离级别下，赢家的修改还没提交时，输家看到的那一行仍然是可写状态——看起来明明能领，却领不到。于是我写的所有判断分支全部落空。",
+  "正确的推理是：闸门是唯一的裁决者，它说零行就是零行；回查显示可写，唯一的解释就是并发有人先领走了，只是我还看不见。这一课三句话收尾：租约不是锁，锁要有人解、租约到点自愈；过期靠 WHERE 里的惰性判定，不靠后台任务；唯一键有两副面孔，守的是不是你要判定的那件事，决定它是闸门还是安全网。"]}
+]};
+
+/* ═══════════════ 引擎 ═══════════════ */
+const $=id=>document.getElementById(id);
+const au=$('au');
+const FLAT=[];
+MODEL.steps.forEach((s,si)=>s.sentences.forEach((t,k)=>FLAT.push({si,k,text:t})));
+const TL=window.AUDIO_TIMELINE||null;
+if(!TL||TL.length!==FLAT.length){$('missing').style.display='block';
+  console.warn('timeline 句数',TL&&TL.length,'≠ MODEL 句数',FLAT.length);}
+let cur=-1,curStep=-1;
+
+function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function hl(raw,lang){
+  let s=esc(raw);
+  if(lang==='sql'){
+    s=s.replace(/(--[^\n]*)/g,'<span class="cm">$1</span>')
+       .replace(/\b(UPDATE|SET|WHERE|AND|OR|CREATE|TABLE|ALTER|ADD|CONSTRAINT|FOREIGN|KEY|REFERENCES|PRIMARY|NOT|NULL|DEFAULT|SELECT|FROM|AUTO_INCREMENT)\b/g,'<span class="kw">$1</span>')
+       .replace(/(&#39;|')([^']*)(&#39;|')/g,'<span class="str">\'$2\'</span>')
+       .replace(/(#\{\w+\})/g,'<span class="ann">$1</span>');
+  }else{
+    s=s.replace(/(\/\/[^\n]*)/g,'<span class="cm">$1</span>')
+       .replace(/(\/\*\*?[\s\S]*?\*\/)/g,'<span class="cm">$1</span>')
+       .replace(/\b(public|private|int|void|if|throw|new|return|class|final|static|boolean|import)\b/g,'<span class="kw">$1</span>')
+       .replace(/@(Test|Transactional|Override)\b/g,'<span class="ann">@$1</span>')
+       .replace(/(&quot;[^&]*?&quot;)/g,'<span class="str">$1</span>');
+  }
+  return s;
+}
+function renderStage(si){
+  const st=MODEL.steps[si];
+  $('crumb').textContent=st.crumb;
+  $('actBadge').textContent=st.act===1?'第一幕 · 黑板':'第二幕 · 代码';
+  $('actBadge').className='actbadge '+(st.act===1?'a1':'a2');
+  $('leftTh').innerHTML=st.act===1?'🖍 黑板 · 架构推演（不出代码）':'💻 IDE · 真实源文件行号';
+  $('topSub').textContent=st.title;
+  $('detail').innerHTML=st.detail;
+  if(st.mode==='board'){
+    // 黑板：按行分段，随句子推进逐行显现
+    $('stageIn').innerHTML='<div class="board">'+
+      st.board.split('\n').map((l,i)=>`<span class="ln" data-l="${i}">${l||' '}</span>`).join('\n')+'</div>';
+  }else{
+    const lines=st.code.split('\n');
+    $('stageIn').innerHTML='<div class="code">'+lines.map((l,i)=>{
+      const no=st.from+i;
+      const on=(st.hl||[]).some(([a,b])=>no>=a&&no<=b);
+      return `<span class="row${on?' on':''}"><span class="no">${no}</span>${hl(l,st.lang)||' '}</span>`;
+    }).join('')+'</div>';
+  }
+  buildFlow(si);
+}
+function revealBoard(si,localIdx){
+  const st=MODEL.steps[si]; if(st.mode!=='board')return;
+  const total=st.board.split('\n').length, n=st.sentences.length;
+  const upto=Math.ceil(total*(localIdx+1)/n);
+  document.querySelectorAll('.board .ln').forEach((el,i)=>el.classList.toggle('on',i<upto));
+}
+function buildFlow(si){
+  $('flow').innerHTML=MODEL.steps.map((s,i)=>
+    `<button class="fitem${i===si?' on':''}" data-i="${i}">${s.act===1?'🖍':'💻'} ${s.title}
+      <small>${s.sentences.length} 句</small></button>`).join('');
+  $('flow').querySelectorAll('.fitem').forEach(b=>b.onclick=()=>{
+    const first=FLAT.findIndex(f=>f.si===+b.dataset.i); if(first>=0)seekTo(first);});
+}
+function fmt(s){const m=Math.floor(s/60);return m+':'+String(Math.floor(s%60)).padStart(2,'0');}
+function showSentence(k){
+  if(k<0||k>=FLAT.length)return;
+  const f=FLAT[k];
+  if(f.si!==curStep){curStep=f.si;renderStage(f.si);}
+  cur=k;
+  const local=k-FLAT.findIndex(x=>x.si===f.si);
+  revealBoard(f.si,local);
+  $('subTxt').textContent=f.text;
+  const st=MODEL.steps[f.si];
+  // 字幕待在该注视的一侧：黑板/代码在左 → 字幕靠左；详解在右 → 每步最后一句靠右
+  const last=local===st.sentences.length-1;
+  $('subBar').className='sub-bar '+(last?'right':'left');
+  $('fbadge').textContent=last?'👀 看右侧详解':'👀 看左侧'+(st.mode==='board'?'黑板':'代码');
+  $('counter').textContent=`步 ${f.si+1}/${MODEL.steps.length} · 句 ${k+1}/${FLAT.length}`;
+  if(st.mode==='code'){
+    const on=document.querySelector('.code .row.on'); if(on)on.scrollIntoView({block:'nearest'});
+  }
+}
+function seekTo(k){if(!TL)return;au.currentTime=TL[k][0];showSentence(k);if(au.paused)au.play();}
+au.addEventListener('timeupdate',()=>{
+  if(!TL)return;
+  const t=au.currentTime;
+  let k=FLAT.length-1; for(let i=0;i<TL.length;i++){if(t<TL[i][1]){k=i;break;}}
+  if(k!==cur)showSentence(k);
+  $('fill').style.width=(t/(au.duration||1)*100)+'%';
+  $('timeLabel').textContent=fmt(t)+' / '+fmt(au.duration||0);
+});
+au.addEventListener('ended',()=>{$('playBtn').textContent='▶ 重播';});
+$('playBtn').onclick=()=>{if(au.paused){au.play();$('playBtn').textContent='⏸ 暂停';
+  if(cur<0)showSentence(0);}else{au.pause();$('playBtn').textContent='▶ 继续';}};
+$('prevBtn').onclick=e=>seekTo(e.shiftKey?FLAT.findIndex(f=>f.si===Math.max(0,curStep-1)):Math.max(0,cur-1));
+$('nextBtn').onclick=e=>seekTo(e.shiftKey?FLAT.findIndex(f=>f.si===Math.min(MODEL.steps.length-1,curStep+1)):Math.min(FLAT.length-1,cur+1));
+$('prog').onclick=e=>{const r=e.currentTarget.getBoundingClientRect();
+  au.currentTime=(e.clientX-r.left)/r.width*(au.duration||0);if(au.paused)au.play();};
+$('speed').oninput=e=>{au.playbackRate=+e.target.value;$('speedVal').textContent=(+e.target.value).toFixed(1)+'×';};
+document.addEventListener('keydown',e=>{
+  if(e.code==='Space'){e.preventDefault();$('playBtn').click();}
+  if(e.key==='ArrowLeft'){e.preventDefault();$('prevBtn').onclick(e);}
+  if(e.key==='ArrowRight'){e.preventDefault();$('nextBtn').onclick(e);}
+});
+// 进度条刻度
+au.addEventListener('loadedmetadata',()=>{
+  if(!TL)return;
+  const d=au.duration,p=$('prog');
+  FLAT.forEach((f,i)=>{
+    const m=document.createElement('div');
+    m.className='mk'+(i>0&&FLAT[i-1].si!==f.si?' step':'');
+    m.style.left=(TL[i][0]/d*100)+'%';p.appendChild(m);
+  });
+  $('timeLabel').textContent='0:00 / '+fmt(d);
+});
+renderStage(0);
+</script>
+</body>
+</html>

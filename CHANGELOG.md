@@ -6,6 +6,106 @@
 > L06–L11.5 条目为 2026-07-09 断更补录：由 11 个挖掘子代理逐行解析 58 个会话转录（157 条变更明细，
 > 在 `docs/changelog-evidence/mine*.json`，含续档分叉去重）与 git 全史交叉核实而成。
 
+## 0.1.0-SNAPSHOT - L16 Wait、Attempt 与 Lease（一棒怎么写 · 待提交）
+
+日期：2026-08-02　出处：`[会话 3ad9ede8]`（继承 L15 会话 `53f5f3e5` 的上下文与讲解风格）
+
+> **本课主线**：L15 把队列建好了，但队列里的人还不能写字。一句话框定——
+> **一张票排到了，怎么让它的持有者独占地写完、顺位交棒；且独占权到期能自动失效（不靠任何后台任务），
+> 网络重发也不会写出两段正文？**
+>
+> ✅ **本课第一次能看见成品**：两个机娘接力写出的草稿，在浏览器审稿页里是两段正文、两个作者。
+> 这是 L15「零像素」之后的兑现点。
+>
+> **本课三句话**：租约不是锁（锁要有人解，租约到点自愈）；过期靠 `WHERE` 里的惰性判定（不靠 Worker）；
+> 唯一键有两副面孔（守的是不是你要判定的那件事，决定它是闸门还是安全网）。
+
+### Added
+- **ADR-0006**（`docs/decisions/0006-l16-wait-attempt-lease.md`）：设计简报——P1~P8 取证 + 7 条决策 + 11 项测试计划 + DRIFT D-16 登记。
+- **迁移 `V013__create_attempt_and_idempotency.sql`**（蓝图写 V010，主线早被设备配对占用 → 顺延，续 D-02/D-09/D-15）：
+  - `contribution_attempt`：一个席位上的**一次写作过程**，**租约五列内嵌于此**（`lease_token_digest`/`lease_issued_at`/`lease_expires_at`/`last_heartbeat_at`/`max_lease_expires_at`，后两列建列不用留 L17/L18）。
+  - `idempotency_record`：幂等台账，唯一键 `(owner_user_id, agent_id, endpoint, idempotency_key)`。
+  - **合与分的判据**（本课设计教学点）：① 基数会不会破 1:1 ② 生命周期是否同生共死，两个都满足才合表。`ticket↔attempt` 是 1:N 且寿命不同 → **分**；`attempt↔lease` 恒 1:1 且同生共死 → **合**。与 L15 的 `ticket↔handoff`（必须分）恰好构成正反两例。
+  - **填 L15 留的两个坑**：`fk_ticket_active_attempt` 外键（V012 建列时目标表还不存在）+ `uk_contribution_ticket` 唯一键（submit 的不变量）。
+  - 状态机继续写成 CHECK（`ck_attempt_status`/`ck_idempotency_status`），取文档完整值集。
+- **`ContentFacade`**（`com.agentlog.content`，模块**根包 = 公开 API**）——**跨模块写的第一条正路**，兑现了 `content/package-info.java` 从 L02 挂到现在的空头支票。实现类在私有子包 `content.application`，collaboration 只看得见接口 → `ModularityTest` 保持绿。方法用 `Propagation.MANDATORY`：**拒绝在没有事务时被调用**，把「必须与 submit 同事务」交给容器强制而不是靠注释提醒。
+- **幂等横切**（`shared/idempotency`，本项目 **AOP 第一次出场**，为此引入 `spring-boot-starter-aop`）：`@Idempotent` 注解 + `IdempotencyAspect`（环绕切面）+ `IdempotencyStore`（三个 `REQUIRES_NEW` 独立事务方法）。**一处实现覆盖 4 个端点**，顺手还清 L15 登记的 P3 欠账（start/join 声明了 `Idempotency-Key` 却不校验）。
+  - 为什么用 AOP 而不是 L13 那两层 Filter：切面直接拿到 Controller 的**返回值对象**，Jackson 序列化存库、重放时反序列化返回；Filter 拿到的是字节流，得包 `ContentCachingResponseWrapper`。
+  - `endpoint` 列存**路由模板**而非实际 URI —— 否则同一个 key 用在两张不同的票上会被切成两个幂等域，反而破坏幂等语义；路径参数改为参与 `requestHash`。
+- **三个 Chain 3 端点**：`GET /agent/contribution-tickets/{code}`（状态·CLI wait 轮询它）、`POST .../leases`（领租约）、`POST .../contributions`（提交，租约走 `X-Turn-Lease-Token` 头）。
+- **错误码 +11**：`ACPP_TICKET_NOT_FOUND`(404) / `WAITING`(409) / `BLOCKED`(409) / `NOT_WRITABLE`(409) / `ACPP_WRONG_AGENT`(**403**) / `ACPP_LEASE_ALREADY_CLAIMED`(409) / `EXPIRED`(410) / `INVALID`(403) / `IDEMPOTENCY_REQUEST_IN_PROGRESS`(409) / `KEY_REUSED_WITH_DIFFERENT_BODY`(409) / `KEY_REQUIRED`(400)。
+  - **`ACPP_WRONG_AGENT` 用 403 而不是 404**，与「跨主人一律 404」不冲突：**泄漏边界按租户划，不按机娘划**。同一主人名下的机娘本就彼此可见，藏起来没有安全收益，反而让机娘拿不到「该换回原机娘」这条自愈信息。
+- **CLI `collab status / wait / claim-turn / submit`**（`files` 栏只列后端两文件，但验收要「后序等待」→ 范围必须含 CLI，同 L14/L15 前科）：
+  - `wait` 按服务端给的 `pollAfterSeconds` 退避，**节奏由服务端掌握**；超时退出码 **2**（与业务失败 1 区分——超时是"还没轮到"不是"出错了"）。
+  - **幂等键落本地并复用**（`claimIdempotencyKey`/`submitIdempotencyKey`）：每次重试换新 key 等于没有幂等。
+  - **lease 令牌只落盘、不进任何流**（`cli-spec.md` 输出规则）——它不经过人手，回显只增加泄漏面。
+- **测试 +13**：`LeaseAndSubmitIntegrationTest`(11) + `LeaseConcurrencyIntegrationTest`(2，**皇冠**：2/8 线程双领一成功)。**后端 96 绿 + CLI 10 绿 = 106**。
+- **L16 教学产物**（`backend/src/magic-L16/`）—— 🔴 **本课起从三件套变四件套**（主人 2026-08-03 定义第四种）：
+  - `00-L16讲义.md`（12 节，全部配**真实行号**可跳转；§6.3「唯一键的两副面孔」与 §9「事务快照」是核心段；§11 面试问答十问）
+  - `AgentLog-L16.postman_collection.json`（**7 组 32 请求**，带断言脚本，可一键 Run Collection；④⑤ 两组直接对应硬验收「后序等待」「submit 幂等」）
+  - `06-L16租约与幂等-方案B-mp3.html` + `06-make-audio.py`（方案B 视频：**两幕 12 步 47 句 / 11.1 分钟**，第一幕黑板 7 步、第二幕代码 5 步）
+  - 🆕 **`08-L16代码陪读-导游版.html`（第四种产物·本课首创）**：把本课**全部 30 个改动文件**按阅读顺序逐个导游，**10 章 24 站**，可交互（左代码右讲解、分步高亮、键盘翻站）。
+    - **起因（诚实记录）**：主人读幂等那五个文件读不懂，**自己去问了别的 AI** 才看明白 `hashOf()`，由此点破「我们环节一直差的一个东西，就是本课代码陪读」。他的原话：「**你写的代码我是完全没参与的，所以需要你导游引领细致喂饭深入浅出讲解**」。
+    - **四种产物的分工**：**视频**讲大体设计（问题→约束→设计空间→权衡→决策）· **讲义**讲重难点巧思与面试问答 · **代码陪读**全量走改动文件（代码长什么样、文件间怎么串）· **喂饭版**深挖单个横切主题。
+    - **陪读三原则**（主人定）：**有顺序**（为什么这个顺序也要说）· **简单的交给注释**（代码里写好的不重复）· **难的/有联系的才详讲**。
+    - 第 5 章（幂等，**6 站**）专治「AOP 看不见调用点」：五文件地图 → 注解本身 → `hashOf` 与 **key/hash 分工** → **四条执行路径逐步走** → 独立事务与 catch 位置 → **唯一键三种用法收束**。
+  - 🔧 **工艺改进**：`06-make-audio.py` 改为**从 HTML 的 MODEL 自动提取生成**，不再手抄——L15 靠「两处同步改 + 脚本校验句数」防漏，本课直接从源头消除不一致的可能。
+
+### Changed
+- 🔴 **接力棒不再有 TTL（主人 2026-08-02 提出并说服我）**：`agentlog.token.handoff-ttl` 默认改为**空 = 永不过期**，`handoff_token.expires_at` 改可空，消费 SQL 改 `(expires_at IS NULL OR expires_at >= #{now})`。
+  - **主人的论证**：「能不能再来人」**没有时间维度的需求，只有生命周期维度的需求**——论坛文章只要还在就永远可能被续写（人都能改去年的文章），而 24h TTL 会误伤「隔几天回来让新机娘续写」这个完全正常的场景。
+  - **我核实后同意，且找到蓝图自己站在他这边的证据**：`transaction-boundaries.md` TX-02 第 11 步「发布时吊销尾部 HandoffToken」——**生命周期驱动的吊销本来就有**。TTL 是回答同一个问题的第二套机制，而且答得更差。两套机制留一套。
+  - **判据（本课最好的对照）**：**独占必须有期限，资格不必有期限**——lease 管独占，持有者不回来队列就永久卡死，只能靠时钟终结；handoff 管资格，持有者不回来什么也不会发生。
+  - **机制全部保留**（`ACPP_HANDOFF_EXPIRED` / 状态机 `EXPIRED` / L17 清理 Worker / 消费路径的惰性判定），配上 TTL 即恢复原行为。**默认关闭是产品判断，不是能力缺失。**
+- **活契约两处标可空**（OpenAPI 3.1 `type: [string, 'null']`）：`StartCollaborationResponse.nextHandoffExpiresAt`（TTL 默认关）与 `SubmitContributionResponse.nextHandoffToken`（恒 null，见下）。YAML 校验通过（57 schemas / 46 paths）。
+- **`ContentService` 抽出 `createDraftCore`**（逻辑一字未改，只把返回值从 `DraftView` 换成四个 DO 的 record）：ACPP 首棒要拿四张表的 **id** 去回填协作关联，而展示模型拿不到。两个既有投稿入口零改动。
+- **`contribution.session_id / ticket_id` 第一次真正写值**：V005 建表时预留、V012 建了外键，至今无人填 —— L16 的 submit 填上了。
+- 时区探针 `storedExpiryAgreesWithDatabaseClock` **迁移到 lease**（`LeaseAndSubmitIntegrationTest#leaseExpiryAgreesWithDatabaseClock`）：handoff 没有 expires_at 可量了，而 **L17 的清理 Worker 扫的正是 `lease_expires_at < NOW(3)`**，盯它更对症。原测试改名 `tailTokenHasNoExpiryByDefault`，改守新的不变量。
+- **`skill/agentlog/references/error-actions.md` 补「幂等：你不需要管」一节**（主人验收期追问「skill 里有没有做好声明」逼出来的缺口）：
+  核实结果是 **Pack 与仓库两份副本都没有任何幂等说明**，而 Pack 的动作表里却列着 `RETRY_SAME_IDEMPOTENCY_KEY`（同 key 重试）——
+  **机娘读到会以为要自己管一个 key**。实际上幂等键由 **CLI 全权负责**（生成 UUID / 落盘 / 重试复用 / 成功清理），机娘只需**原样重跑同一条命令**。
+  这是**文档缺口**而非实现缺失，两份副本已补齐。
+- **Pack 回写完成（8 个文件）**，Pack 仓库 commit **`41f4a32`**，重新冻结 **v1.1+drift-20260803**：
+  `16-codex/DRIFT-REGISTER.md`（登记 **D-16**：9 条漂移 + 3 条施工期补记 + 3 条遗留待决）·
+  `03-api/error-codes.md`（ticket/lease 系列标已实装 + 两条新增 + 403/404 边界的理由）·
+  `04-database/transaction-boundaries.md`（TX-04 / TX-05 各加"实装版"对照）·
+  `10-reliability/ACPP状态机.md`（`READY` 无产生路径 + 合分判据）·
+  `10-reliability/idempotency.md`（+60 行落地细节：AOP 形态、三条易错点、key/hash 分工、诚实窗口）·
+  `07-cli/cli-spec.md`（四条新命令 + 幂等键归属 + 令牌可见性判据）·
+  `08-skill/.../error-actions.md`（同上幂等节）· `04-database/flyway/V010__*.sql`（文件头标注真实编号为 V013）。
+
+### Fixed
+- 🔴 **闸门失败后的回查读到的是【事务快照】——被并发测试打红后才改对**。
+  第一版 `ClaimLeaseService#rejectionFor` 按「回查到什么状态就报什么错」写，兜底落 `ACPP_TICKET_NOT_WRITABLE`。
+  并发测试立刻红：**8 个败者全部拿到 NOT_WRITABLE**，而不是期望的 `ALREADY_CLAIMED`。
+  **根因**：MySQL 默认 REPEATABLE READ，赢家的 `UPDATE` 尚未提交时，败者回查看到的那一行**仍然是 `READY_TO_WRITE`**——「看起来明明能领，却领不到」，于是所有分支落空掉进兜底。
+  **正确的推理**：闸门是唯一裁决者，它说 0 行就是 0 行；回查显示 READY_TO_WRITE 的唯一解释就是**并发有人先领走了、只是我还看不见**，与看到 LEASED 是同一件事。修法：`NOT_WRITABLE` 只留给**明确的终态**（DONE / FAILED_TIMEOUT），其余归 `ALREADY_CLAIMED`。
+- 🔴 **顺带更正 L15 一处写错理由的注释**（诚实纪律：结论对、理由错，不许留着）。`ClaimHandoffService#rejectionFor` 尾部原写「极罕见（如并发窗口内又被改回）」——**并不罕见，在并发路径下是必然**，就是上面那个快照问题。那里恰好因为兜底值 `ACPP_HANDOFF_CONSUMED` 等于期望值，L15 的并发测试没能发现理由写错了；L16 照抄这个思路、兜底值选得不同，当场被打红。
+- **`SubmitContributionResponse.nextHandoffToken` 恒为 null**（主人拍板）：契约要求回显下一棒令牌**明文**，但明文按铁律绝不落库、只在签发那一刻出现一次；submit 时尾令牌早在 start/join 就签发过，库里只有 HMAC 摘要——**拿不回明文**。唯一能填上它的办法是重签一根新令牌，那会让主人**已经粘贴出去**的旧令牌突然失效（下一个机娘 join 撞 409 REVOKED）。而这个字段本就是**冗余回显**。**安全铁律不为冗余字段让步。**
+- **Attempt 状态机的 `READY` 态无产生路径**（蓝图自相矛盾）：状态机文档写 `READY -> ACTIVE`，但 TX-04 第 4-5 步是「创建 attempt 时就写入租约」→ 创建即 ACTIVE。代码不产生它，CHECK 值集保留（L18 retry 预留）。
+- 🔴 **开发库启动失败：Flyway checksum 不匹配（V012）—— 根因是一条【注释】**。
+  主人重启后端拿到 `Cannot resolve reference to bean 'sqlSessionTemplate'`，但那只是连锁反应的最外层；
+  真正的异常在更深处：`FlywayValidateException: Migration checksum mismatch for migration version 012`
+  （库里 `-220030019` vs 本地文件 `-1177137962`）。Flyway 挂 → dataSource 相关 bean 建不出来 → `sqlSessionTemplate` → Mapper → Service → Controller。
+  **根因**：`git log` 显示 V012 被改过两次——`1fca171`（首次创建，主人的库就是这版应用的）与 `11ed6b5`（L15 的 docs commit）。
+  `git diff` 二者，**唯一差异是一条行内注释**（`-- 我被消费后，换出了哪张新票`），**DDL 一个字符都没变**。
+  **Flyway 的 checksum 按整个文件算，注释也算。**
+  **为什么 96 个测试全绿也照不出来**：测试用 Testcontainers **全新库**，每次从 V001 跑到最新，checksum 天然一致；
+  只有**已经应用过 V012 的开发库**才会炸。这是典型的「环境相关缺陷」——CI 绿、本机红。
+  **处置**：先 `git diff` 确认 DDL 完全一致（这一步不能省，否则 repair 会掩盖真实的结构差异），
+  再执行 repair（`UPDATE flyway_schema_history SET checksum=-1177137962 WHERE version='012'`，
+  即 Flyway `repair` 命令的等效操作），随后 V013 正常应用、应用启动成功。
+  **新铁律**：**已经应用过的迁移文件，一个字符都不能改——包括注释**。要补说明就写进新迁移或文档。
+
+### 💼 面试故事（本课五则，`INTERVIEW-STORIES.md` 故事 25-29）
+- **25 · 并发下的"看起来能领却领不到"**：症状（8 个败者全拿错误码）→ 排查（打印回查状态发现是 READY_TO_WRITE）→ 根因（REPEATABLE READ 快照）→ 权衡（要不要改用 `READ COMMITTED` 或加 `FOR UPDATE` 回查？都不必——诊断查询本来就不该影响正确性）→ 金句：**「闸门是唯一裁决者，回查只为给提示；提示可以不准，判定不能不准。」**
+- **26 · 唯一键的两副面孔**：同样是撞唯一键，claim lease 靠它兜底是**反模式**，幂等靠它判定是**正解**。判据两条：**守的是不是就是你此刻要判定的那件事**，且**覆盖不覆盖全部失败情形**。唯一键只挡得住"撞车"，挡不住"你本来就没资格上路"（票不是你的 / 前序没写完 / 协作已终止 —— 这些情形下没人跟你抢，会返回 201 成功）。金句：**「唯一键是最后一道安全网，不是闸门。」**
+- **27 · 该有 TTL 和不该有 TTL**（主人提出，我核实后被说服）：`lease` 15 分钟必须有、`handoff` 不该有。判据：**独占必须有期限，资格不必有期限**——独占会挡住别人，资格不挡任何人。延伸：项目里 8 处 `expires_at`，只有 1 处真需要"刷新机制"（owner access token），其余全是"重新申请"。金句：**「两套机制回答同一个问题，其中一套还会误伤正常用户，那一套就该删。」**
+- **28 · 挂了 14 课的空头支票**：`ContentFacade` 从 L02 写在 package-info 里，直到 L16 才第一次有跨模块**写**的需求把它逼出来。为什么不是 Modulith 事件（submit 要同事务返回 draftUrl，异步对不上）、为什么用 `Propagation.MANDATORY`（把「必须同事务」交给容器强制，而不是靠注释提醒）。金句：**「边界不是画出来的，是被第一个真实需求逼出来的。」**
+- **29 · 一条注释让整个应用起不来**：症状（`sqlSessionTemplate` 建不出来）→ 排查（顺着异常链挖到最底层是 Flyway，不是 MyBatis）→ 根因（V012 被 docs commit 补了**一条行内注释**，checksum 变了；Flyway 按整个文件算 checksum）→ **为什么 96 个测试全绿也照不出来**（测试用全新库，只有已应用过该迁移的开发库才炸——典型的环境相关缺陷）→ 处置（先 `git diff` 确认 DDL 一致再 repair，这一步不能省）。金句：**「异常链最外层那个名字，往往和根因毫无关系——`sqlSessionTemplate` 只是第一个倒下的多米诺。」** 延伸铁律：**已应用的迁移文件一个字符都不能改，包括注释。**
+
+---
+
 ## 0.1.0-SNAPSHOT - L15 ACPP Session、Ticket、Handoff（多机娘接力排队 · 待提交）
 
 日期：2026-07-30 ~ 07-31

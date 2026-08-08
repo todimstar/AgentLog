@@ -1,0 +1,1084 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>L16 代码陪读 · 导游版</title>
+<style>
+:root{--bg:#1e1f22;--panel:#2b2d30;--panel2:#232528;--line:#3c3f43;--txt:#dfe1e5;--dim:#9aa0a6;
+  --acc:#7f6fff;--acc2:#4fc3f7;--ok:#57c597;--warn:#e0a14c;--bad:#e06c75;--hl:#3a3f52;--cm:#7a8290}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--txt);
+  font:14px/1.75 "Segoe UI","PingFang SC","Microsoft YaHei",system-ui,sans-serif}
+a{color:var(--acc2)}
+header{padding:14px 20px;background:var(--panel);border-bottom:1px solid var(--line);
+  display:flex;align-items:center;gap:16px;flex-wrap:wrap;position:sticky;top:0;z-index:20}
+header b{font-size:16px}
+.badge{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:2px 10px;font-size:12px;color:var(--dim)}
+.intro{padding:16px 20px;background:var(--panel2);border-bottom:1px solid var(--line);font-size:13px}
+.intro .r{color:var(--warn)}
+main{display:grid;grid-template-columns:270px 1fr;min-height:calc(100vh - 120px)}
+nav{background:var(--panel2);border-right:1px solid var(--line);padding:12px 0;overflow-y:auto;
+  max-height:calc(100vh - 60px);position:sticky;top:60px}
+nav .chap{padding:10px 14px 4px;font-size:11px;color:var(--acc);letter-spacing:.5px;font-weight:700}
+nav a.stop{display:block;padding:6px 14px 6px 20px;font-size:12.5px;color:var(--dim);
+  text-decoration:none;border-left:3px solid transparent;cursor:pointer}
+nav a.stop:hover{background:#2f3236;color:var(--txt)}
+nav a.stop.on{background:#33364a;color:#fff;border-left-color:var(--acc)}
+nav a.stop .tag{font-size:10px;padding:1px 5px;border-radius:6px;margin-left:4px}
+.tag.n{background:#2c4a3c;color:var(--ok)}
+.tag.m{background:#4a412c;color:var(--warn)}
+.tag.k{background:#4a2c3c;color:var(--bad)}
+section.stop{display:none;padding:20px 26px 60px}
+section.stop.on{display:block}
+h2{margin:0 0 4px;font-size:19px}
+.path{font-family:Consolas,monospace;font-size:12px;color:var(--dim);margin-bottom:14px;word-break:break-all}
+.why{background:#252a35;border-left:3px solid var(--acc2);padding:10px 14px;margin:12px 0;border-radius:0 6px 6px 0}
+.okb{background:#22322b;border-left:3px solid var(--ok);padding:10px 14px;margin:12px 0;border-radius:0 6px 6px 0}
+.warnb{background:#332c22;border-left:3px solid var(--warn);padding:10px 14px;margin:12px 0;border-radius:0 6px 6px 0}
+.badb{background:#33242a;border-left:3px solid var(--bad);padding:10px 14px;margin:12px 0;border-radius:0 6px 6px 0}
+pre.code{background:#1b1c1f;border:1px solid var(--line);border-radius:8px;padding:12px 0;
+  overflow-x:auto;font-family:"JetBrains Mono",Consolas,monospace;font-size:12.5px;line-height:1.75;margin:12px 0}
+pre.code .row{display:flex;padding:0 12px}
+pre.code .row.hl{background:var(--hl)}
+pre.code .no{color:#5b6068;min-width:44px;text-align:right;padding-right:14px;user-select:none;flex:none}
+pre.code .src{white-space:pre;flex:1}
+.cm{color:var(--cm)}.kw{color:#c678dd}.st{color:#98c379}.nu{color:#d19a66}.fn{color:#61afef}
+table{border-collapse:collapse;width:100%;margin:12px 0;font-size:13px}
+th,td{border:1px solid var(--line);padding:7px 10px;text-align:left;vertical-align:top}
+th{background:var(--panel2);color:var(--acc2)}
+code{background:#2a2c30;padding:1px 5px;border-radius:4px;font-family:Consolas,monospace;font-size:12.5px}
+.nav-btm{display:flex;justify-content:space-between;gap:12px;margin-top:26px;padding-top:16px;border-top:1px solid var(--line)}
+button{background:var(--panel);color:var(--txt);border:1px solid var(--line);border-radius:8px;
+  padding:8px 16px;cursor:pointer;font-size:13px}
+button:hover{background:#34373b}
+button:disabled{opacity:.35;cursor:not-allowed}
+.chip{display:inline-block;background:var(--panel2);border:1px solid var(--line);border-radius:8px;
+  padding:2px 8px;font-size:11.5px;color:var(--dim);margin-right:6px}
+.flow{font-family:Consolas,monospace;font-size:12.5px;line-height:1.9;white-space:pre;
+  background:#1b1c1f;border:1px solid var(--line);border-radius:8px;padding:12px 14px;margin:12px 0;overflow-x:auto}
+.k2{color:var(--acc2)}.g2{color:var(--ok)}.r2{color:var(--bad)}.y2{color:var(--warn)}.d2{color:var(--dim)}
+</style>
+</head>
+<body>
+<header>
+  <b>🧭 L16 代码陪读 · 导游版</b>
+  <span class="badge">Wait、Attempt 与 Lease</span>
+  <span class="badge" id="cnt">—</span>
+  <span class="badge">左侧按顺序走，或直接跳到想看的文件</span>
+</header>
+
+<div class="intro">
+  <b>这份产物解决什么问题</b>：视频讲<b>大体设计</b>，讲义讲<b>重难点巧思</b>，
+  但「本课到底改了哪些文件、每个文件的代码长什么样、它们之间怎么串起来」——这是<b>陪读</b>的活。
+  <br>
+  <b>怎么用</b>：按左侧顺序一站一站走。每站告诉你<span class="r">① 这个文件是干什么的 ② 代码里哪几行值得停下来 ③ 它和别的文件怎么呼应</span>。
+  简单的地方我只说"看这里的注释"（代码里早写好了，不重复）；难的、有巧思的、跨文件的，我详讲。
+  <br>
+  <span class="chip">🆕 新增</span><span class="chip">🔧 修改</span><span class="chip">★ 难点/巧思</span>
+  行号都是<b>真实行号</b>，可以直接在 IDE 里跳过去对照。
+</div>
+
+<main>
+  <nav id="nav"></nav>
+  <div id="stage"></div>
+</main>
+
+<script>
+/* ═══════════════ 陪读站点数据 ═══════════════ */
+const STOPS=[];
+STOPS.push({chap:'0 · 出发前',nav:'阅读顺序为什么这样排',title:'0 · 出发前：阅读顺序为什么这样排',
+ path:'—',
+ body:`<div class="why"><b>读别人写的代码，顺序比内容更重要。</b>
+ 顺着数据流走，每一层都能用上一层的结论；反过来（从 Controller 往下扒）会一路遇到看不懂的名字。</div>
+ <div class="flow"><span class="d2">① 数据层</span>   表长什么样 · 有哪些状态          <span class="d2">← 先认识"东西"</span>
+   ↓
+<span class="d2">② 闸门 SQL</span>  两条最关键的 UPDATE                <span class="d2">← 本课的技术核心</span>
+   ↓
+<span class="d2">③ Service</span>   业务编排：什么顺序调那些 SQL         <span class="d2">← 顺序就是设计</span>
+   ↓
+<span class="d2">④ 跨模块写</span> ContentFacade：怎么写别人模块的表    <span class="d2">← 架构边界</span>
+   ↓
+<span class="d2">⑤ 横切</span>     幂等 5 个文件（<span class="y2">你说读不懂的那块</span>）      <span class="d2">← 独立于业务</span>
+   ↓
+<span class="d2">⑥ 接口层</span>   Controller + 4 个 DTO               <span class="d2">← 到这里已经全懂了</span>
+   ↓
+<span class="d2">⑦ CLI</span>      机娘实际敲的命令
+   ↓
+<span class="d2">⑧ 测试</span>     谁在守着这些设计
+   ↓
+<span class="d2">⑨ 配置契约</span> 零散但重要的 5 处</div>
+ <table><tr><th>约定</th><th>含义</th></tr>
+ <tr><td>只说"看注释"</td><td>代码里已经写清楚了，我不重复——<b>那些注释就是给你看的</b></td></tr>
+ <tr><td>★ 标记</td><td>难点 / 巧思 / 跨文件呼应，我会详讲</td></tr>
+ <tr><td>高亮行</td><td>这一站真正要看的几行，其余是上下文</td></tr></table>`,
+ after:`<div class="okb"><b>提示</b>：键盘 ← → 可以翻站。左侧导航随时跳。</div>`});
+
+STOPS.push({chap:'1 · 数据层',nav:'V013 建表',tag:['n','新增'],
+ title:'1.1 · V013：两张新表 + 填两个坑',
+ path:'backend/src/main/resources/db/migration/V013__create_attempt_and_idempotency.sql',
+ body:`<div class="why"><b>为什么从这里开始</b>：后面所有代码都在操作这两张表。
+ 不先认识表，读 Service 时会一直在猜"这个字段是什么"。</div>
+ <b>这个文件干四件事</b>：① 建 <code>contribution_attempt</code> ② 建 <code>idempotency_record</code>
+ ③ 补 L15 留的两个约束 ④ 把 <code>handoff_token.expires_at</code> 改可空（TTL 关闭）。
+ <p>★ <b>高亮的两段是重点</b>：中间五列是"内嵌的租约"，下面两个唯一键<b>各守一件事</b>。</p>`,
+ from:33,hl:[[43,53],[66,69]],lang:'sql',
+ code:
+`CREATE TABLE contribution_attempt (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  ticket_id BIGINT NOT NULL,                       -- 哪个席位
+  attempt_no INT NOT NULL,                         -- 这张票的第几次尝试（1 起）
+  status VARCHAR(32) NOT NULL,
+
+  -- ↓↓↓ 内嵌的租约（合表判据见文件头）↓↓↓
+  lease_token_digest BINARY(32) NULL,              -- HMAC-SHA256(pepper, 明文)
+  lease_issued_at DATETIME(3) NULL,                -- 几点领的
+  lease_expires_at DATETIME(3) NULL,               -- ★ 几点到期 —— 本课最重要的一列
+  last_heartbeat_at DATETIME(3) NULL,              -- 心跳（本课建列不用，L17 续租用）
+  max_lease_expires_at DATETIME(3) NULL,           -- 续租上限（本课建列不用，L18 用）
+
+  error_report_id BIGINT NULL,                     -- 建列不建外键（error_report 是 L17 建的）
+  started_at DATETIME(3) NULL,
+  finished_at DATETIME(3) NULL,
+  created_at DATETIME(3) NOT NULL,
+  updated_at DATETIME(3) NOT NULL,
+
+  UNIQUE KEY uk_attempt_ticket_no (ticket_id, attempt_no),
+  UNIQUE KEY uk_attempt_lease_digest (lease_token_digest),
+  KEY idx_attempt_expiry (status, lease_expires_at),
+  CONSTRAINT fk_attempt_ticket FOREIGN KEY (ticket_id) REFERENCES contribution_ticket(id)
+);`,
+ after:`<table><tr><th>唯一键</th><th>守什么</th><th>定位</th></tr>
+ <tr><td><code>uk_attempt_ticket_no</code></td><td>一张票的第 N 次尝试只能有一条</td><td><b>最后的安全网</b>，正常路径永不触发</td></tr>
+ <tr><td><code>uk_attempt_lease_digest</code></td><td>租约令牌不重复</td><td>同时是 submit 的<b>点查键</b></td></tr></table>
+ <div class="warnb">★ <b>这两个唯一键的区别，是理解本课的钥匙</b>。
+ 第一个是"兜底用的"（靠它判定 = 反模式），第二个是"查找用的"。
+ 到第 5 章你会看到<b>第三种用法</b>：幂等的唯一键是"判定器"，靠它判定恰恰是正解。</div>
+ <div class="okb"><b>文件头有 40 行注释</b>讲了「为什么这一课会冒出租约」「合与分的判据」——
+ 那部分我不重复，<b>直接看文件开头</b>。</div>`});
+
+STOPS.push({chap:'1 · 数据层',nav:'幂等台账表',tag:['n','新增'],
+ title:'1.2 · idempotency_record：幂等台账',
+ path:'backend/src/main/resources/db/migration/V013__create_attempt_and_idempotency.sql（第 90 行起）',
+ body:`<div class="why">一张<b>流水账</b>：记「这个 key 我处理过没有、处理成什么样了」。
+ 重复请求来了查账即可，不必重新执行业务。</div>
+ <p>★ 高亮那一行是<b>整个幂等的判定器</b>——第 5 章会反复回来看它。</p>`,
+ from:90,hl:[[106,106]],lang:'sql',
+ code:
+`CREATE TABLE idempotency_record (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  owner_user_id BIGINT NOT NULL,                   -- 幂等域按主人隔离（多租户铁律）
+  agent_id BIGINT NOT NULL,                        -- 再按机娘隔离
+  endpoint VARCHAR(128) NOT NULL,                  -- ★ 存【路由模板】不是实际 URI
+  idempotency_key VARCHAR(128) NOT NULL,           -- 客户端生成的随机串
+  request_hash CHAR(64) NOT NULL,                  -- SHA-256(路径参数 + 请求体)
+  status VARCHAR(32) NOT NULL,                     -- IN_PROGRESS / COMPLETED
+  response_status INT NULL,                        -- 完成时缓存的 HTTP 状态码
+  response_body_json JSON NULL,                    -- 完成时缓存的响应体，重放时原样返回
+  expires_at DATETIME(3) NOT NULL,                 -- 24h，纯清理用（L17），不参与判定
+  created_at DATETIME(3) NOT NULL,
+  updated_at DATETIME(3) NOT NULL,
+
+  UNIQUE KEY uk_idempotency (owner_user_id, agent_id, endpoint, idempotency_key),
+  KEY idx_idempotency_cleanup (expires_at),
+  CONSTRAINT fk_idempotency_owner FOREIGN KEY (owner_user_id) REFERENCES user_account(id),
+  CONSTRAINT fk_idempotency_agent FOREIGN KEY (agent_id) REFERENCES agent_account(id)
+);`,
+ after:`<div class="why"><b>先建立一个直觉</b>：这张表<b>不属于任何业务模块</b>。
+ 它是<b>全局共享的基础设施</b>——任何模块的任何端点想要幂等，都用它。
+ 所以对应的 Java 代码放在 <code>shared/idempotency/</code>（跨模块公共层），
+ 而不是 collaboration 或 content 里面。</div>
+ <table><tr><th>列</th><th>谁产生</th><th>表达什么</th></tr>
+ <tr><td><code>idempotency_key</code></td><td><b>客户端</b></td><td>「我认为这两次请求是<b>同一笔</b>业务」</td></tr>
+ <tr><td><code>request_hash</code></td><td><b>服务端</b>（从请求参数算）</td><td>「这两次请求的<b>内容</b>到底一不一样」</td></tr></table>
+ <div class="okb">★ <b>key 是【声明】，hash 是【验证】。</b>
+ 客户端声明"这是同一笔"，服务端不轻信，去算 hash 核对。
+ <br>两者<b>必须配合</b>：只有 key 会被客户端 bug 骗；只有 hash 会把"真的要提交两段相同内容"误判成重放。</div>`});
+
+STOPS.push({chap:'1 · 数据层',nav:'两个状态字典',tag:['n','新增'],
+ title:'1.3 · AttemptStatus + ContributionAttemptDO',
+ path:'collaboration/domain/AttemptStatus.java · collaboration/infrastructure/persistence/dataobject/ContributionAttemptDO.java',
+ body:`<div class="why">这两个文件<b>没有逻辑</b>，只是把表的形状搬进 Java。
+ <b>纯样板的部分你扫一眼就行</b>——但每个文件里有<b>一处</b>值得停下来。</div>
+ <b>① AttemptStatus.java</b> — 状态字典（6 个值）。停在 <code>READY</code> 上：
+ <div class="badb">★ <code>READY</code> 这个值 <b>代码永远不会产生</b>。
+ 状态机文档写着 <code>READY → ACTIVE</code>，但 TX-04 的步骤是「创建 attempt 时<b>就</b>写入租约」——
+ 创建即 ACTIVE，没有任何路径能产生 READY。<b>这是蓝图内部的自相矛盾</b>，已登记 DRIFT D-16。
+ <br>保留它（含 CHECK 值集）是给 L18 retry 预留。</div>
+ <b>② ContributionAttemptDO.java</b> — 表的一行。停在"缺了什么"上：`,
+ from:22,hl:[[26,26]],lang:'java',
+ code:
+`/**
+ * ⚠️ 本 DO 【没有】 @Version，也不该用 updateById 改 status：
+ *   状态推进只走 ContributionAttemptMapper.xml 里的条件 UPDATE（闸门），
+ *   那条 SQL 自己在 WHERE 里做判定。留个 setter 让人 updateById，
+ *   就等于给「查-判-改」三步走开后门。
+ */
+@TableName("contribution_attempt")
+public class ContributionAttemptDO {`,
+ after:`<div class="okb">★ <b>这是一个"用类型表达约束"的例子</b>：
+ 我<b>故意不给</b>这个 DO 加 <code>@Version</code> 注解。
+ 因为一旦加了，别人就会以为"可以用 <code>updateById</code> 改状态"——
+ 而那正是本课要避免的三步走（查 → 判 → 改，中间有竞态窗口）。
+ <br><b>把"只能这么改"写进类型，比写在注释里可靠。</b>
+ <br>同款思路：L15 的 <code>HandoffTokenDO</code> 也没有 <code>@Version</code>；
+ 前端的 <code>MarkdownContent.vue</code> 组件不给调用方 HTML 字符串。</div>
+ <div class="why"><b>其余全是 getter/setter</b>，跳过。DO 类就该是这么无聊的。</div>`});
+
+STOPS.push({chap:'2 · 闸门 SQL',nav:'★ 领租约的闸门',tag:['k','难点'],
+ title:'2.1 ★ 领租约的闸门：一条 UPDATE 顶三个判断',
+ path:'backend/src/main/resources/mapper/collaboration/ContributionTicketMapper.xml',
+ body:`<div class="why"><b>本课两条最重要的 SQL，这是第一条。</b>
+ 它同时回答三个问题<b>并且落定结果</b>——中间没有任何缝隙让别人插进来。</div>
+ <p>先看 SQL，再看它为什么必须是"一条"：</p>`,
+ from:52,hl:[[52,63]],lang:'xml',
+ code:
+`<update id="claimForLease">
+    UPDATE contribution_ticket
+    SET status     = 'LEASED',
+        updated_at = #{now},
+        version    = version + 1
+    WHERE ticket_code       = #{ticketCode}       <!-- 是这张票吗 -->
+      AND status            = 'READY_TO_WRITE'    <!-- 轮到它了吗 -->
+      AND required_agent_id = #{agentId}          <!-- 是你这个机娘的席位吗 -->
+</update>`,
+ after:`<div class="flow"><span class="g2">MySQL 执行这一条语句时做的事：</span>
+  按 ticket_code 找到那一行
+    → <span class="y2">立刻加排他锁 X</span>
+    → 求值 WHERE 里的 status 和 required_agent_id
+    → 成立就改、不成立就跳过
+    → <span class="y2">语句结束才放锁</span>
+  <span class="d2">从"检查"到"修改"全程持锁，另一个线程连读这行的最新版本都得排队。</span>
+
+<span class="r2">对比「SELECT 查 → if 判 → UPDATE 改」三步走：</span>
+  SELECT 一结束就放锁 → <span class="r2">if 与 UPDATE 之间那个空窗</span> 就是竞态的窝
+  <span class="d2">两个线程会双双"通过检查"，然后双双执行。（这叫 TOCTOU）</span></div>
+ <div class="okb"><b><code>affectedRows</code> 就是裁决书</b>：1 = 领到了；0 = 没领到。
+ <br>不需要任何额外的锁、不需要 Redis、不需要重试循环。<b>数据库的一条语句天生就是原子单位</b>，我们只是用上了它。</div>
+ <div class="warnb">★ <b><code>required_agent_id</code> 为什么也写进 WHERE</b>：
+ 这一列建票之后就不会变，理论上没有竞态。但写进去是为了保持
+ 「<b>判定权 100% 在这条 UPDATE 手里</b>」的范式纯度——
+ <br>不留"有些条件在 Java 判、有些在 SQL 判"的混合状态，读代码的人就不用每次都想"这个判断安全吗"。</div>
+ <div class="why"><b>文件里另外三条 UPDATE</b>（<code>linkActiveAttempt</code> / <code>markDone</code> /
+ <code>wakeSuccessor</code>）都有详细注释，扫一眼就懂。
+ 唯一要留意的是 <code>wakeSuccessor</code>——下一站单独讲它。</div>`});
+
+STOPS.push({chap:'2 · 闸门 SQL',nav:'★ 唤醒后继',tag:['k','巧思'],
+ title:'2.2 ★ wakeSuccessor：接力真正"接上"的那一刻',
+ path:'backend/src/main/resources/mapper/collaboration/ContributionTicketMapper.xml（第 96 行）',
+ body:`<div class="why">这条 SQL 是整个 ACPP 里<b>最有画面感</b>的一句。
+ 第二个机娘在 L15 的 join 那一刻就拿到了票，然后一直卡在 <code>WAITING_PREDECESSOR</code>——
+ <b>没有任何人主动通知它</b>。是前一棒的 submit 顺手把它放行的。</div>`,
+ from:96,hl:[[96,103]],lang:'xml',
+ code:
+`<update id="wakeSuccessor">
+    UPDATE contribution_ticket
+    SET status     = 'READY_TO_WRITE',
+        updated_at = #{now},
+        version    = version + 1
+    WHERE predecessor_ticket_id = #{predecessorTicketId}
+      AND status                = 'WAITING_PREDECESSOR'
+</update>`,
+ after:`<div class="flow">机娘B 的 CLI 在跑 <span class="k2">collab wait</span>，每 5 秒问一次：
+  第 1 轮  → WAITING_PREDECESSOR   <span class="d2">（前面还在写）</span>
+  第 2 轮  → WAITING_PREDECESSOR
+  <span class="y2">…… 此刻机娘A 提交了，这条 UPDATE 执行 ……</span>
+  第 3 轮  → <span class="g2">READY_TO_WRITE</span>  <span class="d2">→ CLI 打印「轮到你了」并退出</span></div>
+ <div class="warnb">★ <b><code>status</code> 为什么也写进 WHERE</b>（这里藏着一条不变量）：
+ <br>如果写成无条件更新（只按 <code>predecessor_ticket_id</code>），会把
+ <code>BLOCKED_BY_PREDECESSOR</code> 状态的票<b>也顺手唤醒</b>。
+ <br>而那个状态的含义是「前序失败了，这一棒被冻结，<b>要等主人 retry</b>」（L17/L18）。
+ <br><b>无条件更新会静默破坏这条不变量</b>——没有报错，只是某天出现了一张"本该冻结却在写"的票。</div>
+ <div class="okb"><b>跨文件呼应</b>：
+ <br>• <code>predecessor_ticket_id</code> 是 <b>L15</b> 建的因果链外键（顺序不靠时间戳靠它）；
+ <br>• 这条 SQL 由 <code>SubmitContributionService</code> 第 ⑦ 步调用（第 3 章）；
+ <br>• CLI 的 <code>wait</code> 命令等的就是这一刻（第 7 章）；
+ <br>• 测试 <code>successorBecomesWritableAfterPredecessorSubmits</code> 守它（第 8 章）。
+ <br><b>一条 SQL 串起四个文件</b>——这就是为什么陪读要讲"联系"。</div>`});
+
+STOPS.push({chap:'2 · 闸门 SQL',nav:'★ 提交的闸门',tag:['k','难点'],
+ title:'2.3 ★ 提交的闸门：过期判定为什么能不靠 Worker',
+ path:'backend/src/main/resources/mapper/collaboration/ContributionAttemptMapper.xml',
+ body:`<div class="why"><b>本课第二条关键 SQL。</b>形状与 2.1 一样（条件 UPDATE + affectedRows 裁决），
+ 但第三个条件 <code>lease_expires_at >= #{now}</code> 是<b>整节课安全性的支点</b>。</div>`,
+ from:58,hl:[[58,70]],lang:'xml',
+ code:
+`<update id="consumeActiveLease">
+    UPDATE contribution_attempt
+    SET status      = 'SUCCEEDED',
+        finished_at = #{now},
+        updated_at  = #{now}
+    WHERE lease_token_digest = #{leaseTokenDigest}   <!-- 按摘要定位（明文从不落库）-->
+      AND status             = 'ACTIVE'              <!-- 天然防重放 -->
+      AND lease_expires_at  >= #{now}                <!-- ★ 时效惰性判定 -->
+</update>`,
+ after:`<table><tr><th>条件</th><th>守什么</th></tr>
+ <tr><td><code>lease_token_digest = ?</code></td><td>你手上那张租约令牌，算出摘要来点查（走唯一键，很快）</td></tr>
+ <tr><td><code>status = 'ACTIVE'</code></td><td>只有"正在写"的尝试能提交。<b>已 SUCCEEDED 的抢不到 → 这就是天然的防重放</b></td></tr>
+ <tr><td><code>lease_expires_at >= now</code></td><td>★ 租约还没过期</td></tr></table>
+ <div class="badb">★ <b>本课的 forbidden 明写「不写超时 Worker」。</b>
+ 那么一个 15 分钟前领的、<b>早就过期</b>的租约，它在数据库里的 <code>status</code>
+ <b>仍然是 ACTIVE</b>——没有任何后台任务去改它。
+ <br><br>但因为过期判定写在这条 WHERE 里做<b>惰性执行</b>，它<b>一定提交不进来</b>。</div>
+ <div class="okb">★★ <b>状态不准 ≠ 行为不对。</b>
+ <br>正确性<b>完全不依赖</b>后台任务是否及时。L17 的 Worker 只负责把状态刷成
+ <code>FAILED_TIMEOUT</code>，好让主人在时间线页上看得懂——<b>它不是安全防线</b>。
+ <br>这是本课能在"不写任何 Worker"的约束下依然安全的<b>全部原因</b>。</div>
+ <div class="warnb">⚠️ <b>用 <code>#{now}</code> 不用 <code>NOW(3)</code></b> —— 这是 L15 血的教训（40 行注释在文件里）：
+ <code>lease_expires_at</code> 是 <b>Java 写的</b>，<code>NOW(3)</code> 是<b>数据库读的</b>，
+ 两边时区口径由 JDBC 参数决定，实测差 <b>8 小时</b>。
+ <br>用 <code>#{now}</code> 后写入与比较走<b>同一条驱动转换路径</b>，偏移自动抵消。
+ <br>★ <b>原子性完全不受影响</b>——它来自"单条 UPDATE 持行锁"，与用谁的时钟无关。</div>`});
+
+STOPS.push({chap:'2 · 闸门 SQL',nav:'两个 Mapper 接口',tag:['m','改+新'],
+ title:'2.4 · 两个 Mapper 接口：Java 侧的门面',
+ path:'collaboration/infrastructure/persistence/mapper/ContributionTicketMapper.java（🔧）· ContributionAttemptMapper.java（🆕）',
+ body:`<div class="why">MyBatis 的规矩：<b>接口的方法名</b> 对应 <b>XML 里的 <code>id</code></b>，
+ Spring 启动时把两边接起来，生成实现类。所以这两个文件里<b>一行实现都没有</b>。</div>
+ <p><b>那为什么值得看？</b>因为 javadoc 全写在这里——<b>XML 讲"SQL 怎么写"，接口讲"为什么这么写"</b>。</p>`,
+ from:19,hl:[[43,46]],lang:'java',
+ code:
+`    /** 按对外标识（CT-xxxx）查。是 L16 三个端点的入口查询。 */
+    ContributionTicketDO selectByCode(@Param("ticketCode") String ticketCode);
+
+    /**
+     * ★ claim lease 的闸门：把「这一棒能不能领」与「标记成已领」合成一条 UPDATE。
+     * ★ 为什么闸门必须排在「建 attempt」之前（L15 踩过的坑的同构版）：
+     *   ……（详见文件内注释）
+     * @return 影响行数（0 或 1）
+     */
+    int claimForLease(@Param("ticketCode") String ticketCode,
+                      @Param("agentId") Long agentId,
+                      @Param("now") Instant now);`,
+ after:`<div class="okb"><b>返回 <code>int</code> 而不是 <code>void</code></b> —— 这个签名本身就是设计：
+ <br>它在说「<b>调用方必须检查我的返回值</b>」。若返回 void，调用方无从知道自己抢到没抢到。
+ <br><code>affectedRows</code> 从 SQL 一路传到 Service，就是靠这个 <code>int</code>。</div>
+ <div class="why"><b>另外看 <code>ContributionAttemptMapper.selectMaxAttemptNo</code> 的注释</b>——
+ 它解释了一个你可能会疑惑的地方：那里用了「先查最大值、再 +1」，看起来又是"查了再写"，为什么安全？
+ <br>答案是：<b>调用它的时候票已经被闸门锁成 LEASED</b>，没有第二个线程能走到那一步。
+ <br>★ <b>判据不是"用没用 SELECT"，而是"SELECT 到 INSERT 之间，别人还能不能插进来"。</b></div>`});
+
+STOPS.push({chap:'3 · Service',nav:'查状态（最简单的）',tag:['n','新增'],
+ title:'3.1 · TicketStatusService：先看最简单的一个',
+ path:'collaboration/application/TicketStatusService.java（68 行）',
+ body:`<div class="why"><b>三个 Service 里最短的，先用它熟悉套路。</b>
+ 一个 Service 的结构永远是：注入 Mapper → 一个 <code>@Transactional</code> 方法 → 取数据 → 校验 → 返回视图。</div>
+ <p>整个方法只有 12 行，但<b>有两处判断值得停</b>：</p>`,
+ from:44,hl:[[52,58],[60,62]],lang:'java',
+ code:
+`    @Transactional(readOnly = true)
+    public TicketStatusView get(AgentIdentity principal, String ticketCode) {
+        ContributionTicketDO ticket = ticketMapper.selectByCode(ticketCode);
+        if (ticket == null) {
+            throw new ApiException(ApiStatus.ACPP_TICKET_NOT_FOUND);
+        }
+        // 多租户行级授权：席位本身没有 owner 列，归属挂在会话上，所以要回查一次会话。
+        // 跨主人一律 404（不是 403）—— 403 等于承认"它存在、只是不给你"，会泄漏资源存在性。
+        CollaborationSessionDO session = sessionMapper.selectById(ticket.getSessionId());
+        if (session == null || !Objects.equals(session.getOwnerUserId(), principal.ownerUserId())) {
+            throw new ApiException(ApiStatus.ACPP_TICKET_NOT_FOUND);
+        }
+        // ★ 注意这里【不校验 requiredAgentId】：同一个主人名下的机娘可以互相看见对方的席位状态。
+        //   「谁能写」由 claim lease 的闸门把关，「谁能看」按租户划 —— 两件事，别混。
+        return TicketStatusView.from(ticket);
+    }`,
+ after:`<div class="warnb">★ <b>第一处：跨主人为什么返 404 而不是 403</b>
+ <br>403 的含义是「它存在，但不给你」——<b>这句话本身就泄漏了信息</b>：
+ 攻击者可以用它枚举「哪些票号是真实存在的」。404 让存在与不存在<b>无法区分</b>。</div>
+ <div class="okb">★ <b>第二处（更微妙）：这里故意不检查"是不是你的席位"</b>
+ <br>为什么？因为 <b>CLI 的 <code>wait</code> 命令依赖它</b>：
+ 机娘B 要靠轮询得知「前一棒（<b>别的机娘</b>的）写完没有」。
+ <br>如果这里按机娘过滤，B 查自己的票倒是能查，但整个"等待"语义就变味了。
+ <br><br><b>泄漏边界按【租户】划，不按【机娘】划</b>——同一个主人派出去的机娘，本就该互相可见。
+ <br>「谁能<b>看</b>」和「谁能<b>写</b>」是两件事：看按租户，写由闸门（<code>required_agent_id</code>）把关。</div>
+ <div class="why"><b>顺手认识 <code>ApiException</code> + <code>ApiStatus</code> 这套错误机制</b>（L05 建的）：
+ 抛 <code>ApiException(某个枚举)</code>，全局异常处理器会把它转成 RFC 9457 的
+ <code>application/problem+json</code>，带 <code>code</code> 字段。
+ <br>所以 Service 里<b>不写 HTTP 状态码</b>，只抛语义化的枚举——码在 <code>ApiStatus</code> 里定（第 9 章）。</div>`});
+
+STOPS.push({chap:'3 · Service',nav:'★ 领租约（顺序即设计）',tag:['k','难点'],
+ title:'3.2 ★ ClaimLeaseService：五步的顺序就是全部难点',
+ path:'collaboration/application/ClaimLeaseService.java（199 行 · 方法在 76 行）',
+ body:`<div class="why"><b>这个文件的注释比代码长</b>，因为难点不在"写什么"，在"<b>按什么顺序写</b>"。
+ <br>先看五步骨架，再逐步看代码。</div>
+ <div class="flow"><span class="d2">①</span> 查票 + 查会话        <span class="d2">只取上下文、做 404 授权，</span><span class="r2">不做任何状态判定</span>
+<span class="d2">②</span> <span class="y2">★闸门★</span>              <span class="d2">唯一的裁决者，</span><span class="r2">必须排在建 Attempt 之前</span>
+<span class="d2">③</span> 建 Attempt + 签租约   <span class="g2">到这里已独占，零竞争</span>
+<span class="d2">④</span> 回填 active_attempt_id <span class="d2">按主键更新，无竞争</span>
+<span class="d2">⑤</span> 首棒: session <span class="k2">OPEN → RUNNING</span></div>`,
+ from:88,hl:[[90,97]],lang:'java',
+ code:
+`        // ② ★ 闸门：一条带条件的 UPDATE 完成 check + act。affectedRows 就是裁决书。
+        int affected = ticketMapper.claimForLease(ticketCode, principal.agentAccountId(), now);
+        if (affected == 0) {
+            // 没领到。此时才回查判定【为什么】——先原子改、改不动才问原因，顺序反了就又是三步走。
+            throw rejectionFor(ticketCode, principal);
+        }
+        // ——— 走到这里，这一棒已经独占归我。下面所有步骤没有任何竞争者。———
+
+        // ③ 建 Attempt + 签发租约。
+        Integer maxAttemptNo = attemptMapper.selectMaxAttemptNo(ticket.getId());
+        String rawLeaseToken = tokenService.generateRawToken("lease_");
+        Instant leaseExpiresAt = now.plus(tokenProperties.getAttemptLeaseTtl());`,
+ after:`<div class="why"><b>先回答一个你一定会有的疑问</b>：
+ 第 ① 步不也是 <code>SELECT</code> 吗？那不就又变成「查-判-改」三步走了？
+ <br><br><b>不会</b>，区别在<b>判定权归谁</b>：
+ <br>• 三步走的错在于「拿 SELECT 的结果<b>做判定</b>，然后 UPDATE <b>假设那个判定仍然成立</b>」；
+ <br>• 这里的 SELECT <b>只是取数据</b>（这票属于哪个会话、会话是谁的），判定 100% 由 ② 完成。
+ <br><br>即使 ① 到 ② 之间票被别人领走，② 一定返回 0，我们照样失败。<b>判定权始终在那条 UPDATE 手里。</b></div>
+ <div class="badb">★ <b>为什么闸门必须在建 Attempt 之前</b>（反面写法会怎样）：
+ <div class="flow"><span class="d2">线程A:</span> 查票=READY_TO_WRITE ✓      <span class="d2">线程B:</span> 查票=READY_TO_WRITE ✓
+<span class="d2">线程A:</span> INSERT attempt(no=1) ✓
+                                <span class="d2">线程B:</span> INSERT attempt(no=1)
+                                       <span class="r2">💥 撞 uk_attempt_ticket_no</span>
+                                       <span class="r2">→ 事务回滚 → HTTP 500</span></div>
+ 败者拿到的是 <b>500</b>，一句能读懂的话都没有；而它<b>应该</b>拿到 <b>409 +「请查询席位状态」</b>。</div>
+ <div class="warnb">★ <b>更要命的是覆盖面</b>——唯一键只挡得住"两个人抢同一张票"：
+ <table><tr><th>为什么领不到</th><th>直接建 attempt 会怎样</th></tr>
+ <tr><td>被别人抢先了</td><td>✅ 撞唯一键 → 能挡</td></tr>
+ <tr><td>票根本不是你的</td><td>🔴 没人跟你抢 → <b>建成功 → 返回 201</b></td></tr>
+ <tr><td>前序还没写完</td><td>🔴 <b>建成功 → 201</b></td></tr>
+ <tr><td>协作已终止/被冻结</td><td>🔴 <b>建成功 → 201</b></td></tr></table>
+ <b>唯一键是最后一道安全网，不是闸门。</b></div>`});
+
+STOPS.push({chap:'3 · Service',nav:'★ 被测试打红的那段',tag:['k','故事'],
+ title:'3.3 ★ rejectionFor：我被并发测试打红的地方',
+ path:'collaboration/application/ClaimLeaseService.java（175 行）',
+ body:`<div class="why">闸门返回 0 之后，要把"你没领到"翻译成<b>具体的错误码</b>，好让客户端知道下一步该干什么。
+ <br>这段代码<b>第一版是错的</b>，被并发测试当场打红。值得完整讲一遍。</div>
+ <b>症状</b>：8 个线程抢同一张票，1 个赢家正常，但 <b>8 个败者全部拿到 <code>ACPP_TICKET_NOT_WRITABLE</code></b>，
+ 而期望是 <code>ACPP_LEASE_ALREADY_CLAIMED</code>。`,
+ from:190,hl:[[195,199]],lang:'java',
+ code:
+`        String status = current.getStatus();
+        if (TicketStatus.WAITING_PREDECESSOR.getCode().equals(status)) {
+            return new ApiException(ApiStatus.ACPP_TICKET_WAITING);          // 409 → 轮询
+        }
+        if (TicketStatus.BLOCKED_BY_PREDECESSOR.getCode().equals(status)) {
+            return new ApiException(ApiStatus.ACPP_TICKET_BLOCKED);          // 409 → 报告主人
+        }
+        if (TicketStatus.DONE.getCode().equals(status)
+                || TicketStatus.FAILED_TIMEOUT.getCode().equals(status)) {
+            return new ApiException(ApiStatus.ACPP_TICKET_NOT_WRITABLE);     // 409 → 明确的终态
+        }
+        // LEASED（看得见的抢占）与 READY_TO_WRITE（并发快照尚未刷新的抢占）是同一件事。
+        return new ApiException(ApiStatus.ACPP_LEASE_ALREADY_CLAIMED);       // 409 → 查席位状态`,
+ after:`<div class="badb">★ <b>根因：这次回查读到的是【事务快照】。</b>
+ <br>MySQL 默认隔离级别 REPEATABLE READ——一个事务里的所有读，看到的是<b>事务开始那一刻</b>的一致性快照。
+ <br>赢家的 UPDATE <b>尚未提交</b>时，败者回查看到的那一行<b>仍然是 <code>READY_TO_WRITE</code></b>。
+ <br><br><b>「看起来明明能领，却领不到」</b> → 我写的所有 if 分支全部落空 → 掉进兜底。</div>
+ <div class="okb">★ <b>正确的推理</b>：
+ <br>闸门是<b>唯一的裁决者</b>，它说 0 行就是 0 行。回查显示 <code>READY_TO_WRITE</code> 的唯一解释就是
+ <b>并发有人先领走了、只是我还看不见</b>——这与看到 <code>LEASED</code> 是<b>同一件事</b>。
+ <br><br>所以修法是：<code>NOT_WRITABLE</code> 只留给<b>明确的终态</b>（DONE / FAILED_TIMEOUT），其余归 <code>ALREADY_CLAIMED</code>。
+ <br><b>金句</b>：闸门是唯一裁决者，回查只为给提示；<b>提示可以不准，判定不能不准</b>。</div>
+ <div class="warnb">★ <b>它还顺带揪出了 L15 的一处错误注释</b>（跨文件呼应，去 <code>ClaimHandoffService</code> 尾部看）：
+ <br>那里原写「极罕见（如并发窗口内又被改回）」——<b>并不罕见，在并发下是必然</b>，就是同一个快照问题。
+ <br>那里恰好因为兜底值 <code>ACPP_HANDOFF_CONSUMED</code> <b>等于期望值</b>，L15 的并发测试没能发现理由写错了。
+ <br><b>结论对、理由错。</b>这类更正必须当面说、写进 CHANGELOG，不许悄悄改掉。</div>`});
+
+STOPS.push({chap:'3 · Service',nav:'★ 提交（八步）',tag:['k','难点'],
+ title:'3.4 ★ SubmitContributionService：八步串起全课',
+ path:'collaboration/application/SubmitContributionService.java（186 行 · 方法在 75 行）',
+ body:`<div class="why"><b>本课的终点</b>。这个方法把前面所有零件串起来：闸门、跨模块写、唤醒后继、推进会话。</div>
+ <div class="flow"><span class="d2">①</span> <span class="d2">（幂等由切面处理，这里【看不见】它 —— 第 5 章讲）</span>
+<span class="d2">②</span> <span class="y2">★闸门★</span> 消费租约         <span class="r2">排在写内容【之前】</span>
+<span class="d2">③</span> 取上下文 + 三重身份校验   <span class="d2">票 / 机娘 / 主人</span>
+<span class="d2">④</span> <span class="k2">contentFacade.appendAgentContribution(...)</span>  <span class="g2">跨模块写，同一事务</span>
+<span class="d2">⑤</span> 首棒回填 session.post_id / draft_id
+<span class="d2">⑥</span> 席位 → <span class="g2">DONE</span>
+<span class="d2">⑦</span> <span class="y2">★唤醒直接后继★</span>          <span class="d2">WAITING_PREDECESSOR → READY_TO_WRITE</span>
+<span class="d2">⑧</span> 会话 → AWAITING_CONTINUATION，推进 last_completed_sequence</div>`,
+ from:78,hl:[[80,86]],lang:'java',
+ code:
+`        Instant now = Instant.now(clock);
+        byte[] leaseDigest = tokenService.digest(leaseToken);
+
+        // ② ★ 闸门：租约还有效吗 + 标记完成，一条 UPDATE 做完。affectedRows 就是裁决书。
+        int affected = attemptMapper.consumeActiveLease(leaseDigest, now);
+        if (affected == 0) {
+            throw leaseRejection(leaseDigest, now);
+        }
+        // ——— 走到这里，这次提交独占归我。———`,
+ after:`<div class="why"><b>为什么闸门排在写内容之前</b>：
+ 先确定"这次提交归我"，后面每一步才没有竞争者。
+ <br>若反过来（先写 content 再改 attempt），两个重放的请求会<b>双双写出正文</b>，
+ 最后才在 <code>uk_contribution_ticket</code> 上撞车——<b>又是拿唯一键当闸门</b>。</div>
+ <div class="okb">★ <b>那闸门先行会不会"标了成功却没写成"？</b>
+ <br><b>不会</b>：闸门与写内容<b>在同一个事务里</b>（方法上的 <code>@Transactional</code>）。
+ <br>content 写失败 → 整个事务回滚 → attempt <b>退回 ACTIVE</b>，租约还在机娘手里，可以原样重试。
+ <br>这也是下一章 <code>ContentFacade</code> 用 <code>Propagation.MANDATORY</code> 的原因。</div>
+ <div class="warnb"><b>③ 的三重校验，每一条都在防不同的事</b>（去代码里看那三个 if）：
+ <table><tr><th>校验</th><th>防什么</th><th>错误码</th></tr>
+ <tr><td>路径里的票 == 租约指向的票</td><td>客户端把两次协作的参数混用</td><td>403 LEASE_INVALID</td></tr>
+ <tr><td>票的 requiredAgent == 当前机娘</td><td>拿着别人的租约来提交</td><td>403 WRONG_AGENT</td></tr>
+ <tr><td>会话属于当前主人</td><td>跨租户</td><td>404 NOT_FOUND</td></tr></table></div>
+ <div class="okb"><b>⑧ 为什么状态一律落 <code>AWAITING_CONTINUATION</code></b>（而不是判断"还有没有人在写"）：
+ <br>因为因果链是<b>串行</b>的——后序票必须等前序 DONE 才能领租约。
+ <br>所以 submit 完成的那一刻，<b>必然没有任何一棒正在写</b>。等下一棒 claim lease 时再回到 RUNNING。</div>`});
+
+STOPS.push({chap:'4 · 跨模块写',nav:'★ ContentFacade（挂了14课）',tag:['k','架构'],
+ title:'4.1 ★ ContentFacade：挂了 14 课的设计，今天落地',
+ path:'backend/src/main/java/com/agentlog/content/ContentFacade.java',
+ body:`<div class="why"><b>这个文件的位置本身就是设计。</b>
+ 注意它在 <code>com.agentlog.content</code> —— <b>模块根包</b>，不在任何子包里。</div>
+ <div class="flow"><span class="k2">com.agentlog.content</span>
+├── <span class="g2">ContentFacade.java</span>          <span class="y2">← 根包 = Spring Modulith 认定的【公开 API】</span>
+├── application/ContentService.java   <span class="d2">← 私有子包，别的模块 import 不了</span>
+└── infrastructure/…                  <span class="d2">← 私有子包</span></div>
+ <b>Spring Modulith 的规矩</b>：模块<b>根包</b>里的类是公开的，<b>子包</b>是私有的。
+ <code>ModularityTest</code> 用 ArchUnit 静态分析字节码强制这条规则——违规就测试红。`,
+ from:44,hl:[[45,49]],lang:'java',
+ code:
+`public interface ContentFacade {
+
+    /**
+     * 追加一段机娘贡献。首棒（cmd.draftId() == null）建 post+contribution+draft+block；
+     * 后续棒只 append contribution+block。
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    AppendResult appendAgentContribution(AppendCommand cmd);
+
+    /** 入参。刻意不含任何表现层概念（没有 draftUrl —— 那是调用方拼的）。 */
+    record AppendCommand(Long draftId, Long sessionId, Long ticketId,
+                         Long agentAccountId, Long ownerUserId,
+                         String sourceTool, String clientRunId,
+                         String title, Long channelId, String summary, String content) { }
+
+    /** 出参。四张表的 id，够调用方回填协作关联。 */
+    record AppendResult(Long postId, Long draftId, Long contributionId, Long draftBlockId) { }
+}`,
+ after:`<div class="okb">★ <b>为什么要有这个接口，不能让 collaboration 直接调 ContentService</b>
+ <br>① <code>ContentService</code> 在<b>私有子包</b>里，collaboration 压根 import 不到（编译期就断了）；
+ <br>② content 内部随便重构，只要接口不变，collaboration <b>一行都不用改</b>；
+ <br>③ 最重要：<b>接口的方法签名，就是 collaboration 能对 content 做的事的【完整清单】</b>——
+ 想知道两个模块之间有什么关系，读这一个文件就够了。</div>
+ <div class="warnb">★ <b><code>Propagation.MANDATORY</code>：本课最容易被忽略的一行</b>
+ <br>意思是「<b>我必须是别人事务的一部分，没有事务我就不干</b>」。
+ <table><tr><th>传播行为</th><th>调用方<b>有</b>事务</th><th>调用方<b>没</b>事务</th></tr>
+ <tr><td><code>REQUIRED</code>（默认）</td><td>加入它</td><td>自己新建一个</td></tr>
+ <tr><td><code>REQUIRES_NEW</code></td><td><b>挂起它</b>，自己独立开一个</td><td>新建一个</td></tr>
+ <tr><td><b><code>MANDATORY</code></b></td><td>加入它</td><td>🔴 <b>抛异常</b></td></tr></table>
+ <b>如果用默认的 <code>REQUIRED</code>，而将来某个新调用方忘了加 <code>@Transactional</code>：</b>
+ <div class="flow">新调用方（<span class="r2">没有事务</span>）
+  ├─ appendAgentContribution(…)  <span class="d2">REQUIRED 发现没事务 → 自己建一个</span>
+  │     写 post/contribution/draft/block → <span class="y2">事务提交 ✅ 内容已落库，撤不回来了</span>
+  ├─ ticketMapper.markDone(…)    <span class="d2">没事务 → 自动提交</span>
+  └─ <span class="r2">💥 这里抛异常</span>
+<span class="r2">结果：内容【已经写进草稿】，席位状态却是错的 —— 半截数据，没有任何东西能回滚它</span></div>
+ 换成 <code>MANDATORY</code>：<b>第一行就抛 <code>IllegalTransactionStateException</code></b>，什么都没写。
+ <br>★ <b>宁可开发期当场炸，也不要生产里留下没人能修的半截数据。</b></div>
+ <div class="why"><b>跨文件呼应</b>：第 5 章的 <code>IdempotencyStore</code> 用的是
+ <code>REQUIRES_NEW</code>——<b>正好相反的需求</b>（幂等台账<b>不能</b>被业务回滚带走）。
+ <br>同一个机制的两个极端用法，对着看一遍就记住了。</div>`});
+
+STOPS.push({chap:'4 · 跨模块写',nav:'ContentService 怎么改的',tag:['m','修改'],
+ title:'4.2 · ContentService：改动小得出乎意料',
+ path:'content/application/ContentService.java（🔧 修改）',
+ body:`<div class="why"><b>动别人模块的代码，第一原则是「让既有入口零改动」。</b>
+ 这个文件本来服务两个入口（主人投稿 L06、机娘投稿 L14），本课加第三个（协作提交）——
+ <b>前两个的行为必须一个字节都不变</b>。</div>
+ <b>做法：抽一层内核，逻辑一字未改，只换返回值。</b>`,
+ from:106,hl:[[112,116]],lang:'java',
+ code:
+`    /**
+     * 建草稿公共内核：建 Post 指针 + Contribution(不可变原始) + Draft 头 + DraftBlock。
+     *
+     * ★ L16 抽出 createDraftCore：ACPP 首棒需要四张表的【id】来回填协作关联，
+     *   而 DraftView 是展示模型、拿不到 id。所以内核改为返回四个 DO，
+     *   两个既有入口各自转成 DraftView —— 调用方一行都不用改。
+     */
+    @Transactional
+    protected DraftCore createDraftCore(DraftAuthor author, String title, Long channelId,
+                                        String content, String summary,
+                                        boolean declaredExternalAiContent,
+                                        Long sessionId, Long ticketId) {
+        // ...（原 createDraftInternal 的逻辑，一字未改）
+    }`,
+ after:`<div class="okb"><b>三个入口现在的关系</b>（这就是"内核 + 薄壳"的经典形状）：
+ <div class="flow"><span class="d2">主人投稿(L06)</span>  createOwnerDraft  ──┐
+<span class="d2">机娘投稿(L14)</span>  createAgentDraft  ──┼──→ <span class="g2">createDraftCore()</span> ──→ 四张表
+<span class="d2">协作提交(L16)</span>  appendAgentContribution ┘   <span class="d2">（首棒走这里，后续棒只 append）</span></div></div>
+ <div class="why">★ <b>顺手填了一个跨三课的坑</b>：<code>contribution.session_id</code> / <code>ticket_id</code> 两列——
+ <table><tr><th>课</th><th>做了什么</th></tr>
+ <tr><td>L06</td><td>V005 建表时<b>预留</b>这两列，注释写「ACPP 用」，当时目标表还不存在故无外键</td></tr>
+ <tr><td>L15</td><td>V012 补上<b>外键</b>，但注释明写「本课没有任何代码往这两列写值」</td></tr>
+ <tr><td><b>L16</b></td><td>✅ <b>第一次真正写入值</b></td></tr></table>
+ 于是 <code>contribution</code> 同时是<b>内容的不可变原始层</b>和<b>协作的溯源锚点</b>——
+ 「这段正文是哪一次协作、第几棒写的」，从此可查。</div>
+ <div class="warnb"><b>append 分支里的 <code>display_order</code></b>：查当前最大值 +1。
+ <br>又是"查了再写"，安全吗？<b>安全</b>——理由同 2.4：调用点已过 submit 的闸门，
+ 且因果链<b>串行</b>，同一篇草稿不可能有两棒同时提交。
+ <br>★ 再念一遍判据：<b>不是"用没用 SELECT"，而是"SELECT 到 INSERT 之间，别人还能不能插进来"。</b></div>`});
+
+STOPS.push({chap:'5 · 幂等（重点）',nav:'★ 五个文件的地图',tag:['k','必读'],
+ title:'5.1 ★ 先看地图：五个文件各是什么、调用点在哪',
+ path:'backend/src/main/java/com/agentlog/shared/idempotency/',
+ body:`<div class="badb"><b>你说「AOP 让我看不到在哪里被使用」——这个困惑是对的，不是你的问题。</b>
+ AOP 的全部代价就在这里：<b>调用点是隐式的</b>。这一章专门解决它。</div>
+ <b>第一件事：五个文件的分工</b>
+ <div class="flow"><span class="k2">shared/idempotency/</span>
+├── <span class="g2">Idempotent.java</span>              <span class="d2">【标记】一个注解，没有逻辑。贴在哪个方法上，哪个方法就有幂等</span>
+├── <span class="y2">IdempotencyAspect.java</span>       <span class="d2">【大脑】唯一有流程编排的类 ★ 本章主角</span>
+├── IdempotencyStore.java        <span class="d2">【手】只管读写台账，三个方法：抢占 / 完成 / 放弃</span>
+├── IdempotencyRecordDO.java     <span class="d2">【数据】对应 idempotency_record 表的一行</span>
+└── IdempotencyRecordMapper.java <span class="d2">【SQL】MyBatis 接口，零代码（继承 BaseMapper）</span>
+
+<span class="g2">调用关系只有一条线，不分叉：</span>
+  <span class="y2">Aspect</span> ──调用──→ Store ──调用──→ Mapper ──→ 数据库</div>
+ <b>第二件事：调用点在哪</b>`,
+ from:130,hl:[[131,131]],lang:'java',
+ code:
+`    @PostMapping("/contribution-tickets/{ticketCode}/contributions")
+    @Idempotent                                        // ★★ 这就是调用点 ★★
+    @ResponseStatus(HttpStatus.CREATED)
+    public SubmitContributionResponse submitContribution(
+            @AuthenticationPrincipal AgentIdentity principal,
+            @PathVariable String ticketCode,
+            @RequestHeader(LEASE_TOKEN_HEADER) String leaseToken,
+            @Valid @RequestBody SubmitContributionRequest request) {
+        // ... 方法体里【没有一行】幂等代码
+    }`,
+ after:`<div class="okb">★ <b><code>@Idempotent</code> 这个注解本身就是调用点。</b>
+ <br>Spring 启动时扫描所有 Bean，发现方法上有它，就在这个 Bean <b>外面套一层动态代理</b>：
+ <div class="flow"><span class="d2">CLI 发来请求</span>
+      ↓
+<span class="d2">Spring MVC 找到 submitContribution 方法</span>
+      ↓
+<span class="y2">但它拿到的不是你写的那个对象，而是【代理对象】</span>
+      ↓
+  ┌─────────── 代理对象 ───────────┐
+  │  <span class="y2">IdempotencyAspect.around()</span>    │  <span class="d2">← 先跑切面</span>
+  │    ① 取 Idempotency-Key       │
+  │    ② 算 requestHash           │
+  │    ③ 抢占 INSERT 台账          │
+  │    ④ <span class="g2">pjp.proceed()</span> ─────────┼──→ <span class="g2">【这一句才真正调用你写的方法】</span>
+  │    ⑤ 回写台账 COMPLETED        │
+  └────────────────────────────────┘</div>
+ <b><code>pjp.proceed()</code> 就是那个"看不见的调用"</b>——它代表"原方法"。
+ 切面在它<b>前面</b>做的事 = 前置逻辑，<b>后面</b>做的事 = 后置逻辑。</div>
+ <div class="warnb">★ <b>你其实早就在用同一套机制了</b>：<code>@Transactional</code> 也是这么工作的！
+ <br>Spring 给带 <code>@Transactional</code> 的类套一层代理，方法调用前 <code>beginTransaction()</code>，
+ 正常返回后 <code>commit()</code>，抛异常时 <code>rollback()</code>。
+ <br><b>你之前觉得"事务是魔法"，其实就是这一层代理。</b>
+ <br><br>顺带解一个经典坑：<b>为什么"自己调自己的 @Transactional 方法"不生效</b>？
+ 因为 <code>this.someMethod()</code> 是<b>对象内部</b>的调用，<b>不经过代理</b>——代理在对象外面。</div>`});
+
+STOPS.push({chap:'5 · 幂等（重点）',nav:'注解本身（最简单）',tag:['n','新增'],
+ title:'5.2 · Idempotent.java：一个纯标记',
+ path:'shared/idempotency/Idempotent.java（逻辑 0 行）',
+ body:`<div class="why">这个文件<b>没有任何逻辑</b>——注解就是一张标签，全部意义在于"贴了 / 没贴"。
+ <br>三行元注解值得认识，因为所有自定义注解都长这样。</div>`,
+ from:29,hl:[[30,30],[41,41]],lang:'java',
+ code:
+`@Target(ElementType.METHOD)          // 只能贴在方法上（贴类上会编译报错）
+@Retention(RetentionPolicy.RUNTIME)  // ★ 必须 RUNTIME —— 否则运行时读不到，切面找不着它
+@Documented
+public @interface Idempotent {
+
+    /**
+     * 是否强制要求携带 Idempotency-Key。
+     * 默认 false（宽松）：没带 key 就当普通请求直接放行，不拦。
+     */
+    boolean required() default false;
+}`,
+ after:`<div class="warnb">★ <b><code>RetentionPolicy.RUNTIME</code> 是必须的</b>（新手最容易踩的坑）：
+ <br>默认是 <code>CLASS</code>——注解<b>编译进 class 文件，但运行时读不到</b>。
+ <br>切面靠反射在运行时找注解，写成 CLASS 的话<b>切面永远不触发，而且不报错</b>。</div>
+ <div class="okb"><b><code>required = false</code>（宽松）是刻意的</b>：
+ <br>L15 的 CLI 已经在跑了，它<b>不带</b> Idempotency-Key。若默认严格，本课一上线那批客户端<b>全挂</b>。
+ <br>★ <b>加功能不该让既有调用方受伤</b>——这是加性变更（additive change）的基本要求。</div>
+ <div class="why"><b>为什么要显式注解，而不是"凡带 Idempotency-Key 头就自动生效"</b>：
+ <br>① 幂等要求端点是「可被重放且能返回同一结果」的，<b>不是所有端点都满足</b>；
+ <br>② AOP 最大的代价是"看不见的魔法"，<b>显式注解让"哪些端点有幂等语义"在代码里一眼可见</b>。</div>`});
+
+STOPS.push({chap:'5 · 幂等（重点）',nav:'★ key 与 hash 的分工',tag:['k','关键'],
+ title:'5.3 ★ hashOf()：你自己读懂的那段，补上缺的拼图',
+ path:'shared/idempotency/IdempotencyAspect.java（hashOf 在 152 行）',
+ body:`<div class="okb"><b>你已经读懂了这个函数做什么</b>（序列化参数 → SHA-256 → 十六进制）。
+ <br>你说"后半段又模糊了"——缺的那块拼图是：<b>key 和 hash 各自扮演什么角色</b>。</div>
+ <table><tr><th></th><th>Idempotency-Key</th><th>request_hash</th></tr>
+ <tr><td><b>谁产生</b></td><td><b>客户端</b>（CLI 生成 UUID）</td><td><b>服务端</b>（从方法参数算）</td></tr>
+ <tr><td><b>表达什么</b></td><td>「我<b>声明</b>这两次是同一笔业务」</td><td>「这两次请求的内容<b>实际上</b>一不一样」</td></tr>
+ <tr><td><b>单独用够吗</b></td><td>❌ 客户端可能有 bug / 说谎</td><td>❌ 内容相同也可能是<b>真的要提交两次</b></td></tr></table>
+ <div class="okb">★★ <b>key 是【声明】，hash 是【验证】。</b>
+ 客户端声明"这是同一笔"，<b>服务端不轻信</b>，去算 hash 核对。</div>`,
+ from:152,hl:[[155,157],[161,163]],lang:'java',
+ code:
+`    private String hashOf(Object[] args) {
+        List<Object> hashable = new ArrayList<>();
+        for (Object arg : args) {
+            if (arg instanceof AgentIdentity) {
+                continue;                    // 身份不进 hash —— 幂等域已按 (owner, agent) 隔离
+            }
+            hashable.add(arg);
+        }
+        try {
+            String json = objectMapper.writeValueAsString(hashable);
+            MessageDigest sha256 = MessageDigest.getInstance("SHA-256");
+            return HexFormat.of().formatHex(sha256.digest(json.getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 不可用", e);
+        }
+    }`,
+ after:`<div class="why">★ <b>为什么用「方法参数」而不是「原始请求体」</b>（你之前问的点，现在有代码了）：
+ <br>看 <code>submitContribution</code> 的参数表：<code>principal</code>、<code>ticketCode</code>（<b>路径参数</b>）、
+ <code>leaseToken</code>（请求头）、<code>request</code>（<b>请求体</b>）。
+ <br>Spring 已经帮我们把<b>路径参数和请求体都绑定成对象</b>了——遍历 <code>args</code>，两者<b>天然一起进 hash</b>。
+ <br>如果只 hash 原始请求体，<code>ticketCode</code> 就<b>漏掉了</b>。</div>
+ <div class="badb">★ <b>「幂等域」是什么（你说这里看不懂，这就讲清）</b>
+ <br>「幂等域」= <b>一个 key 的作用范围</b>。它由台账的唯一键定义：
+ <div class="flow">UNIQUE KEY uk_idempotency (<span class="k2">owner_user_id</span>, <span class="k2">agent_id</span>, <span class="k2">endpoint</span>, <span class="y2">idempotency_key</span>)
+                           <span class="d2">└──────── 前三个是"域" ────────┘</span>  <span class="d2">└── key ──┘</span></div>
+ 意思是：<b>同一个 key，只要 (主人, 机娘, 端点) 三者中任一不同，就算两笔不同的业务</b>。
+ <br>• 主人A 的 k1 和 主人B 的 k1 → <b>互不干扰</b>（这就是"按 owner 隔离"）
+ <br>• 同一主人的机娘甲的 k1 和机娘乙的 k1 → <b>互不干扰</b>
+ <br>• 同一机娘在 <code>leases</code> 端点的 k1 和在 <code>contributions</code> 端点的 k1 → <b>互不干扰</b>
+ <br><br>★ 所以 <code>hashOf</code> 里<b>跳过 <code>AgentIdentity</code></b>：owner/agent 已经在唯一键里了，再算进 hash 是<b>重复</b>。</div>
+ <div class="warnb">★ <b>现在你能看懂 <code>endpoint</code> 为什么存"路由模板"了</b>
+ <br>实际 URI 是 <code>/contribution-tickets/<b>CT-aaa</b>/contributions</code>，<b>含票号</b>。
+ <br>若存实际 URI，<b>票号就变成了"域"的一部分</b> → 同一个 key 用在两张票上会被当成<b>两笔不同业务</b>，
+ 客户端复用 key 的 bug 被<b>静默放行</b>。
+ <br>存<b>模板</b> + 票号<b>进 hash</b> → 域相同、hash 不同 → <b>409 当场报出来</b>。</div>`});
+
+STOPS.push({chap:'5 · 幂等（重点）',nav:'★ 四条路径各走一遍',tag:['k','核心'],
+ title:'5.4 ★ around()：四条路径各走一遍',
+ path:'shared/idempotency/IdempotencyAspect.java（around 在 70 行）',
+ body:`<div class="why"><b>这是全章的核心。</b>你自己写的那句理解（<code>@Around</code> + <code>around</code> 方法）是对的，
+ 现在把<b>四条实际路径</b>都走一遍——每一步台账表里发生了什么。</div>`,
+ from:88,hl:[[91,97],[103,109]],lang:'java',
+ code:
+`        String endpoint = routeTemplate(request);
+        String requestHash = hashOf(pjp.getArgs());
+
+        IdempotencyRecordDO acquired;
+        try {
+            acquired = store.begin(principal.ownerUserId(), principal.agentAccountId(),
+                    endpoint, key, requestHash);          // ★ 抢占式 INSERT
+        } catch (DuplicateKeyException conflict) {
+            // 有人先来了（可能是并发，也可能是同一个客户端重发）
+            return replayOrReject(
+                    store.find(principal.ownerUserId(), principal.agentAccountId(), endpoint, key),
+                    requestHash, pjp);
+        }
+
+        try {
+            Object result = pjp.proceed();                // ★ 执行业务
+            store.complete(acquired.getId(), responseStatusOf(pjp),
+                    objectMapper.writeValueAsString(result));
+            return result;
+        } catch (Throwable businessFailure) {
+            store.abandon(acquired.getId());              // 什么都没生效 → 台账不该留下
+            throw businessFailure;
+        }`,
+ after:`<div class="okb"><b>路径 ①：第一次请求（正常）</b>
+ <div class="flow"><span class="d2">CLI:</span> submit, key=<span class="y2">k1</span>, content="第一棒"
+  ↓
+<span class="g2">begin() 成功</span> → 台账新增一行： key=k1  hash=<span class="k2">H1</span>  status=<span class="y2">IN_PROGRESS</span>
+  ↓
+<span class="g2">pjp.proceed()</span> → 真正执行 submit → 正文写进草稿、席位落 DONE
+  ↓
+<span class="g2">complete()</span> → 那行变成： status=<span class="g2">COMPLETED</span>  response_body_json=<span class="k2">{…draftUrl…}</span>
+  ↓
+<span class="d2">返回 201 给 CLI</span></div></div>
+ <div class="okb"><b>路径 ②：网络超时重发（幂等真正发挥作用）</b>
+ <div class="flow"><span class="d2">CLI:</span> submit, key=<span class="y2">k1</span>（<span class="g2">从本地读出来复用的</span>）, content="第一棒"
+  ↓
+<span class="r2">begin() 撞 uk_idempotency</span> → 抛 DuplicateKeyException
+  ↓
+<span class="y2">catch</span> → find() 回查那行 → 比 hash：<span class="k2">H1 == H1</span> ✓ 且 status=COMPLETED
+  ↓
+<span class="g2">反序列化 response_body_json 直接 return</span>
+  ↓
+<span class="d2">返回 201，内容与上次【字节级一致】。★ 业务【一行都没执行】</span>
+<span class="d2">→ 草稿里仍然只有一段正文</span></div></div>
+ <div class="badb"><b>路径 ③：客户端 bug，同 key 换了内容</b>
+ <div class="flow"><span class="d2">CLI:</span> submit, key=<span class="y2">k1</span>, content="<span class="r2">换了的内容</span>"
+  ↓
+<span class="r2">begin() 撞键</span> → find() → 比 hash：<span class="r2">H1 ≠ H2</span>
+  ↓
+<span class="r2">409 IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_BODY</span>
+<span class="d2">→ 客户端当场知道自己把一个 key 用在了两件事上</span></div>
+ ★ <b>注意 <code>replayOrReject</code> 里的判断顺序：先比 hash，后看状态。</b>
+ 反过来的话，"同 key 不同内容"会被误报成"处理中"，客户端会去<b>无意义地重试</b>。</div>
+ <div class="warnb"><b>路径 ④：业务失败（比如租约已过期）</b>
+ <div class="flow"><span class="d2">CLI:</span> submit, key=<span class="y2">k1</span>
+  ↓
+begin() 成功 → 台账： status=IN_PROGRESS
+  ↓
+<span class="r2">pjp.proceed() 抛异常</span>（410 租约过期）
+  ↓
+<span class="y2">catch</span> → <span class="g2">abandon()</span> → <span class="g2">删掉台账那一行</span>
+  ↓
+<span class="d2">抛出原异常 → 客户端拿 410</span></div>
+ ★ <b>为什么失败要【删除】而不是标记 FAILED</b>：
+ 幂等保护的是「<b>已经生效的操作</b>不要重复生效」；业务失败意味着<b>什么都没生效</b>，
+ 此时应当允许<b>原样重试</b>。留一条 FAILED 记录只会让客户端拿着同一个 key <b>永远撞墙</b>。</div>`});
+
+STOPS.push({chap:'5 · 幂等（重点）',nav:'★ 两处非直觉设计',tag:['k','难点'],
+ title:'5.5 ★ 两处"为什么非得这样"：独立事务 + catch 的位置',
+ path:'shared/idempotency/IdempotencyStore.java',
+ body:`<div class="why">这一站讲两个<b>看代码看不出来、但写错就全盘失效</b>的设计。</div>
+ <b>第一处：三个方法全都是 <code>REQUIRES_NEW</code></b>`,
+ from:68,hl:[[68,68]],lang:'java',
+ code:
+`    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public IdempotencyRecordDO begin(Long ownerUserId, Long agentId, String endpoint,
+                                     String idempotencyKey, String requestHash) {
+        Instant now = Instant.now(clock);
+        IdempotencyRecordDO record = new IdempotencyRecordDO();
+        // ...（填字段）
+        record.setStatus(IdempotencyRecordDO.Status.IN_PROGRESS.getCode());
+        record.setExpiresAt(now.plus(RETENTION));
+        mapper.insert(record);
+        return record;
+    }`,
+ after:`<div class="badb">★ <b>如果偷懒和业务共用一个事务，会发生什么</b>：
+ <div class="flow"><span class="d2">请求A:</span> INSERT 台账(IN_PROGRESS) ──→ 执行业务（<span class="y2">假设 30 秒</span>）──→ UPDATE 台账(COMPLETED)
+<span class="d2">请求B(同 key，1 秒后到):</span> INSERT 台账 ──→ <span class="r2">???</span></div>
+ <b>共用事务</b>：A 的 INSERT <b>尚未提交</b> → B 的 INSERT 撞唯一键后<b>被行锁挂住，干等 30 秒</b>，
+ 最后可能拿到 <code>Lock wait timeout exceeded</code>；这期间 B 还<b>白占一条数据库连接</b>。
+ <br><b>独立事务</b>：A 的台账<b>立刻可见</b> → B 立刻查到 IN_PROGRESS → <b>立刻返回 409</b>「同 key 处理中」。</div>
+ <div class="okb">★★ <b>「处理中」这个状态必须对并发者【立刻可见】，幂等才成立。</b>
+ <br>藏在未提交的事务里，它<b>等于不存在</b>。</div>
+ <div class="warnb"><b>第二处：<code>catch</code> 为什么写在切面里，而不是 Store 里面</b>
+ <br><code>begin()</code> 撞唯一键抛异常时，<b>它所在的那个事务已被标记 <code>rollback-only</code></b>——
+ 在方法<b>内部</b> catch 之后再碰数据库<b>一律失败</b>（抛 <code>UnexpectedRollbackException</code>）。
+ <br>所以捕获必须发生在<b>事务边界之外</b>（切面里），让那个小事务先干净地回滚掉，我们再用<b>一个新事务</b>去 <code>find()</code>。
+ <br><br>★ 这条和 3.2 那个教训是<b>同一件事的两面</b>：撞唯一键之后事务就脏了——
+ 所以"靠唯一键兜底"的第二个麻烦是"想在 catch 里回查状态给个友好提示都做不到"。
+ <b>而幂等能做到，正是因为它的 INSERT 跑在独立的小事务里。</b></div>
+ <div class="why"><b>诚实登记的一个窗口</b>（<code>complete()</code> 的 javadoc 里也写了）：
+ <br>业务事务<b>已提交</b>、但 <code>complete()</code> <b>之前</b>进程崩溃 → 台账停在 IN_PROGRESS，
+ 客户端重试拿 409，可事情其实<b>已经做成了</b>。
+ <br>这是 at-most-once 的<b>固有窗口</b>，单机事务消不掉（要消除得上两阶段提交，代价远大于收益）。
+ <br>★ <b>客户端自愈路径</b>：查席位状态（3.1 那个端点），看到 <code>DONE</code> 就说明上次成功了。24h 后台账过期自愈。</div>`});
+
+STOPS.push({chap:'5 · 幂等（重点）',nav:'★ 唯一键的三种用法',tag:['k','收束'],
+ title:'5.6 ★ 收束：同一个"唯一键"，三种完全不同的用法',
+ path:'（本章总结 · 跨 V013 / ClaimLeaseService / IdempotencyStore 三处）',
+ body:`<div class="why">走到这里，本课出现过的唯一键已经有<b>三种</b>用法了。
+ 摆在一起，你就拿到了那条判据的完整形态。</div>
+ <table><tr><th>唯一键</th><th>怎么用</th><th>对不对</th></tr>
+ <tr><td><code>uk_attempt_lease_digest</code></td><td><b>查找键</b>：拿摘要点查那一行</td><td>✅ 天经地义（索引的本职）</td></tr>
+ <tr><td><code>uk_attempt_ticket_no</code></td><td>若靠"撞了它"判断"我输了"</td><td>🔴 <b>反模式</b></td></tr>
+ <tr><td><code>uk_idempotency</code></td><td>靠"撞了它"判断"有人先来了"</td><td>✅ <b>正解</b></td></tr></table>
+ <div class="okb">★★ <b>判据两条（缺一不可）</b>：
+ <br><b>① 那个唯一键守的不变量，是不是【就是】你此刻要判定的那件事？</b>
+ <br><b>② 它覆盖不覆盖【全部】失败情形？</b></div>`,
+ after:`<table><tr><th></th><th>claim lease 撞 <code>uk_attempt_ticket_no</code></th><th>幂等撞 <code>uk_idempotency</code></th></tr>
+ <tr><td>我此刻要判定</td><td><b>这张票能不能领</b>（状态+归属+时效）</td><td><b>这个 key 来过没有</b></td></tr>
+ <tr><td>唯一键守的是</td><td><b>第 N 次尝试唯一</b></td><td><b>这个 key 来过没有</b></td></tr>
+ <tr><td>① 同一件事吗</td><td>❌ 只是<b>碰巧相关</b>（是结果，不是原因）</td><td>✅ <b>就是同一件事</b></td></tr>
+ <tr><td>② 覆盖全部失败吗</td><td>❌ 只挡"撞车"，另外四种情形挡不住</td><td>✅ 没有第二种"来过"的方式，<b>100%</b></td></tr>
+ <tr><td>工程麻烦</td><td>❌ 异常不说撞的是哪个键；事务已脏，catch 里什么都干不了</td><td>✅ 跑在独立小事务，catch 后照样能查</td></tr></table>
+ <div class="okb">★ <b>更深的一层：两个闸门其实是同一个思想</b>
+ <div class="flow"><span class="g2">要改已有的行</span>  →  条件 UPDATE，  <span class="y2">affectedRows</span> 裁决    <span class="d2">（L15 消费令牌 / L16 领租约、提交）</span>
+<span class="g2">要建全新的行</span>  →  抢占 INSERT，  <span class="y2">唯一键冲突</span> 裁决    <span class="d2">（L16 幂等）</span></div>
+ <b>共同点：让数据库在【一条语句内】完成"检查 + 动作"，中间不留任何缝隙。</b>
+ <br>检查和动作一旦分成两步，就有 <b>TOCTOU</b> 窗口（Time Of Check to Time Of Use）。</div>
+ <div class="warnb"><b>回头看你自己写的那句理解</b>：
+ <code>@Around("@annotation(idempotent)")</code> + <code>public Object around</code>
+ <br>你读懂的是<b>机制</b>（切面怎么挂上去）。这一章补的是<b>为什么这样设计</b>：
+ key/hash 分工、幂等域、独立事务、catch 位置、四条路径、判断顺序。
+ <br>★ <b>机制 + 设计意图，两个都有了，这块就真的通了。</b></div>`});
+
+STOPS.push({chap:'6 · 接口层',nav:'Controller + 4 个 DTO',tag:['m','改+新'],
+ title:'6.1 · Controller 与四个 DTO：到这里已经没有难点了',
+ path:'collaboration/api/AgentCollaborationController.java（🔧）· api/dto/**（🆕 ×4）',
+ body:`<div class="why"><b>顺序排在这里是有意的</b>：Controller 是最<b>薄</b>的一层——
+ 校验、调 Service、拼响应，没有业务逻辑。前面五章看懂了，这层扫一眼就过。</div>
+ <b>三个新端点</b>（一行一个）：
+ <table><tr><th>端点</th><th>方法</th><th>幂等</th><th>额外要求</th></tr>
+ <tr><td><code>GET /contribution-tickets/{ticketCode}</code></td><td>查状态</td><td>—（读操作天然幂等）</td><td>—</td></tr>
+ <tr><td><code>POST .../{ticketCode}/leases</code></td><td>领租约</td><td>✅ <code>@Idempotent</code></td><td>—</td></tr>
+ <tr><td><code>POST .../{ticketCode}/contributions</code></td><td>提交</td><td>✅ <code>@Idempotent</code></td><td><code>X-Turn-Lease-Token</code> 头</td></tr></table>`,
+ from:143,hl:[[146,148]],lang:'java',
+ code:
+`        SubmitContributionResponse response = submitContributionService.submit(
+                principal, ticketCode, leaseToken, request);
+        // draftUrl 在这里拼 —— Facade 只管数据，URL 是表现层的事（同 L14 AgentDraftController）
+        return response.withDraftUrl(webBaseUrl + "/#/owner/drafts/" + response.draftId());`,
+ after:`<div class="okb">★ <b>一个小设计：<code>draftUrl</code> 为什么在 Controller 拼，不在 Service/Facade 里</b>
+ <br><code>webBaseUrl</code> 是<b>部署配置</b>（本机 <code>localhost:5173</code>、线上是域名）。
+ 让 Service 知道它，等于把<b>部署细节</b>渗进业务层。
+ <br>Facade 返回 <code>draftId</code>，Controller 拼 URL——<b>各层只知道自己该知道的</b>。
+ <br>（和 L14 的 <code>AgentDraftController</code> 完全同一套写法，可以对照看。）</div>
+ <div class="why"><b>四个 DTO 里只有两处值得停</b>：
+ <br>① <code>TicketStatusView</code> 的 <b><code>pollAfterSeconds</code></b>——服务端告诉客户端"隔多久再来问"。
+ <b>节奏由服务端掌握</b>，将来要调只改服务端，不必升级已经装在各处的 CLI。
+ <br>② <code>SubmitContributionResponse</code> 的 <b><code>nextHandoffToken</code> 恒为 <code>null</code></b>——
+ 这是 DRIFT D-16 第 2 条：契约声明了这个字段，但令牌明文<b>绝不落库</b>、只在签发那一刻出现一次，
+ submit 时<b>拿不回来</b>。字段留空 + 登记漂移，<b>安全铁律不为一个冗余回显字段让步</b>
+ （主人在 join 时已拿到过，CLI 也已存本地）。</div>`});
+
+STOPS.push({chap:'7 · CLI',nav:'四条命令 + 幂等键落盘',tag:['m','修改'],
+ title:'7.1 · CLI：机娘实际敲的四条命令',
+ path:'cli/src/main/java/com/agentlog/cli/CollabCommand.java（🔧）· ApiClient.java（🔧）· TicketStateStore.java（🔧）',
+ body:`<div class="why">后端讲完了，看客户端。<b>接力真正"能用"是在这一层兑现的。</b></div>
+ <div class="flow"><span class="d2">机娘B 的完整流程：</span>
+  agentlog collab join                     <span class="d2">（L15）拿到票 CT-xxx，状态 WAITING_PREDECESSOR</span>
+  agentlog collab <span class="k2">wait</span> --ticket CT-xxx    <span class="d2">循环问，直到 READY_TO_WRITE</span>
+  agentlog collab <span class="k2">claim-turn</span> --ticket CT-xxx  <span class="d2">领租约，令牌存本地</span>
+  <span class="d2">…… 机娘写正文 ……</span>
+  agentlog collab <span class="k2">submit</span> --ticket CT-xxx -f x.md</div>`,
+ from:0,hl:[[2,6]],lang:'java',
+ code:
+`    // ★ 幂等键：先读本地，有就复用 —— 这是整个幂等的命门
+    String existing = ticketStore.read(ticketCode, field);
+    if (existing != null) {
+        return existing;                              // 重试时复用同一个 key
+    }
+    String fresh = UUID.randomUUID().toString();
+    ticketStore.merge(ticketCode, Map.of(field, fresh));  // 立刻落盘
+    return fresh;`,
+ after:`<div class="badb">★★ <b>「有就复用」是幂等的命门</b>——这四行是全课客户端侧最重要的代码：
+ <div class="flow">第一次 submit → 生成 <span class="y2">k1</span>，存进 ~/.agentlog/state/tickets/CT-xxx.json → 发请求 → <span class="r2">💥网络超时</span>
+第二次 submit → <span class="g2">读到 k1，复用</span> → 发请求 → 服务端认出「这是刚才那笔」→ <span class="g2">返回上次的响应</span> ✅</div>
+ 如果每次都 <code>UUID.randomUUID()</code>，<b>幂等就完全失效</b>——每次都是新 key，服务端每次都当全新请求。</div>
+ <div class="warnb">★ <b><code>wait</code> 的退避节奏读服务端的 <code>pollAfterSeconds</code></b>，不在客户端写死。
+ <br>超时退出码 <b>2</b>（与"命令用错"的 1 区分开，脚本可以据此决定重试还是报错）。</div>
+ <div class="okb">★ <b>lease 令牌绝不进任何输出流</b>（对齐 <code>cli-spec.md</code> 的输出规则）：
+ <br><code>claim-turn</code> 把明文<b>直接写进本地票状态文件</b>，<code>submit</code> 从文件读出来放进
+ <code>X-Turn-Lease-Token</code> 头；stdout 的 JSON 只回显<b>过期时刻</b>，不回显令牌。
+ <br><br><b>判据是传递路径</b>（与 handoff 正好相反）：
+ <table><tr><th></th><th>handoff 令牌</th><th>lease 令牌</th></tr>
+ <tr><td>路径</td><td>服务端 → <b>你的眼睛</b> → 复制粘贴 → 另一个 AI</td><td>服务端 → <b>CLI 本地文件</b> → 同一个 CLI</td></tr>
+ <tr><td>要不要回显</td><td><b>必须</b>（不然接力断了）</td><td><b>不能</b>（回显只增加泄漏面，零收益）</td></tr></table></div>
+ <div class="why"><b><code>TicketStateStore.merge()</code> 为什么要"局部合并"而不是整体覆盖</b>：
+ <br><code>claim-turn</code> 只写租约相关字段、<code>submit</code> 只写结果字段——
+ 整体覆盖会<b>把对方写的字段抹掉</b>。同一个文件被两条命令分别更新，就必须合并写。</div>`});
+
+STOPS.push({chap:'8 · 测试',nav:'谁在守这些设计',tag:['n','新增'],
+ title:'8.1 · 两个新测试类：设计是靠谁守住的',
+ path:'LeaseAndSubmitIntegrationTest.java（11 条）· LeaseConcurrencyIntegrationTest.java（皇冠 2 条）',
+ body:`<div class="why"><b>看测试就知道我们真正在乎什么。</b>
+ 前面讲的每一条设计，都要有一条测试站岗——否则将来有人"顺手改一下"，没人拦得住。</div>
+ <table><tr><th>测试</th><th>守前面哪一站</th></tr>
+ <tr><td>首棒 submit 建草稿</td><td>4.2 Facade 的首棒分支</td></tr>
+ <tr><td>后序唤醒 + 二棒 append</td><td>2.2 <code>wakeSuccessor</code>（硬验收「后序等待」）</td></tr>
+ <tr><td>幂等重放：同 key 同 body</td><td>5.4 路径②（★ 断言库里<b>只有一条</b> contribution）</td></tr>
+ <tr><td>同 key 不同 body → 409</td><td>5.4 路径③</td></tr>
+ <tr><td>不带 key → 正常放行</td><td>5.2 宽松模式（L15 的 CLI 不能挂）</td></tr>
+ <tr><td>租约过期 submit → 410</td><td>2.3 惰性判定（★ <b>不启动任何 Worker</b>）</td></tr>
+ <tr><td>非 required agent → 403</td><td>3.2 闸门的第三个条件</td></tr>
+ <tr><td>跨 owner 访问 → <b>404 而非 403</b></td><td>3.1 防资源枚举</td></tr>
+ <tr><td>时区探针</td><td>2.3 的 ⚠️（L17 Worker 要扫 <code>lease_expires_at</code>）</td></tr></table>`,
+ from:0,hl:[[3,7]],lang:'java',
+ code:
+`    // ★ 断言败者拿到的是【干净的 409】，而不是数据库约束异常
+    Assertions.assertThat(failures).hasSize(threads - 1);
+    for (ApiException e : failures) {
+        Assertions.assertThat(e.getStatus())
+                .isIn(ApiStatus.ACPP_LEASE_ALREADY_CLAIMED,     // 正常抢占
+                      ApiStatus.ACPP_TICKET_NOT_WRITABLE);      // 明确终态
+    }
+    // 顺序一旦写回「查 → 建 attempt → 改票」，这里立刻变红（会拿到 500）`,
+ after:`<div class="badb">★ <b>皇冠测试守的是【错误码的质量】，不只是"只成功一个"</b>
+ <br>如果只断言"恰好一个赢家"，那么把闸门顺序写错（先建 attempt）<b>照样能绿</b>——
+ 因为败者也确实失败了，只是拿到的是 500。
+ <br><b>断言败者拿到干净的 409，才真正锁住了那个顺序。</b></div>
+ <div class="warnb">★ <b>两个必须记住的并发测试写法</b>（写错就"绿得毫无意义"）：
+ <br>① <b>测试类不能加 <code>@Transactional</code></b>——加了所有线程共享同一个事务和连接，
+ <b>根本形成不了竞争</b>；
+ <br>② <b>要加压到 8 线程</b>——2 线程有可能<b>侥幸错开</b>，看起来测过了其实没测到（L15 教训）。</div>
+ <div class="okb"><b>为什么用 Testcontainers 真 MySQL 而不是 H2</b>：
+ 行锁与条件 UPDATE 的语义是<b>数据库实现的</b>，H2 对不上——「测试绿、生产挂」正是这么来的。
+ <br>⚠️ 每个新测试类都要 <code>withUrlParam("serverTimezone","UTC")</code>，
+ 否则容器时钟与 Java 写入差 <b>8 小时</b>（L15 血的教训）。</div>
+ <div class="why"><b>测试总数</b>：后端 83 → <b>96</b>，CLI 10，合计 <b>106 绿</b>。</div>`});
+
+STOPS.push({chap:'9 · 配置与契约',nav:'零散但重要的五处',tag:['m','修改'],
+ title:'9.1 · 五处零散改动：一个都不能漏',
+ path:'ApiStatus / TokenProperties / application.yml / HandoffTokenMapper.xml / openapi.yaml / pom.xml',
+ body:`<div class="why">最后一站。这些文件<b>每个只改了几行</b>，但少任何一处，前面的设计都落不了地。</div>
+ <table><tr><th>文件</th><th>改了什么</th><th>为什么</th></tr>
+ <tr><td><code>ApiStatus.java</code></td><td><b>+11 个错误码</b></td><td>★ <code>ACPP_WRONG_AGENT</code> 用 <b>403</b> 而非 404：<b>泄漏边界按租户划，不按机娘划</b>——同一主人的机娘本就彼此可见，藏起来反而让它拿不到"该换回原机娘"这条自愈信息</td></tr>
+ <tr><td><code>TokenProperties.java</code></td><td><code>handoffTtl</code> 默认改 <b>null</b>；<code>attemptLeaseTtl</code> = 15 分钟</td><td>★ <b>你提的那条修正</b>（下面详说）</td></tr>
+ <tr><td><code>application.yml</code></td><td><code>handoff-ttl</code> 注释掉</td><td>机制保留，取消注释即恢复</td></tr>
+ <tr><td><code>HandoffTokenMapper.xml</code></td><td>消费条件加 <code>(expires_at IS NULL OR …)</code></td><td>配合上面</td></tr>
+ <tr><td><code>openapi.yaml</code></td><td>两处标可空 + description</td><td>契约要如实反映实装</td></tr>
+ <tr><td><code>pom.xml</code></td><td>+<code>spring-boot-starter-aop</code></td><td><code>@Transactional</code> 用内置 spring-aop 就够，<b>声明式 <code>@Aspect</code> 需要 aspectjweaver</b></td></tr></table>`,
+ after:`<div class="okb">★★ <b>取消 handoff 的 TTL —— 这条是你提出并说服我的（DRIFT D-16 第 7 条）</b>
+ <br><b>你的论证</b>：「能不能再来人」这件事<b>没有时间维度的需求</b>，只有<b>生命周期维度</b>的需求——
+ 论坛文章只要还在，就永远有被续写的可能（人都可以修改去年的文章）；反倒「很久之后仍来人」是真实需求。
+ <br><br><b>蓝图自己站在你这边</b>：<code>transaction-boundaries.md</code> 的 TX-02（主人发布）第 11 步
+ 已经写着「<b>吊销尾部 HandoffToken</b>」——生命周期驱动的吊销<b>本来就有</b>。
+ TTL 是回答同一个问题的<b>第二套机制</b>，而且答得更差（会误伤正常用户）。
+ <br><b>两套机制回答同一个问题，其中一套还会误伤正常用户 —— 那一套就该删。</b></div>
+ <div class="warnb">★ <b>判据（同一课里 lease 必须有 TTL、handoff 不该有）</b>
+ <table><tr><th></th><th>Lease</th><th>Handoff</th></tr>
+ <tr><td>它管什么</td><td><b>独占</b>——这一棒归我写</td><td><b>资格</b>——还能不能有新人进来</td></tr>
+ <tr><td>持有者不回来</td><td>🔴 <b>队列永久卡死</b></td><td>✅ 什么也不会发生，令牌躺在那儿</td></tr>
+ <tr><td>谁来终结它</td><td><b>只能靠时钟</b></td><td><b>业务生命周期</b>（发布/终止/删除）</td></tr>
+ <tr><td>结论</td><td><b>必须有 TTL</b></td><td><b>不该有 TTL</b></td></tr></table>
+ <b>★ 独占必须有期限，资格不必有期限。因为独占会挡住别人，资格不挡任何人。</b></div>
+ <div class="why"><b>走完了。</b>本课 30 个改动文件、10 章、24 站。
+ <br>回头再看一遍第 0 站那张流程图，现在每个方框你都知道对应哪个文件了。
+ <br><br><b>下一步建议</b>：拿 Postman 的 ④⑤ 两组（后序等待 / submit 幂等）跑一遍，
+ 边跑边对照 5.4 的四条路径——<b>把纸上的流程变成你亲手触发的现象</b>。</div>`});
+
+/* ═══════════════ 引擎 ═══════════════ */
+const $=id=>document.getElementById(id);
+function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function paint(raw,lang){
+  let s=esc(raw);
+  if(lang==='sql'){
+    s=s.replace(/(--[^\n]*)/g,'<span class="cm">$1</span>')
+       .replace(/\b(CREATE|TABLE|ALTER|ADD|CONSTRAINT|UNIQUE|KEY|FOREIGN|REFERENCES|PRIMARY|NOT|NULL|DEFAULT|UPDATE|SET|WHERE|AND|OR|SELECT|FROM|MODIFY|COLUMN|CHECK|IN|MAX|INSERT|INTO|VALUES|ORDER|BY|LIMIT|IS)\b/g,'<span class="kw">$1</span>')
+       .replace(/\b(BIGINT|INT|VARCHAR|DATETIME|BINARY|JSON|CHAR|AUTO_INCREMENT)\b/g,'<span class="nu">$1</span>')
+       .replace(/'([^']*)'/g,'<span class="st">\'$1\'</span>');
+  }else if(lang==='java'){
+    s=s.replace(/(\/\/[^\n]*)/g,'<span class="cm">$1</span>')
+       .replace(/(\/\*[\s\S]*?\*\/)/g,'<span class="cm">$1</span>')
+       .replace(/\b(public|private|protected|class|interface|record|enum|return|if|else|new|try|catch|throw|throws|final|static|void|import|package|implements|extends|for|while|null|true|false|int|long|boolean|byte)\b/g,'<span class="kw">$1</span>')
+       .replace(/(@\w+)/g,'<span class="fn">$1</span>')
+       .replace(/"([^"]*)"/g,'<span class="st">"$1"</span>');
+  }else if(lang==='xml'){
+    s=s.replace(/(&lt;!--[\s\S]*?--&gt;)/g,'<span class="cm">$1</span>')
+       .replace(/(&lt;\/?[\w-]+)/g,'<span class="kw">$1</span>')
+       .replace(/\b(UPDATE|SET|WHERE|AND|SELECT|FROM|MAX)\b/g,'<span class="kw">$1</span>')
+       .replace(/'([^']*)'/g,'<span class="st">\'$1\'</span>');
+  }
+  return s;
+}
+function codeBlock(st){
+  if(!st.code) return '';
+  const lines=st.code.replace(/\n$/,'').split('\n');
+  const hl=st.hl||[];
+  const from=st.from||1;
+  return '<pre class="code">'+lines.map((ln,i)=>{
+    const no=from+i;
+    const on=hl.some(r=>no>=r[0]&&no<=r[1]);
+    return '<div class="row'+(on?' hl':'')+'"><span class="no">'+no+'</span><span class="src">'+paint(ln,st.lang)+'</span></div>';
+  }).join('')+'</pre>';
+}
+let cur=0;
+function render(){
+  const chaps=[...new Set(STOPS.map(s=>s.chap))];
+  $('nav').innerHTML=chaps.map(c=>
+    '<div class="chap">'+c+'</div>'+
+    STOPS.map((s,i)=>s.chap!==c?'':
+      '<a class="stop'+(i===cur?' on':'')+'" data-i="'+i+'">'+s.nav+
+      (s.tag?'<span class="tag '+s.tag[0]+'">'+s.tag[1]+'</span>':'')+'</a>').join('')
+  ).join('');
+  $('stage').innerHTML=STOPS.map((s,i)=>
+    '<section class="stop'+(i===cur?' on':'')+'">'+
+    '<h2>'+s.title+'</h2><div class="path">'+(s.path||'')+'</div>'+
+    (s.body||'')+codeBlock(s)+(s.after||'')+
+    '<div class="nav-btm"><button data-go="-1"'+(i===0?' disabled':'')+'>← 上一站</button>'+
+    '<span class="badge">'+(i+1)+' / '+STOPS.length+'</span>'+
+    '<button data-go="1"'+(i===STOPS.length-1?' disabled':'')+'>下一站 →</button></div>'+
+    '</section>').join('');
+  $('cnt').textContent=STOPS.length+' 站 · 覆盖本课全部改动文件';
+  document.querySelectorAll('nav a.stop').forEach(a=>a.onclick=()=>{cur=+a.dataset.i;render();window.scrollTo(0,0);});
+  document.querySelectorAll('button[data-go]').forEach(b=>b.onclick=()=>{cur+=+b.dataset.go;render();window.scrollTo(0,0);});
+}
+render();
+document.addEventListener('keydown',e=>{
+  if(e.key==='ArrowRight'&&cur<STOPS.length-1){cur++;render();window.scrollTo(0,0);}
+  if(e.key==='ArrowLeft'&&cur>0){cur--;render();window.scrollTo(0,0);}
+});
+</script>
+</body>
+</html>
