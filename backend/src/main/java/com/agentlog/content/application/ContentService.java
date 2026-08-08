@@ -1,5 +1,6 @@
 package com.agentlog.content.application;
 
+import com.agentlog.content.ContentFacade;
 import com.agentlog.content.api.dto.request.CreateAgentDraftRequest;
 import com.agentlog.content.api.dto.request.CreateOwnerDraftRequest;
 import com.agentlog.content.api.dto.response.AuthorView;
@@ -20,6 +21,7 @@ import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
@@ -32,7 +34,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
-public class ContentService {
+public class ContentService implements ContentFacade {
 
     /**
      * user_account.status / agent_account.status 的 ACTIVE 值。
@@ -107,6 +109,26 @@ public class ContentService {
     protected DraftView createDraftInternal(DraftAuthor author, String title, Long channelId,
                                             String content, String summary,
                                             boolean declaredExternalAiContent) {
+        CreatedDraft created = createDraftCore(author, title, channelId, content, summary,
+                declaredExternalAiContent, null, null);
+        return DraftView.from(created.draft(), List.of(created.block()),
+                lookupBlockAuthors(List.of(created.block())));
+    }
+
+    /**
+     * 建草稿的真正内核（L16 从 createDraftInternal 里抽出来，逻辑一字未改）。
+     *
+     * 为什么要抽：ACPP 的首棒 submit 也要走这套「建 post + contribution + draft + block」，
+     * 但它需要拿到四张表各自的 <b>id</b> 去回填协作关联，而 DraftView 是展示模型、拿不到。
+     * 于是内核返回 {@link CreatedDraft}（四个 DO），两个投稿入口各自 {@code DraftView.from(...)}。
+     *
+     * @param acppSessionId 协作会话 id，非协作投稿传 null
+     * @param acppTicketId  协作席位 id，非协作投稿传 null
+     */
+    private CreatedDraft createDraftCore(DraftAuthor author, String title, Long channelId,
+                                         String content, String summary,
+                                         boolean declaredExternalAiContent,
+                                         Long acppSessionId, Long acppTicketId) {
         Instant now = Instant.now(clock);
 
         ForumChannelDO channel = forumChannelMapper.selectById(channelId);
@@ -133,6 +155,11 @@ public class ContentService {
         postMapper.insert(post);
 
         ContributionDO contribution = new ContributionDO();
+        // ACPP 关联（L16 起）：非协作投稿传 null；协作 submit 传 session/ticket。
+        // 这两列 V005 建表时就预留了（注释写「ACPP 用」），V012 建了外键，到这里才第一次真正写值。
+        // 写上之后 contribution 既是内容的不可变原始层，也是「这段字是哪次协作的第几棒写的」的溯源锚点。
+        contribution.setSessionId(acppSessionId);
+        contribution.setTicketId(acppTicketId);
         contribution.setAuthorType(author.authorType().getCode());
         contribution.setAuthorUserId(author.authorUserId());
         contribution.setAuthorAgentId(author.authorAgentId());
@@ -173,7 +200,98 @@ public class ContentService {
         draftBlockMapper.insert(block);
 
 
-        return DraftView.from(draft, List.of(block), lookupBlockAuthors(List.of(block)));
+        return new CreatedDraft(post, contribution, draft, block);
+    }
+
+    /** 建草稿内核的产出：四张表各自那一行。返回 DO 而非 DraftView —— 调用方要的是 id，视图各自拼。 */
+    private record CreatedDraft(PostDO post, ContributionDO contribution, DraftDO draft, DraftBlockDO block) {
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    //  ContentFacade 实现 —— 跨模块【写】的唯一入口（L16 · ADR-0006 · DRIFT D-16）
+    // ══════════════════════════════════════════════════════════════════════════
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>实现要点：
+     * <ol>
+     *   <li><b>不自开事务边界</b>（用 MANDATORY 而非 REQUIRED）—— 必须跑在调用方
+     *       collaboration 的 submit 事务里。若谁忘了开事务就调它，宁可当场抛异常，
+     *       也不要出现「贡献写进去了、席位没落 DONE」这种半截状态。
+     *       这是把「必须同事务」这条约束<b>交给容器强制</b>，而不是靠注释提醒。</li>
+     *   <li>首棒复用建草稿内核；后续棒只追加 contribution + block。</li>
+     * </ol>
+     */
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY)
+    public AppendResult appendAgentContribution(AppendCommand command) {
+        DraftAuthor author = DraftAuthor.agent(
+                command.agentAccountId(), command.ownerUserId(),
+                command.sourceTool(), command.clientRunId());
+
+        // —— 首棒：整套建出来（post 指针 + 不可变贡献 + 草稿头 + 第一块正文）——
+        if (command.draftId() == null) {
+            CreatedDraft created = createDraftCore(author, command.title(), command.channelId(),
+                    command.content(), command.summary(), false,
+                    command.sessionId(), command.ticketId());
+            return new AppendResult(created.post().getId(), created.draft().getId(),
+                    created.contribution().getId(), created.block().getId(), 0);
+        }
+
+        // —— 后续棒：草稿已经在了，只往后面接一段 ——
+        Instant now = Instant.now(clock);
+        DraftDO draft = draftMapper.selectById(command.draftId());
+        if (draft == null) {
+            throw new ApiException(ApiStatus.DRAFT_NOT_FOUND);
+        }
+        // 行级授权：这篇草稿必须属于机娘背后的那个主人。
+        // 理论上 collaboration 侧已经校验过（session.owner_user_id），这里是【纵深防御】——
+        // Facade 是公开入口，不能假设每个调用方都做对了。
+        if (!Objects.equals(draft.getOwnerUserId(), command.ownerUserId())) {
+            throw new ApiException(ApiStatus.DRAFT_FORBIDDEN);
+        }
+
+        ContributionDO contribution = new ContributionDO();
+        contribution.setSessionId(command.sessionId());
+        contribution.setTicketId(command.ticketId());
+        contribution.setAuthorType(AuthorType.AGENT.getCode());
+        contribution.setAuthorAgentId(command.agentAccountId());
+        contribution.setSourceTool(command.sourceTool());
+        contribution.setClientRunId(command.clientRunId());
+        contribution.setRawContent(command.content());   // 不可变原始层，永不覆盖
+        contribution.setCreatedAt(now);
+        contributionMapper.insert(contribution);
+
+        // 新块排在最后。这里「查最大值再 +1」是安全的：调用点已通过 submit 的 attempt 闸门，
+        // 而因果链是串行的（后序票必须等前序 DONE 才能领租约），同一篇草稿不可能有两棒同时提交。
+        DraftBlockDO last = draftBlockMapper.selectOne(
+                Wrappers.<DraftBlockDO>lambdaQuery()
+                        .eq(DraftBlockDO::getDraftId, draft.getId())
+                        .orderByDesc(DraftBlockDO::getDisplayOrder)
+                        .last("LIMIT 1"));
+        int nextOrder = (last == null) ? 0 : last.getDisplayOrder() + 1;
+
+        DraftBlockDO block = new DraftBlockDO();
+        block.setDraftId(draft.getId());
+        block.setContributionId(contribution.getId());
+        block.setAuthorType(AuthorType.AGENT.getCode());
+        block.setAuthorAgentId(command.agentAccountId());
+        block.setSourceTool(command.sourceTool());
+        block.setDisplayOrder(nextOrder);
+        block.setRenderedContent(command.content());     // 可编辑渲染层（L19 主人润色只改这一层）
+        block.setIsHidden(false);
+        block.setVersion(0L);
+        block.setCreatedAt(now);
+        block.setUpdatedAt(now);
+        draftBlockMapper.insert(block);
+
+        // 草稿头的 updated_at 要跟着动，否则主人的草稿箱按更新时间排序会看不出「刚被续写过」。
+        draft.setUpdatedAt(now);
+        draftMapper.updateById(draft);
+
+        return new AppendResult(draft.getPostId(), draft.getId(),
+                contribution.getId(), block.getId(), nextOrder);
     }
 
     /**

@@ -173,7 +173,14 @@ public class ClaimHandoffService {
         if (current.getExpiresAt() != null && current.getExpiresAt().isBefore(now)) {
             return new ApiException(ApiStatus.ACPP_HANDOFF_EXPIRED);
         }
-        // 兜底：状态与时效都看不出问题（极罕见，如并发窗口内又被改回）。按已消费处理，提示索取新令牌。
+        // 兜底：状态与时效都看不出问题。
+        // ⚠️ L16 更正（原注释写的是「极罕见（如并发窗口内又被改回）」，理由是错的）：
+        //   这在并发路径下【是必然而非罕见】——闸门失败后的这次回查读到的是【事务快照】，
+        //   MySQL 默认 REPEATABLE READ，赢家的 UPDATE 尚未提交时，败者看到的那一行仍是 AVAILABLE。
+        //   本处结论（按已消费处理）恰好正确，所以 L15 的并发测试没能发现理由写错了；
+        //   L16 的 ClaimLeaseService 第一版照抄这个思路，兜底值选得不同，当场被并发测试打红。
+        //   正确的推理是：闸门是唯一裁决者，它说 0 行就是 0 行；回查显示"看起来能用"，
+        //   唯一解释就是并发有人先消费了、只是我还看不见 —— 与看到 CONSUMED 是同一件事。
         return new ApiException(ApiStatus.ACPP_HANDOFF_CONSUMED);
     }
 }

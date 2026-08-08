@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.agentlog.collaboration.infrastructure.persistence.mapper.ContributionTicketMapper">
+
+    <resultMap id="ticketMap"
+               type="com.agentlog.collaboration.infrastructure.persistence.dataobject.ContributionTicketDO">
+        <id     property="id"                   column="id"/>
+        <result property="ticketCode"           column="ticket_code"/>
+        <result property="sessionId"            column="session_id"/>
+        <result property="sequenceNo"           column="sequence_no"/>
+        <result property="requiredAgentId"      column="required_agent_id"/>
+        <result property="sourceTool"           column="source_tool"/>
+        <result property="clientRunId"          column="client_run_id"/>
+        <result property="predecessorTicketId"  column="predecessor_ticket_id"/>
+        <result property="status"               column="status"/>
+        <result property="activeAttemptId"      column="active_attempt_id"/>
+        <result property="version"              column="version"/>
+        <result property="createdAt"            column="created_at"/>
+        <result property="updatedAt"            column="updated_at"/>
+    </resultMap>
+
+    <select id="selectByCode" resultMap="ticketMap">
+        SELECT id, ticket_code, session_id, sequence_no, required_agent_id,
+               source_tool, client_run_id, predecessor_ticket_id, status,
+               active_attempt_id, version, created_at, updated_at
+        FROM contribution_ticket
+        WHERE ticket_code = #{ticketCode}
+    </select>
+
+    <!--
+      ★★★ L16 的皇冠之一：领租约的原子闸门 ★★★
+
+      一条 UPDATE 同时回答三个问题并落定结果：
+        ticket_code = ?                 是这张票吗（走 uk_ticket_code 点查）
+        status = 'READY_TO_WRITE'       轮到它了吗（WAITING/LEASED/DONE/BLOCKED 一律抢不到）
+        required_agent_id = ?           是【你这个机娘】的席位吗（多租户之下再加一层归属）
+      成立 → status 落 'LEASED'，这一棒从此独占归你，后续每一步都没有竞争者。
+
+      ★ 顺序铁律：闸门必须在【建 attempt 之前】。
+        反面写法「查票 → 建 attempt → 改票」会让两个线程双双先建 attempt，
+        撞 uk_attempt_ticket_no → 败者拿 500 而非干净的 409。
+        这正是 L15 在 HandoffTokenMapper 里踩过的坑，同一课的同构版本。
+
+      ★ 唯一键不是闸门，是最后一道安全网：
+        它只挡得住"两个人抢同一张票"，挡不住"票根本不是你的 / 前序还没写完 / 协作已终止"——
+        那些情形下没人跟你抢，票会建成功、返回 200。
+        判据：那个唯一键守的不变量，是不是【就是】你此刻要判定的那件事，且覆盖全部失败情形？
+
+      version = version + 1：本表有乐观锁列，凡改必进。L18 的 terminate/retry 会读它。
+    -->
+    <update id="claimForLease">
+        UPDATE contribution_ticket
+        SET status     = 'LEASED',
+            updated_at = #{now},
+            version    = version + 1
+        WHERE ticket_code       = #{ticketCode}
+          AND status            = 'READY_TO_WRITE'
+          AND required_agent_id = #{agentId}
+    </update>
+
+    <!--
+      回填「当前进行中的 attempt」。按主键更新，无竞争——能走到这里的只有闸门的赢家。
+      （对应 V013 补上的 fk_ticket_active_attempt 外键，V012 建列时目标表还不存在。）
+    -->
+    <update id="linkActiveAttempt">
+        UPDATE contribution_ticket
+        SET active_attempt_id = #{attemptId},
+            updated_at        = #{now},
+            version           = version + 1
+        WHERE id = #{ticketId}
+    </update>
+
+    <!-- submit 成功：席位落终态。调用点已通过 attempt 闸门，无竞争。 -->
+    <update id="markDone">
+        UPDATE contribution_ticket
+        SET status     = 'DONE',
+            updated_at = #{now},
+            version    = version + 1
+        WHERE id = #{ticketId}
+    </update>
+
+    <!--
+      ★ 唤醒直接后继 —— 「后序可提前排队，不可提前写」的兑现点。
+
+      第二个机娘在 L15 的 join 那一刻就拿到了票，但状态是 WAITING_PREDECESSOR，
+      claim-turn 会被闸门挡下（status 对不上）。直到前一棒 submit，这条 UPDATE 才放它过去。
+      这就是 CLI `collab wait` 轮询时等的那个瞬间。
+
+      为什么 status 也写进 WHERE：BLOCKED_BY_PREDECESSOR（L17 因前序失败而冻结）
+      不该被一次成功的 submit 顺手唤醒——它要等主人 retry（L18）。无条件更新会静默破坏那条不变量。
+
+      predecessor_ticket_id 是因果链的边，所以「谁是我的直接后继」= 谁的 predecessor 指着我。
+      链表结构保证了最多只有一个，但这条 SQL 不依赖该假设（多了也能正确放行）。
+    -->
+    <update id="wakeSuccessor">
+        UPDATE contribution_ticket
+        SET status     = 'READY_TO_WRITE',
+            updated_at = #{now},
+            version    = version + 1
+        WHERE predecessor_ticket_id = #{predecessorTicketId}
+          AND status                = 'WAITING_PREDECESSOR'
+    </update>
+</mapper>

@@ -148,7 +148,12 @@ public class StartCollaborationService {
      */
     HandoffIssue issueTailToken(CollaborationSessionDO session, Long predecessorTicketId, Instant now) {
         String rawToken = tokenService.generateRawToken("handoff_");
-        Instant expiresAt = now.plus(tokenProperties.getHandoffTtl());   // 默认 24h
+        // ★ L16 改（DRIFT D-16）：ttl 为 null → expiresAt 为 null → 接力棒【永不过期】。
+        //   「能不能再来人」由生命周期决定（发布/终止时吊销尾令牌），不由时钟决定；
+        //   判据：独占（lease）必须有期限，资格（handoff）不必有期限。
+        //   机制保留——配上 agentlog.token.handoff-ttl 即恢复原行为，消费路径的惰性判定还在。
+        java.time.Duration ttl = tokenProperties.getHandoffTtl();
+        Instant expiresAt = (ttl == null) ? null : now.plus(ttl);
 
         HandoffTokenDO token = new HandoffTokenDO();
         token.setTokenDigest(tokenService.digest(rawToken));

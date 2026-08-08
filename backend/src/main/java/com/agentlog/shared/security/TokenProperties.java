@@ -28,10 +28,37 @@ public class TokenProperties {
     /** AgentActingToken 有效期（L13 assume 机娘）。 */
     private Duration agentActingTtl = Duration.ofHours(1);
 
-    /** HandoffToken 有效期（L15 ACPP 接力）。 */
-    private Duration handoffTtl = Duration.ofHours(24);
+    /**
+     * HandoffToken 有效期（L15 ACPP 接力）。
+     *
+     * ★ <b>默认 null = 永不过期</b>（L16 改 · DRIFT D-16 · 主人 2026-08-02 提出）。
+     *
+     * 原设计是 24 小时，L16 撤掉了这个默认值。理由：
+     * 「能不能再来人」这件事<b>没有时间维度的需求，只有生命周期维度的需求</b>——
+     * 论坛文章只要还在，就永远有被续写的可能（人都能改去年的文章）；
+     * 而「什么时候不能再来人」蓝图已经用另一套机制回答了：
+     * {@code transaction-boundaries.md} TX-02 第 11 步「发布时吊销尾部 HandoffToken」，
+     * 外加 L18 terminate。两套机制回答同一个问题，其中一套还会误伤正常用户，那一套就该关掉。
+     *
+     * ★ 判据（与下面的 attemptLeaseTtl 正好构成对照，值得记住）：
+     * <pre>
+     *   Lease 管【独占】——持有者不回来，队列永久卡死，只能靠时钟终结 → 必须有 TTL
+     *   Handoff 管【资格】——持有者不回来，什么也不会发生 → 不必有 TTL
+     *   一句话：独占必须有期限，资格不必有期限。因为独占会挡住别人，资格不挡任何人。
+     * </pre>
+     *
+     * <b>机制保留</b>：配上一个值即恢复原行为（签发时写 expires_at，消费时惰性判定过期），
+     * {@code ACPP_HANDOFF_EXPIRED} 与 L17 的清理 Worker 都还在。默认关闭是产品判断，不是能力缺失。
+     */
+    private Duration handoffTtl = null;
 
-    /** Attempt 租约有效期（L15 领棒）。 */
+    /**
+     * Attempt 租约有效期（L16 领租约）。
+     *
+     * ★ 这个 TTL <b>必须存在</b>：租约管的是「这一棒归我写」的独占权，
+     * 而机娘的对话可能崩掉、再也不回来——没有到期时间，这一棒就永久卡死，整条接力链断在这里。
+     * 租约不是锁：锁要有人解，租约到点自愈。
+     */
     private Duration attemptLeaseTtl = Duration.ofMinutes(15);
 
     /** DeviceCode 配对码有效期（默认 10min，验收项「过期处理」的时限）。 */

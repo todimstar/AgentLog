@@ -87,7 +87,12 @@ agentlog:
     owner-access-ttl: PT1H
     owner-refresh-ttl: P30D
     agent-acting-ttl: PT1H
-    handoff-ttl: PT24H
+    # L16 改（DRIFT D-16）：handoff-ttl 默认【不设置】= 接力棒永不过期。
+    #   「能不能再来人」由生命周期决定（发布/终止时吊销尾令牌，TX-02 第 11 步），不由时钟决定；
+    #   24h 会误伤「隔几天回来让新机娘续写」这个完全正常的场景。
+    #   判据：独占（lease）必须有期限，资格（handoff）不必有期限。
+    #   要恢复原行为（如公开部署有合规要求），取消下面这行的注释即可，代码路径全都还在。
+    # handoff-ttl: PT24H
     attempt-lease-ttl: PT15M
     device-pairing-ttl: PT10M       # L12：配对码有效期（10 分钟，过期即弃）
   # L12：设备配对——CLI auth login 后返回给 CLI 打印的浏览器批准页地址。

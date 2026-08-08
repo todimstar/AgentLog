@@ -70,6 +70,35 @@ public enum ApiStatus {
     ACPP_HANDOFF_EXPIRED(HttpStatus.GONE, "ACPP_HANDOFF_EXPIRED", "接力令牌已过期，请向主人索取新的尾令牌"),
     ACPP_HANDOFF_FROZEN(HttpStatus.CONFLICT, "ACPP_HANDOFF_FROZEN", "接力链已冻结（前序失败），请停止并报告主人"),
     ACPP_HANDOFF_REVOKED(HttpStatus.CONFLICT, "ACPP_HANDOFF_REVOKED", "接力令牌已被吊销，本次协作已结束"),
+
+    // —— ACPP 席位与租约（L16 attempt/lease · ADR-0006）—— 冻结面已登记 DRIFT D-16
+    //
+    // 延续上面那套 404/409/410 的语义分工，另加一个 403：
+    //   403 FORBIDDEN → 资源【存在、也属于你的主人】，但这一棒不是【你这个机娘】的。
+    //                   ★ 这里用 403 而不是 404，与跨主人的 404 口径不冲突：
+    //                     跨主人返 404 是防【别的主人】枚举资源；而同一主人名下的两个机娘
+    //                     本来就彼此可见（都是你派出去的），藏起来没有安全收益，
+    //                     反而让机娘拿不到"该换回原机娘"这条自愈信息。
+    //                     ——泄漏边界按【租户】划，不按【机娘】划。
+    ACPP_TICKET_NOT_FOUND(HttpStatus.NOT_FOUND, "ACPP_TICKET_NOT_FOUND", "席位不存在"),
+    ACPP_TICKET_WAITING(HttpStatus.CONFLICT, "ACPP_TICKET_WAITING", "前一棒尚未完成，请稍后重试"),
+    ACPP_TICKET_BLOCKED(HttpStatus.CONFLICT, "ACPP_TICKET_BLOCKED", "前序失败导致本棒被阻塞，请停止并报告主人"),
+    ACPP_TICKET_NOT_WRITABLE(HttpStatus.CONFLICT, "ACPP_TICKET_NOT_WRITABLE", "本棒当前不可写入（已领租约或已完成）"),
+    ACPP_WRONG_AGENT(HttpStatus.FORBIDDEN, "ACPP_WRONG_AGENT", "这一棒属于另一个机娘，请换回原机娘"),
+    ACPP_LEASE_ALREADY_CLAIMED(HttpStatus.CONFLICT, "ACPP_LEASE_ALREADY_CLAIMED", "本棒的租约已被领走，请查询席位状态"),
+    ACPP_LEASE_EXPIRED(HttpStatus.GONE, "ACPP_LEASE_EXPIRED", "租约已过期，请向主人申请重试（retry）"),
+    ACPP_LEASE_INVALID(HttpStatus.FORBIDDEN, "ACPP_LEASE_INVALID", "租约令牌无效，请停止并报告主人"),
+
+    // —— 幂等（L16 · Idempotency-Key）——
+    // 两条都是 409：请求本身没错，是【和你自己先前那次请求】打架。
+    //   IN_PROGRESS  → 同 key 同内容，上一次还在跑 → 稍后原样重试即可（是安全的）
+    //   REUSED       → 同 key 不同内容 → 客户端把一个 key 用在了两件事上，必须换新 key
+    IDEMPOTENCY_REQUEST_IN_PROGRESS(HttpStatus.CONFLICT, "IDEMPOTENCY_REQUEST_IN_PROGRESS",
+            "同一 Idempotency-Key 的请求正在处理中，请稍后重试"),
+    IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_BODY(HttpStatus.CONFLICT, "IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_BODY",
+            "同一 Idempotency-Key 被用于不同的请求内容，请换一个新的 key"),
+    IDEMPOTENCY_KEY_REQUIRED(HttpStatus.BAD_REQUEST, "IDEMPOTENCY_KEY_REQUIRED",
+            "本端点要求携带 Idempotency-Key 请求头"),
     ;
 
     private final HttpStatus status;

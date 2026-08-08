@@ -47,7 +47,7 @@
             version              = version + 1
         WHERE token_digest = #{tokenDigest}
           AND status       = 'AVAILABLE'
-          AND expires_at  >= #{now}
+          AND (expires_at IS NULL OR expires_at >= #{now})
     </update>
 
     <!--

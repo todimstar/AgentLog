@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.agentlog.collaboration.infrastructure.persistence.mapper.ContributionAttemptMapper">
+
+    <resultMap id="attemptMap"
+               type="com.agentlog.collaboration.infrastructure.persistence.dataobject.ContributionAttemptDO">
+        <id     property="id"                 column="id"/>
+        <result property="ticketId"           column="ticket_id"/>
+        <result property="attemptNo"          column="attempt_no"/>
+        <result property="status"             column="status"/>
+        <result property="leaseTokenDigest"   column="lease_token_digest"/>
+        <result property="leaseIssuedAt"      column="lease_issued_at"/>
+        <result property="leaseExpiresAt"     column="lease_expires_at"/>
+        <result property="lastHeartbeatAt"    column="last_heartbeat_at"/>
+        <result property="maxLeaseExpiresAt"  column="max_lease_expires_at"/>
+        <result property="errorReportId"      column="error_report_id"/>
+        <result property="startedAt"          column="started_at"/>
+        <result property="finishedAt"         column="finished_at"/>
+        <result property="createdAt"          column="created_at"/>
+        <result property="updatedAt"          column="updated_at"/>
+    </resultMap>
+
+    <sql id="allColumns">
+        id, ticket_id, attempt_no, status,
+        lease_token_digest, lease_issued_at, lease_expires_at, last_heartbeat_at, max_lease_expires_at,
+        error_report_id, started_at, finished_at, created_at, updated_at
+    </sql>
+
+    <!--
+      ★★★ L16 的皇冠之二：提交的原子闸门 ★★★
+
+      与 L15 的接力棒消费是【同一个范式】：一条 UPDATE 同时完成"检查"和"动作"，
+      MySQL 在这条语句内部持行锁求值 WHERE、修改、放锁，中间没有任何缝隙。
+      affectedRows 就是裁决书：1 = 这次提交归我；0 = 提交不进来。
+
+      三个判定条件，一个都不许挪到 Java：
+        lease_token_digest = ?    按摘要定位（明文从不落库；走 uk_attempt_lease_digest 点查）
+        status = 'ACTIVE'         只有"正在写"的尝试能提交。已 SUCCEEDED（重放）/ FAILED_TIMEOUT /
+                                  REVOKED 的一律抢不到 —— 这同时也是 submit 天然的第二道防重放
+        lease_expires_at >= #{now}  ★ 时效惰性判定
+
+      ★ 为什么惰性判定是本课的关键：
+        course_schedule 的 forbidden 明写「不写超时 Worker」。也就是说，一个 15 分钟前领的、
+        早已过期的租约，它在库里的 status 【仍然是 ACTIVE】（没有任何后台任务去改它）。
+        但因为过期判定写在这条 WHERE 里，它一定提交不进来。
+        → 正确性【不依赖】L17 的 Worker 是否及时。Worker 只负责把状态刷成 FAILED_TIMEOUT
+          好让主人在时间线上看得懂，它【不是】安全防线。
+        一句话：状态不准 ≠ 行为不对。
+
+      ⚠️ 时刻用应用传入的 #{now}，绝不用数据库的 NOW(3)（L15 血的教训，DRIFT D-15）：
+        lease_expires_at 是 Java 写进去的 DATETIME，而 NOW(3) 是数据库自己的墙上时间，
+        两者的时区口径由 JDBC 连接参数（serverTimezone）决定 —— 主应用 URL 带 UTC，
+        测试的 Testcontainers 自建 URL 不带，实测差 8 小时。
+        用 #{now} 后写入与比较走同一条驱动转换路径，时区偏移自动抵消。
+        ★ 原子性完全不受影响 —— 它来自"单条 UPDATE 持行锁"，与用谁的时钟无关。
+    -->
+    <update id="consumeActiveLease">
+        UPDATE contribution_attempt
+        SET status      = 'SUCCEEDED',
+            finished_at = #{now},
+            updated_at  = #{now}
+        WHERE lease_token_digest = #{leaseTokenDigest}
+          AND status             = 'ACTIVE'
+          AND lease_expires_at  >= #{now}
+    </update>
+
+    <!--
+      闸门失败后的【诊断查询】——只用来把"0 行"翻译成具体错误码与自愈动作，不参与互斥判定。
+      顺序很重要：先原子改，改不动才回头问"为什么"。反过来就又是「查-判-改」三步走了。
+    -->
+    <select id="selectByLeaseDigest" resultMap="attemptMap">
+        SELECT <include refid="allColumns"/>
+        FROM contribution_attempt
+        WHERE lease_token_digest = #{leaseTokenDigest}
+    </select>
+
+    <select id="selectByIdPlain" resultMap="attemptMap">
+        SELECT <include refid="allColumns"/>
+        FROM contribution_attempt
+        WHERE id = #{id}
+    </select>
+
+    <!--
+      调用点在「票已被闸门锁成 LEASED」之后，此时没有第二个线程能进来，所以查了再写是安全的。
+      uk_attempt_ticket_no 在这里退回它该有的角色：最后一道安全网，正常路径永不触发。
+    -->
+    <select id="selectMaxAttemptNo" resultType="java.lang.Integer">
+        SELECT MAX(attempt_no)
+        FROM contribution_attempt
+        WHERE ticket_id = #{ticketId}
+    </select>
+</mapper>
