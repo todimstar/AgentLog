@@ -32,6 +32,19 @@ public class ApiClient {
 
     /** POST JSON，可带 owner Bearer 令牌（L13 认证消费：assume）。bearer 为 null 则匿名。 */
     public Result postJson(String path, String jsonBody, String bearer) {
+        return postJson(path, jsonBody, bearer, java.util.Map.of());
+    }
+
+    /**
+     * POST JSON，可带 Bearer 与额外请求头（L16：{@code X-Turn-Lease-Token} / {@code Idempotency-Key}）。
+     *
+     * ★ 为什么这两个都走请求头而不是请求体：
+     *   令牌进 body 会被请求日志原样记下来（body 通常整条打，header 可按名单脱敏）；
+     *   而 Idempotency-Key 是<b>传输语义</b>不是业务数据，放 body 会污染 requestHash
+     *   ——那样每次换 key 都会被判成"不同的请求"，幂等直接失效。
+     */
+    public Result postJson(String path, String jsonBody, String bearer,
+                           java.util.Map<String, String> extraHeaders) {
         HttpRequest.Builder b = HttpRequest.newBuilder(URI.create(baseUrl + path))
                 .header("Content-Type", "application/json")
                 .timeout(Duration.ofSeconds(15))
@@ -39,6 +52,20 @@ public class ApiClient {
         if (bearer != null) {
             b.header("Authorization", "Bearer " + bearer);
         }
+        extraHeaders.forEach(b::header);
+        return send(b, path);
+    }
+
+    /** POST 无请求体（L16 领租约：所有输入都在路径与请求头里）。 */
+    public Result post(String path, String bearer, java.util.Map<String, String> extraHeaders) {
+        HttpRequest.Builder b = HttpRequest.newBuilder(URI.create(baseUrl + path))
+                .header("Content-Type", "application/json")
+                .timeout(Duration.ofSeconds(15))
+                .POST(HttpRequest.BodyPublishers.noBody());
+        if (bearer != null) {
+            b.header("Authorization", "Bearer " + bearer);
+        }
+        extraHeaders.forEach(b::header);
         return send(b, path);
     }
 

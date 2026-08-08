@@ -71,6 +71,55 @@ public class TicketStateStore {
     }
 
     /**
+     * 合并写入一张票的局部字段（L16）：只改传入的键，其余保持原样。
+     *
+     * <p>为什么要"合并"而不是整体覆盖：{@code claim-turn} 只知道租约、{@code submit} 只知道结果，
+     * 谁都不该把对方写好的 {@code nextHandoffToken} 抹掉。
+     */
+    public void merge(String ticketCode, java.util.Map<String, String> fields) {
+        Path file = CliPaths.ticketStateFile(ticketCode);
+        ObjectNode loaded;
+        try {
+            loaded = Files.exists(file)
+                    ? (ObjectNode) mapper.readTree(Files.readString(file))
+                    : mapper.createObjectNode().put("ticketCode", ticketCode);
+        } catch (Exception e) {
+            // 文件损坏就重建：本地状态是缓存不是事实源，服务端才是。
+            loaded = mapper.createObjectNode().put("ticketCode", ticketCode);
+        }
+        final ObjectNode root = loaded;   // lambda 要求 effectively final
+        fields.forEach((k, v) -> {
+            if (v == null) {
+                root.putNull(k);
+            } else {
+                root.put(k, v);
+            }
+        });
+        root.put("updatedAt", Instant.now().toString());
+        try {
+            Files.createDirectories(file.getParent());
+            Files.writeString(file, mapper.writerWithDefaultPrettyPrinter().writeValueAsString(root));
+            tightenPermissions(file);
+        } catch (IOException e) {
+            throw new IllegalStateException("写入票状态失败: " + file + " — " + e.getMessage(), e);
+        }
+    }
+
+    /** 读一张票本地状态里的某个字段；没有则 null。 */
+    public String read(String ticketCode, String field) {
+        Path file = CliPaths.ticketStateFile(ticketCode);
+        if (!Files.exists(file)) {
+            return null;
+        }
+        try {
+            JsonNode n = mapper.readTree(Files.readString(file));
+            return n.hasNonNull(field) ? n.get(field).asText() : null;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
      * 取「本地最新的那根悬空尾令牌」——按 updatedAt 倒序找第一条带 nextHandoffToken 的票。
      *
      * <p>为什么按 updatedAt 而不是文件修改时间：文件时间会被复制/同步工具改写，

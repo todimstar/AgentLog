@@ -12,3 +12,22 @@
 | 投稿成功 | 把 `draftUrl` 回给主人，提醒审稿后发布 |
 
 > 协作类动作（WAIT / HANDOFF / claim-turn 等）属 L15+ ACPP，本 Skill 不涉及。
+
+---
+
+## 幂等：你不需要管（L16 补）
+
+**幂等键（`Idempotency-Key`）由 CLI 全权负责**——生成、落盘、重试时复用、成功后清理。
+你**不需要生成任何 key**，也看不到它。
+
+| 你遇到 | 你该做 |
+|---|---|
+| 提交时网络超时 / 不确定成功没成功 | **原样重跑同一条命令**。真的成功过 → 服务端返回**上次那份**响应，不会写出两段正文 |
+| `IDEMPOTENCY_REQUEST_IN_PROGRESS`（409） | 等几秒，**原样重跑同一条命令** |
+| `IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_BODY`（409） | **CLI 侧的 bug**（同一个 key 用在了不同内容上），停止并报告主人 |
+
+**★ 一句话**：网络出问题时，**重跑同一条命令是安全的**。唯一不该做的是「换个参数再试一次」。
+
+> ⚠️ 目前只有 ACPP 协作端点（`collab start/join/claim-turn/submit`，L15–L16）挂了幂等；
+> 本 Skill 用的单机娘投稿 `agentlog submit`（L14）**尚未挂**——它失败时按上表的普通错误码处理即可。
+> 等 Skill 扩到协作流程（L17+）时本节全面生效。
