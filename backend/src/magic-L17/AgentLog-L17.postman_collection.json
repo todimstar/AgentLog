@@ -1,0 +1,1065 @@
+{
+  "info": {
+    "name": "AgentLog-L17 · Worker、Audit、Modulith 与 Redis（一棒死了之后）",
+    "description": "# L17 验收集合\n\n## 开跑之前，两件事\n\n**1. 确认 `application-local.yml` 有这两段**（我已经加好了）：\n```yaml\nagentlog:\n  worker:\n    dev-trigger:\n      enabled: true          # 打开手动触发端点\n  token:\n    attempt-lease-ttl: PT30S # 租约改 30 秒，不然要等 15 分钟\n```\n\n**2. 重启后端**（改了配置必须重启，你的 IDEA 里那个）。\n\n## 怎么跑\n\n按 ①→②→③→④→⑤ 顺序，**整组 Run** 或逐条点。\n第 ③ 组中间有一步要你**手动等 35 秒**——那是租约自然过期的时间，\n这一等正是本课的主角：没有人来救它，只能靠时钟。\n\n## 每组看什么\n\n| 组 | 看什么 |\n|---|---|\n| ① | 前置，同 L16，直接跑过去 |\n| ② | 造一个「写到一半就死了」的现场 |\n| ③ | **本课核心**：Worker 宣告死亡 + 失败传播 |\n| ④ | 硬验收①「超时阻塞后序」 |\n| ⑤ | Redis 令牌桶限流（连打 130 次） |",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "① 前置 · owner 令牌 + 两只机娘（同 L16，可直接 Run）",
+      "description": "L12/L13 的认证链，本课不讲，只是把三条链的地基铺好。\n\n**三条链**：Chain 1 = 浏览器 Session（登录/CSRF）· Chain 2 = owner Bearer（CLI 主人身份）· Chain 3 = agent Bearer（机娘代入身份，`/api/v1/agent/**` 只认它）。",
+      "item": [
+        {
+          "name": "1. Create Pairing — 发起配对（匿名）",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"installationCode\": \"postman-l16-{{$randomUUID}}\",\n  \"deviceName\": \"Postman L16\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/cli/device-pairings"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 已发起配对', () => pm.response.to.have.status(201));",
+                  "const b = pm.response.json();",
+                  "pm.collectionVariables.set('deviceCode', b.deviceCode);",
+                  "pm.collectionVariables.set('userCode', b.userCode);"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "2. Login — 登录（种 Session Cookie）",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/web/auth/login"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 登录成功（若失败先检查集合变量 email/password）', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "3. Get CSRF — 取 CSRF token",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/web/csrf"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('csrfToken', pm.response.json().token);"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "4. Confirm — 浏览器批准配对",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{csrfToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userCode\": \"{{userCode}}\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/web/device-pairings/confirm"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('204 已批准', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "5. Poll Token — 换 owner 令牌",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"deviceCode\": \"{{deviceCode}}\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/cli/device-pairings/token"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('APPROVED', () => pm.expect(pm.response.json().status).to.eql('APPROVED'));",
+                  "pm.collectionVariables.set('ownerAccessToken', pm.response.json().ownerAccessToken);"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "6. 列出我的机娘（取两只的 id）",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerAccessToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/cli/agents"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 拿到机娘列表', () => pm.response.to.have.status(200));",
+                  "const list = pm.response.json().filter(a => a.status === 'ACTIVE');",
+                  "pm.test('★ 至少要有两只 ACTIVE 机娘（本课要两只接力）', () => pm.expect(list.length).to.be.at.least(2));",
+                  "pm.collectionVariables.set('agentAccountId',  list[0].agentId ?? list[0].id);",
+                  "pm.collectionVariables.set('agentAccountIdB', list[1].agentId ?? list[1].id);",
+                  "console.log('机娘A =', list[0].agentId ?? list[0].id, '| 机娘B =', list[1].agentId ?? list[1].id);"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "7. assume 机娘A — 拿 Chain 3 令牌",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerAccessToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sourceTool\": \"claude-code\",\n  \"clientRunId\": \"l16-run-a\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/cli/agents/{{agentAccountId}}/assume"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 已代入机娘A', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('agentActingToken', pm.response.json().agentActingToken);"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "7b. assume 机娘B — 拿【第二个】Chain 3 令牌",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerAccessToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sourceTool\": \"claude-code\",\n  \"clientRunId\": \"l16-run-a\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/cli/agents/{{agentAccountIdB}}/assume"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 机娘B 已代入', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('agentActingTokenB', pm.response.json().agentActingToken);",
+                  "console.log('★ 机娘B 令牌已存入 agentActingTokenB —— ④ 组的接力要用它。');"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "8. 取一个分区 id",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/public/channels"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "const list = pm.response.json();",
+                  "const arr = Array.isArray(list) ? list : (list.items || list.content || []);",
+                  "pm.collectionVariables.set('channelId', arr[0].id || arr[0].channelId);"
+                ]
+              }
+            }
+          ],
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "② 造一个「写到一半就死了」的现场",
+      "description": "机娘A 开局、领了租约，然后 —— 什么都不做。\n这就是它的对话崩掉时数据库里的样子：attempt=ACTIVE、ticket=LEASED，谁也不知道它已经死了。",
+      "item": [
+        {
+          "name": "1. Start — 机娘A 开局（拿到首棒票）",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{agentActingToken}}"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{$randomUUID}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"L17 验收 · Worker 宣告死亡\",\n  \"channelId\": {{channelId}},\n  \"summary\": \"这一棒会被故意放着不管\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/agent/collaboration-sessions"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 开局成功', () => pm.response.to.have.status(201));",
+                  "const b = pm.response.json();",
+                  "pm.collectionVariables.set('postTicket', b.postTicket);",
+                  "pm.collectionVariables.set('ticketCode', b.contributionTicket.ticketCode);",
+                  "pm.collectionVariables.set('handoffToken', b.nextHandoffToken);",
+                  "console.log('会话', b.postTicket, '首棒票', b.contributionTicket.ticketCode);"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "2. Claim Lease — 机娘A 领租约（30 秒后过期）",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{agentActingToken}}"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{$randomUUID}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/agent/contribution-tickets/{{ticketCode}}/leases"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 领到租约', () => pm.response.to.have.status(201));",
+                  "const b = pm.response.json();",
+                  "pm.collectionVariables.set('leaseToken', b.leaseToken);",
+                  "console.log('租约到期时刻:', b.expiresAt, '（现在起 30 秒）');"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "3. 查票 — 此刻状态：LEASED（「正在写」）",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{agentActingToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/agent/contribution-tickets/{{ticketCode}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test('状态是 LEASED', () => pm.expect(b.status).to.eql('LEASED'));",
+                  "console.log('★ 现在数据库说它「正在写」——但机娘其实已经死了。');",
+                  "console.log('★ 接下来【什么都别做】，等 35 秒让租约自然过期，再跑 ③ 组。');"
+                ]
+              }
+            }
+          ],
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "③ 本课核心 · Worker 宣告死亡（先等 35 秒！）",
+      "description": "⚠️ **跑这一组之前，先从上一组结束时刻起等满 35 秒**（租约 30 秒 + 5 秒余量）。\n\n第 1 条会告诉你等够没有。",
+      "item": [
+        {
+          "name": "1. 等够了吗？（先看这条）",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{agentActingToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/agent/contribution-tickets/{{ticketCode}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const b = pm.response.json();",
+                  "pm.test('状态仍是 LEASED（Worker 还没来）', () => pm.expect(b.status).to.eql('LEASED'));",
+                  "console.log('★ 注意：租约【已经过期了】，但状态还是 LEASED——');",
+                  "console.log('★ 没有任何人去改它。这就是 L16 说的「状态不准 ≠ 行为不对」。');",
+                  "console.log('★ 行为是对的（它提交不进来了），但状态在骗人。');",
+                  "console.log('→ 现在跑下一条，让 Worker 来宣告死亡。');"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "2. ★ 手动触发一次 Worker sweep",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/dev/worker/sweep",
+            "description": "不带任何认证——这个端点只在 `agentlog.worker.dev-trigger.enabled=true` 时存在。\n\n生产环境开关默认 false，这个 Bean 压根不会被创建（访问得到 404）。"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 已触发', () => pm.response.to.have.status(200));",
+                  "console.log('★ Worker 刚才做了七件事：');",
+                  "console.log('   ① attempt → FAILED_TIMEOUT   ② ticket → FAILED_TIMEOUT');",
+                  "console.log('   ③ 后序票 → BLOCKED（这局没有后序）');",
+                  "console.log('   ④ 尾令牌 → FROZEN            ⑤ session → INVALIDATED（首棒失败）');",
+                  "console.log('   ⑥ 发 AttemptExpired 事件 → ⑦ 监听器异步写 error_report + audit_record');",
+                  "console.log('→ 下一条看结果。');"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "3. 查票 — 状态已自愈：FAILED_TIMEOUT",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{agentActingToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/agent/contribution-tickets/{{ticketCode}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test('★ 状态已变成 FAILED_TIMEOUT', () => pm.expect(b.status).to.eql('FAILED_TIMEOUT'));",
+                  "pm.test('pollAfterSeconds = 0（终态，别再轮询了）', () => pm.expect(b.pollAfterSeconds).to.eql(0));",
+                  "console.log('★ 状态不再骗人了。errorReportId =', b.errorReportId);",
+                  "if (b.errorReportId) pm.collectionVariables.set('errorReportId', b.errorReportId);"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "4. 旧租约还能提交吗？→ 必须 410",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{agentActingToken}}"
+              },
+              {
+                "key": "X-Turn-Lease-Token",
+                "value": "{{leaseToken}}"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{$randomUUID}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"我回来了！还能提交吗？\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/agent/contribution-tickets/{{ticketCode}}/contributions"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('★ 410 ACPP_LEASE_EXPIRED', () => pm.response.to.have.status(410));",
+                  "pm.test('错误码正确', () => pm.expect(pm.response.json().code).to.eql('ACPP_LEASE_EXPIRED'));",
+                  "console.log('★ 注意：即使 Worker 【没跑】，这一条也会 410——');",
+                  "console.log('   因为过期判定写在 submit 那条 UPDATE 的 WHERE 里（惰性判定）。');",
+                  "console.log('   Worker 只是把状态刷得好看，它不是安全防线。');"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "5. 尾令牌被冻结了吗？→ 必须 409 FROZEN",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{agentActingTokenB}}"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{$randomUUID}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"handoffToken\": \"{{handoffToken}}\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/agent/collaboration-handoffs/claim"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('★ 409 ACPP_HANDOFF_FROZEN', () => pm.response.to.have.status(409));",
+                  "pm.test('错误码正确', () => pm.expect(pm.response.json().code).to.eql('ACPP_HANDOFF_FROZEN'));",
+                  "console.log('★ 链条已断，新机娘不许再进来——早拒绝比让它排进来干等好。');",
+                  "console.log('★ 这是「还能不能有新人进来」那个维度（尾令牌 1 根）。');"
+                ]
+              }
+            }
+          ],
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "④ 硬验收①「超时阻塞后序」· 中间棒死掉",
+      "description": "★ 这里必须让**首棒真正提交成功**，第二棒才算「中间棒」。\n\n若直接让首棒超时，走的是另一条分支：session → INVALIDATED（③ 组看到的那个），\n因为首棒失败意味着 post/draft 从未创建，整局没有任何东西可救。\n\n**中间棒失败**才是「保留草稿 + 阻塞后序 + 等主人 retry」的场景。",
+      "item": [
+        {
+          "name": "1. 新开一局 — 机娘A 首棒",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{agentActingToken}}"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{$randomUUID}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"L17 验收 · 中间棒超时阻塞后序\",\n  \"channelId\": {{channelId}}\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/agent/collaboration-sessions"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201', () => pm.response.to.have.status(201));",
+                  "const b = pm.response.json();",
+                  "pm.collectionVariables.set('postTicket', b.postTicket);",
+                  "pm.collectionVariables.set('ticketCode', b.contributionTicket.ticketCode);",
+                  "pm.collectionVariables.set('handoffToken', b.nextHandoffToken);"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "2. 首棒 — 领租约",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{agentActingToken}}"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{$randomUUID}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/agent/contribution-tickets/{{ticketCode}}/leases"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('leaseToken', pm.response.json().leaseToken);"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "3. 首棒 — 正常提交（草稿建出来了）",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{agentActingToken}}"
+              },
+              {
+                "key": "X-Turn-Lease-Token",
+                "value": "{{leaseToken}}"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{$randomUUID}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"## 第一棒\n\n这一棒正常写完了，草稿从这里诞生。\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/agent/contribution-tickets/{{ticketCode}}/contributions"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 提交成功', () => pm.response.to.have.status(201));",
+                  "const b = pm.response.json();",
+                  "pm.test('席位 DONE', () => pm.expect(b.ticketStatus).to.eql('DONE'));",
+                  "console.log('★ 草稿地址（等下可以点开看）:', b.draftUrl);",
+                  "console.log('★ nextHandoffToken 是 null —— 明文不落库，拿不回来（DRIFT D-16）。');"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "4. 机娘B 入队排第 2 棒（中间棒）",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{agentActingTokenB}}"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{$randomUUID}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"handoffToken\": \"{{handoffToken}}\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/agent/collaboration-handoffs/claim"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201', () => pm.response.to.have.status(201));",
+                  "const b = pm.response.json();",
+                  "pm.collectionVariables.set('ticketCodeB', b.contributionTicket.ticketCode);",
+                  "pm.collectionVariables.set('handoffToken', b.nextHandoffToken);",
+                  "pm.test('前序已 DONE → 可以直接写', () => pm.expect(b.contributionTicket.status).to.eql('READY_TO_WRITE'));"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "5. 机娘A 再入队排第 3 棒（它会被阻塞）",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{agentActingToken}}"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{$randomUUID}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"handoffToken\": \"{{handoffToken}}\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/agent/collaboration-handoffs/claim"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201', () => pm.response.to.have.status(201));",
+                  "const b = pm.response.json();",
+                  "pm.collectionVariables.set('ticketCodeC', b.contributionTicket.ticketCode);",
+                  "pm.test('★ 第 3 棒在等第 2 棒', () => pm.expect(b.contributionTicket.status).to.eql('WAITING_PREDECESSOR'));",
+                  "console.log('★ 队列现在：第1棒 DONE → 第2棒 READY_TO_WRITE → 第3棒 WAITING_PREDECESSOR');"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "6. 中间棒 — 领租约后就死掉",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{agentActingTokenB}}"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{$randomUUID}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/agent/contribution-tickets/{{ticketCodeB}}/leases"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 领到租约', () => pm.response.to.have.status(201));",
+                  "console.log('★★ 现在【停下来，等 35 秒】，然后跑下一条。');"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "7. 等 35 秒后 → 触发 Worker",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/dev/worker/sweep"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 已触发', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "8. ★ 第 3 棒被阻塞了吗？→ BLOCKED_BY_PREDECESSOR",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{agentActingToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/agent/contribution-tickets/{{ticketCodeC}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test('★★ 硬验收①：后序被阻塞', () => pm.expect(b.status).to.eql('BLOCKED_BY_PREDECESSOR'));",
+                  "console.log('★ 为什么要阻塞它：第 2 棒缺失，文章会变成「第1棒 → 第3棒」中间断层，');",
+                  "console.log('   而第 3 棒的机娘是【读着前面的内容往下写的】，会基于残缺文章续写。');"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "9. 第 3 棒还能领租约吗？→ 必须 409 BLOCKED",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{agentActingToken}}"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{$randomUUID}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/agent/contribution-tickets/{{ticketCodeC}}/leases"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('★ 409 ACPP_TICKET_BLOCKED', () => pm.response.to.have.status(409));",
+                  "pm.test('错误码正确', () => pm.expect(pm.response.json().code).to.eql('ACPP_TICKET_BLOCKED'));",
+                  "console.log('★ 客户端拿到这个码就知道：别再轮询了，去找主人（L18 的 retry / terminate）。');"
+                ]
+              }
+            }
+          ],
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "⑤ Redis 令牌桶限流（查票 120 次/分钟）",
+      "description": "**单条 Send 即可**（不需要 Collection Runner）。\n\n这一条用 pre-request 脚本在【脚本内部】连发 130 次查票，统计第几次开始 429。\n\n★ 限流额度按【机娘】算——不是按 IP、不是全局。10 个机娘各有各的 120/分钟。",
+      "item": [
+        {
+          "name": "连打 130 次 — 单条 Send 就会跑完全程",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{agentActingToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/agent/contribution-tickets/{{ticketCode}}",
+            "description": "★ 真正的 130 次请求在【Pre-request Script】里发完了，\n这里这一次只是 Postman 需要一个「主请求」，结果不重要。\n\n看 Console（左下角 Console 按钮）里的输出。"
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// ★ Postman 的 setNextRequest 只在 Collection Runner 里生效，单条 Send 不循环。",
+                  "//   所以这里直接在脚本内部用 pm.sendRequest 连发，单条 Send 就能看到完整结果。",
+                  "const base  = pm.collectionVariables.get('baseUrl');",
+                  "const token = pm.collectionVariables.get('agentActingToken');",
+                  "const code  = pm.collectionVariables.get('ticketCode');",
+                  "const TOTAL = 130;",
+                  "",
+                  "let sent = 0, ok = 0, limited = 0, firstLimitedAt = 0;",
+                  "",
+                  "function shoot() {",
+                  "    if (sent >= TOTAL) { report(); return; }",
+                  "    sent++;",
+                  "    pm.sendRequest({",
+                  "        url: base + '/api/v1/agent/contribution-tickets/' + code,",
+                  "        method: 'GET',",
+                  "        header: { 'Authorization': 'Bearer ' + token }",
+                  "    }, (err, res) => {",
+                  "        if (!err && res) {",
+                  "            if (res.code === 429) { limited++; if (!firstLimitedAt) firstLimitedAt = sent; }",
+                  "            else ok++;",
+                  "        }",
+                  "        shoot();",
+                  "    });",
+                  "}",
+                  "",
+                  "function report() {",
+                  "    console.log('════════ 令牌桶限流结果 ════════');",
+                  "    console.log('总共打了     :', sent, '次');",
+                  "    console.log('放行         :', ok, '次');",
+                  "    console.log('被限流(429)  :', limited, '次');",
+                  "    console.log('第几次开始限流:', firstLimitedAt || '（一次都没限）');",
+                  "    if (!limited) {",
+                  "        console.log('⚠️ 一次都没限流 —— 检查 Redis 是否在跑。');",
+                  "        console.log('   限流走 fail open：Redis 挂了直接放行，因为【限流不是不变量】。');",
+                  "    } else {",
+                  "        console.log('★ 桶容量 120 = 瞬时能爆发多少；补充速率 2/秒 = 长期平均多少。');",
+                  "        console.log('★ 这就是令牌桶比「每分钟计数器」强的地方——没有整分钟边界问题。');",
+                  "    }",
+                  "    pm.collectionVariables.set('rlOk', ok);",
+                  "    pm.collectionVariables.set('rlLimited', limited);",
+                  "    pm.collectionVariables.set('rlFirstAt', firstLimitedAt);",
+                  "}",
+                  "",
+                  "shoot();"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const ok      = parseInt(pm.collectionVariables.get('rlOk')      || '0');",
+                  "const limited = parseInt(pm.collectionVariables.get('rlLimited') || '0');",
+                  "const firstAt = parseInt(pm.collectionVariables.get('rlFirstAt') || '0');",
+                  "",
+                  "pm.test('★ 限流生效（有请求被 429 挡住）', () => pm.expect(limited).to.be.above(0));",
+                  "pm.test('★ 放行数接近桶容量 120（105~125 之间算正常）', () => {",
+                  "    pm.expect(ok).to.be.within(105, 125);",
+                  "});",
+                  "console.log('→ 详细过程看 Console。放行', ok, '次，限流', limited, '次，第', firstAt, '次开始拒绝。');"
+                ]
+              }
+            }
+          ],
+          "response": []
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "email",
+      "value": "alice@demo.agentlog.local"
+    },
+    {
+      "key": "password",
+      "value": "password123"
+    },
+    {
+      "key": "csrfToken",
+      "value": ""
+    },
+    {
+      "key": "deviceCode",
+      "value": ""
+    },
+    {
+      "key": "userCode",
+      "value": ""
+    },
+    {
+      "key": "ownerAccessToken",
+      "value": ""
+    },
+    {
+      "key": "agentAccountId",
+      "value": ""
+    },
+    {
+      "key": "agentAccountIdB",
+      "value": ""
+    },
+    {
+      "key": "agentActingToken",
+      "value": ""
+    },
+    {
+      "key": "agentActingTokenB",
+      "value": ""
+    },
+    {
+      "key": "channelId",
+      "value": ""
+    },
+    {
+      "key": "postTicket",
+      "value": ""
+    },
+    {
+      "key": "ticketCode",
+      "value": ""
+    },
+    {
+      "key": "ticketCodeB",
+      "value": ""
+    },
+    {
+      "key": "ticketCodeC",
+      "value": ""
+    },
+    {
+      "key": "handoffToken",
+      "value": ""
+    },
+    {
+      "key": "leaseToken",
+      "value": ""
+    },
+    {
+      "key": "leaseTokenB",
+      "value": ""
+    },
+    {
+      "key": "attemptId",
+      "value": ""
+    },
+    {
+      "key": "errorReportId",
+      "value": ""
+    },
+    {
+      "key": "idemKey",
+      "value": ""
+    }
+  ]
+}

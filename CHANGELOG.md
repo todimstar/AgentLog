@@ -6,6 +6,95 @@
 > L06–L11.5 条目为 2026-07-09 断更补录：由 11 个挖掘子代理逐行解析 58 个会话转录（157 条变更明细，
 > 在 `docs/changelog-evidence/mine*.json`，含续档分叉去重）与 git 全史交叉核实而成。
 
+## 0.1.0-SNAPSHOT - L17 Worker、Audit、Modulith 与 Redis（一棒死了之后秩序怎么自愈 · 待提交）
+
+日期：2026-08-10　出处：`[会话 3ad9ede8]`　设计简报：`docs/decisions/0007-l17-worker-audit-modulith-redis.md`
+
+> **本课是「铁律链条模式 v2」的首次实践**（主人 2026-08-09 与同学讨论后升级）：
+> 旧链条把讲义/视频排在实现之后，导致主人每课都在「生吃一大坨代码」。
+> 新链条在实现前插了三步——**黑板课**（讲透新概念地基）→ **辩论**（主人主驾、质疑我）→ **施工蓝图**（先给文件清单与骨架）。
+> 实证有效：苏格拉底带练 **6 题全对**（L16 是 6 题错 1，因为概念没讲就出题），
+> 且主人在蓝图评审阶段就问出了「那道闸门是不是多余」这种**本该在代码 review 才发现**的问题。
+
+### Added
+
+- **V014 三张表**（`db/migration/V014__create_reliability_audit_events.sql`）：
+  - `error_report`：一次事故的现场（卡在哪 / 为什么 / **`suggested_actions_json` 建议怎么办**）。只在失败时写。
+  - `audit_record`：动作流水（谁、何时、做了什么）。每个动作都写，成功也写。**不含正文**——内容历史归 `post_version`（L06）与 `draft_revision`（L19）。
+  - `EVENT_PUBLICATION`：Spring Modulith **事务性发件箱**（列定义对齐 `spring-modulith-events-jdbc-1.4.11` 的 `schema-mysql.sql`）。
+  - 补 V013 承诺的外键 `fk_attempt_error`（V013 建列时 `error_report` 表还不存在）。
+  - **两张流水表与状态表的三处不同**（本课建模教学点）：① 只有 `created_at`、**没有 `updated_at`/`version`**（只 INSERT 永不 UPDATE，历史不能改）② **没有唯一键**（同一件事可能发生两次，retry 后再失败一次）③ 大量可空列 + JSON 兜底。
+  - **JSON 列的规矩**：需要**查**的字段必须提成正式列，只是"看一眼"的细节才进 JSON——否则表会变成五十列、四十列永远是 NULL。
+- **`reliability` 模块**（Worker 的家）：
+  - `ExpiredAttemptWorker`：`@Scheduled(fixedDelay=PT30S)`，只做「拿活 + 分发」，**逐条 try/catch**。
+  - `ExpireAttemptService.expireOne()`：**每条一个独立 `@Transactional`** —— 这是**毒丸消息（poison pill）防线**（见 Changed）。八步：闸门 → 取上下文 → ticket 超时 → 后序阻塞 → 冻结尾令牌 → session 推进 → 写 error_report → 发事件。
+  - `ExpiredAttemptScanMapper`：**故意不继承 `BaseMapper`**——避免暴露 `updateById` 这种绕过闸门的写法（同 L16 给 DO 不加 `@Version` 的思路）。
+  - `WorkerDevController`：`POST /api/v1/dev/worker/sweep` 手动触发一次扫描，`@ConditionalOnProperty` 仅 dev 开启（主人验收用，免等 30 秒）。
+- **`audit` 模块**（事件的第一个消费者）：`AuditListener` 用 `@ApplicationModuleListener` 监听两个事件，写 `audit_record`。
+- **`shared/event`**：`AttemptExpired` / `ContributionSubmitted` 两个领域事件（定义放共享层，因为发布方与监听方分属不同模块）。
+- **`shared/ratelimit`**：Redis 令牌桶限流。`@RateLimit` 注解 + 切面 + Lua 脚本（照搬 Pack `10-reliability/redis-token-bucket.lua`）。挂在 `claim handoff`(30/min) 与 `查票状态`(120/min) 两个端点。
+- **测试 +6**（`WorkerIntegrationTest`）：时区探针 / 中间棒超时阻塞后序（**硬验收①**）/ 首棒超时 INVALIDATED 且无草稿 / 两 Worker 不重复（**硬验收②**）/ Worker 与 submit 竞争 / 审计写入。
+
+### Changed
+
+- 🔴 **蓝图 TX-06 的「批处理」→「每条独立小事务」**（DRIFT D-17 第 2 条）：
+  Pack `04-database/transaction-boundaries.md` 的 TX-06 只给了扫描 SQL 与逐条要做的事，**没说事务边界**。
+  若 50 条放一个大事务：**第 23 条炸 → 整批回滚 → 30 秒后又扫到同样 50 条 → 又在第 23 条炸 → 永久卡死**，那 49 条正常的永远处理不了。
+  这个故障模式叫**毒丸消息**。解法：每条一个小事务 + Worker 侧 try/catch 兜住，坏的记日志跳过。
+- 🔴 **扫描 SQL 的 `NOW(3)` → 应用时钟 `#{now}`**（续 D-15 的时区教训）：
+  **且此处比 L16 更危险**——L16 submit 判错会「该拒的放过」，测试**立刻红**；
+  L17 Worker 判错只是「少捞/多捞几条」，测试**静默通过**（只验"能捞到"，捞的时机偏 8 小时也过）。
+  → 专门写探针：造**刚过期 1 秒**的 attempt 断言能捞到，时区一错立刻红。
+- **`@EnableScheduling` 补在 `AgentLogApplication`**：此前只有 `@EnableAsync`，`@Scheduled` 根本不会触发。
+- **12 个既有测试类补齐 `withUrlParam("serverTimezone","UTC")`**：L15 就欠着（progress-pointer 记的「其余 6 个」实为 **12 个**，含 `FlywayMigrationTest`）。L17 起 Worker 按时间扫表，不统一会「本地过、CI 挂」。
+- **`ApiStatus` +1**：`RATE_LIMIT_EXCEEDED`(429)。
+- **`SubmitContributionService` 补发 `ContributionSubmitted` 事件**——还 L16 TX-05 第 11 步的账。
+  ⚠️ 注意边界：**状态推进仍在原事务内同步完成**，事件只承载派生的审计行为。
+- 🔴 **`CollaborationFacade`——被 `ModularityTest` 打红之后才补的模块边界**（DRIFT D-17 第 9 条）：
+  施工蓝图里我把 `ExpireAttemptService`（含七步状态推进）放在 `reliability`，结果 `ModularityTest` 一次跑出 **12 条违规**——
+  Worker 要改 attempt/ticket/session 就得 import collaboration 的 Mapper 与 DO，而那些在**私有子包**里。
+  **修法**（与 L16 的 `ContentFacade` 同构）：collaboration **模块根包**开 `CollaborationFacade`（`lockExpiredAttempts` + `expireAttempt`），
+  实现类 `ExpireAttemptFacadeImpl` 留私有子包，`ExpiredAttemptScanMapper` 与 XML 一并搬回 collaboration；
+  `reliability.ExpireAttemptService` 改为**只监听 `AttemptExpired` 写 error_report**。
+  **★ 修完之后才想清楚的判据：「何时做」归 reliability，「做什么」归 collaboration。**
+  那七步全是 ACPP 协议自己的状态机推进（collaboration 的领域知识）；reliability 只负责触发时机（定时扫描、批量占有、毒丸隔离）。
+  这个分工顺带给 L18 的 retry 留好了落点。
+  **教训**：`ModularityTest`（L02 建的）的价值在这里兑现——**边界不靠自觉，靠机器强制**。人在赶工时一定会顺手 import；测试不红，这个设计缺陷会一直留在代码里。
+
+### Fixed
+
+- **`expireOne` 的两处代码缺陷**（施工期自查发现，非测试打红）：
+  ① 第 ⑦ 步 `errorReportMapper.insert` 之后重复调了一次 `markAttemptTimeout` —— 此时 attempt 已是 `FAILED_TIMEOUT`，条件 UPDATE 影响 0 行，是**死代码**；
+  ② 发事件时 `agentId` 写成 `attempt.getAttemptNo() != null ? ticket.getRequiredAgentId() : null` —— `attemptNo` 与「有没有 agentId」毫无关系，是 copy-paste 残留，直接取 `ticket.getRequiredAgentId()`。
+- **登录密码错误返回 500 而不是 401**（L05 遗留，主人验收 L17 时输错一次密码撞出来）：
+  `WebAuthController` 在 **Controller 内部**手动调 `authenticationManager.authenticate()`，
+  抛出的 `AuthenticationException` 不经过 Security 的 `ExceptionTranslationFilter`
+  （那个翻译器在过滤器链上，管不着已进入 Controller 的异常），于是落到 `@ExceptionHandler(Exception.class)` 兜底 → 500。
+  代码里原有注释写着「交给 Security 翻成 401」，**这个假设一直是错的**。
+  修法：新增 `CREDENTIALS_INVALID`(401) + `@ExceptionHandler(AuthenticationException.class)`。
+  两个细节：① **不区分「用户不存在」与「密码错误」**（区分开会变成账号枚举探测器，同 ACPP 跨租户一律 404 的思路）；
+  ② 日志只记一行不打堆栈——密码错是预期内的业务分支，不是故障，打堆栈会让真故障淹没在噪音里。
+  `WebAuthIntegrationTest` 4 条仍绿。
+- **测试 `timeoutBlocksSuccessors` 自己写错**（被打红后修正，**代码是对的**）：
+  我给测试起名"后序阻塞"，用的却是**首棒**超时 —— 按设计首棒失败必然走 `INVALIDATED`（草稿从未建出来，整局作废），
+  期望 `PAUSED_ON_ERROR` 自然对不上。修正为：**先让首棒真正 submit 成功**，第二棒才算"中间棒"。
+  ★ 这条错误本身有教学价值：**「中间棒失败」与「首棒失败」是两条不同的分支**，测试名必须与它实际走的分支一致。
+- **`twoWorkersDoNotDuplicateProcessing` 的断言改成同步证据**（Facade 重构后暴露的测试缺陷）：
+  原来只断言 `error_report` 有 1 条，但重构后 error_report 改由**异步监听器**写——
+  测试要么偶发红（还没写完），要么**测的其实是"发件箱投递了几次"而不是"Worker 宣告了几次"**。
+  改为：两个线程各调一次 `expireAttempt`，**断言恰好一个返回 true**（闸门只放行一个，同步、确定）；
+  异步的 error_report 数量作为**补充**证据（等发件箱完成后再断言）。
+  ★ 判据：**并发测试的主断言必须是同步且确定的**，异步产物只能当辅证。
+
+### 💼 面试故事（30-33）
+
+- **30 · 数据库当任务队列**：多实例 Worker 怎么不重复干活？不用 Redis 分布式锁（Pack 明确禁止「用 Redis 锁替代数据库状态机」）、不用选主，用 **`FOR UPDATE SKIP LOCKED`** —— 已被别人锁住的行**不等，直接跳过去拿下一批**。没有它，实例2 会排队等实例1，两个 Worker 变成串行。金句：**「`SKIP LOCKED` 把数据库的行变成了一个天然的任务队列。」**
+- **31 · 毒丸消息**：批处理里一条坏数据会怎样？大事务下会**永久卡死整个队列**（回滚 → 重扫 → 再炸）。解法是每条独立事务 + 外层 catch 跳过。金句：**「一条坏数据不该毒死整个队列。」**
+- **32 · 事务性发件箱**：「业务成功了，通知一定不会丢」怎么保证？事件和业务数据**在同一个事务里落库**（`EVENT_PUBLICATION` 表），监听器成功则完成、失败则留存重投。同时要说清**边界**：**不变量永远由数据库状态机守，事件只做派生行为**——事件是异步的，不能用来守不变量。
+- **33 · 一个思想的三种形态**：L15 条件 UPDATE（改已有的行，`affectedRows` 裁决）· L16 抢占 INSERT（建全新的行，唯一键冲突裁决）· L17 **Redis Lua 脚本**（限流令牌桶）。三种实现、一个道理：**让"检查"和"动作"在一个不可分割的单位里完成**，中间不留 TOCTOU 缝隙。附带能答「为什么限流可以放 Redis 而闸门不行」——**限流不是不变量，少限多限几次不会导致数据错乱**。
+
+---
+
 ## 0.1.0-SNAPSHOT - L16 Wait、Attempt 与 Lease（一棒怎么写 · 待提交）
 
 日期：2026-08-02　出处：`[会话 3ad9ede8]`（继承 L15 会话 `53f5f3e5` 的上下文与讲解风格）
