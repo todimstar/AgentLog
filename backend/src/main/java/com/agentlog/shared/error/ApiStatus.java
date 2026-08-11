@@ -34,6 +34,15 @@ public enum ApiStatus {
     VERIFICATION_CODE_INVALID(HttpStatus.BAD_REQUEST, "VERIFICATION_CODE_INVALID", "验证码错误"),
     CODE_SEND_TOO_FREQUENT(HttpStatus.TOO_MANY_REQUESTS, "CODE_SEND_TOO_FREQUENT", "验证码已发送，请稍后再试"),
     LOGIN_LOCKED(HttpStatus.TOO_MANY_REQUESTS, "LOGIN_LOCKED", "登录失败次数过多，账号已临时锁定，请稍后再试"),
+    // ★ L17 补（主人验收 L17 时发现的 L05 遗留 bug）：密码错误原本返回 500 INTERNAL_ERROR。
+    //   根因：WebAuthController 在【Controller 内部】手动调 authenticationManager.authenticate()，
+    //   抛出的 AuthenticationException 不经过 Security 的 ExceptionTranslationFilter
+    //   （那个翻译器在过滤器链上，管不着已经进了 Controller 的异常），于是落到 Exception 兜底 → 500。
+    //   ★ 为什么必须修：500 的语义是「服务器坏了，重试吧」，而真相是「你密码打错了」——
+    //     这个错误码在说谎，且客户端无法自愈（这正是 L13 起 recoveryActions 那套设计要避免的）。
+    //   ★ 为什么不区分「用户不存在」和「密码错误」：会变成账号枚举探测器
+    //     （攻击者靠错误码差异就能筛出哪些邮箱已注册）。统一口径，同 ACPP 跨租户一律 404 的思路。
+    CREDENTIALS_INVALID(HttpStatus.UNAUTHORIZED, "CREDENTIALS_INVALID", "邮箱或密码错误"),
 
     // —— 设备配对（L12 identity/pairing）——
     PAIRING_NOT_FOUND(HttpStatus.NOT_FOUND, "PAIRING_NOT_FOUND", "配对请求不存在"),
@@ -99,6 +108,16 @@ public enum ApiStatus {
             "同一 Idempotency-Key 被用于不同的请求内容，请换一个新的 key"),
     IDEMPOTENCY_KEY_REQUIRED(HttpStatus.BAD_REQUEST, "IDEMPOTENCY_KEY_REQUIRED",
             "本端点要求携带 Idempotency-Key 请求头"),
+
+    // —— 接口限流（L17 Redis 令牌桶）——
+    // 429 Too Many Requests：同一个机娘在短时间内请求次数超过额度。
+    // 判据：这个计数错了【不会】破坏任何不变量（多放几次没有数据后果）→ 放在 Redis 令牌桶。
+    // 对比：登录锁定（LOGIN_LOCKED 429）是安全不变量（多放一次 = 攻击者多一次猜密码机会）→ 放在 MySQL。
+    // ★ 三种 429 的分工（本项目特色）：
+    //   CODE_SEND_TOO_FREQUENT / LOGIN_LOCKED → 安全/成本不变量，MySQL 守
+    //   RATE_LIMIT_EXCEEDED                   → 容量保护，Redis 令牌桶（可以不准）
+    RATE_LIMIT_EXCEEDED(HttpStatus.TOO_MANY_REQUESTS, "RATE_LIMIT_EXCEEDED",
+            "请求频率超过限额，请稍后重试"),
     ;
 
     private final HttpStatus status;

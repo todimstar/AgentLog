@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.agentlog.collaboration.infrastructure.persistence.mapper.ExpiredAttemptScanMapper">
+
+    <!--
+      ★★★ L17 Worker 的核心扫描 ★★★
+
+      为什么这里用 FOR UPDATE SKIP LOCKED，而 L15/L16 用「一条 UPDATE + affectedRows」：
+        条件 UPDATE 把"检查"和"动作"合进一条语句，前提是整件事只有【一步】。
+        Worker 处理一条过期 attempt 要做七八件事（改 ticket / 后序 / 令牌 / session /
+        写 error_report / 发事件……），根本无法塞进一条 SQL。
+        所以必须先「声明所有权」（FOR UPDATE 锁住），再逐步执行。
+
+      SKIP LOCKED：同时运行的另一个 Worker 实例遇到被锁的行直接跳过，去拿下一批。
+        → 数据库的行天然形成任务队列，不需要 Redis 锁或消息队列。
+
+      ★ 用 #{now} 而不是 NOW(3)：
+        lease_expires_at 是 Java 写进去的 DATETIME，NOW(3) 是数据库自己的时钟，
+        时区口径由 JDBC 参数决定，测试容器不带 serverTimezone=UTC 时差 8 小时。
+        这里的判断方向（<）比 L16 submit 的（>=）更危险：
+          L16 判错后测试立刻红（该拒的放过）；
+          L17 判错只会静默少捞/多捞——所以需要专门的时区探针测试。
+    -->
+    <select id="lockExpiredAttempts" resultType="long">
+        SELECT id
+        FROM contribution_attempt
+        WHERE status          = 'ACTIVE'
+          AND lease_expires_at &lt; #{now}
+        ORDER BY lease_expires_at
+        LIMIT #{batchSize}
+        FOR UPDATE SKIP LOCKED
+    </select>
+
+    <!--
+      expireOne 的闸门：一条条件 UPDATE，与 L15/L16 的闸门是同一个思想。
+
+      为什么 expireOne 还要再校验一次，明明 lockExpiredAttempts 已经找到这个 id：
+        lockExpiredAttempts 的 FOR UPDATE 在那个事务结束时就放锁了；
+        到 expireOne 开始时，另一个 Worker 实例（或同一实例重启后）可能已经处理了
+        同一条 attempt（status 已经是 FAILED_TIMEOUT）。
+        闸门只防 Worker 之间互相踩，不防机娘 submit
+        （因为 lease_expires_at < now 与 submit 要求的 lease_expires_at >= now 互斥）。
+    -->
+    <update id="markAttemptTimeout">
+        UPDATE contribution_attempt
+        SET status      = 'FAILED_TIMEOUT',
+            finished_at = #{now},
+            updated_at  = #{now}
+        WHERE id              = #{attemptId}
+          AND status          = 'ACTIVE'
+          AND lease_expires_at &lt; #{now}
+    </update>
+
+    <update id="markTicketTimeout">
+        UPDATE contribution_ticket
+        SET status     = 'FAILED_TIMEOUT',
+            updated_at = #{now},
+            version    = version + 1
+        WHERE id = #{ticketId}
+    </update>
+
+    <!--
+      冻结后序：wakeSuccessor 的镜像（SubmitContributionService 里那个是"放行"，这里是"阻塞"）。
+      status 写进 WHERE：只阻塞等待中的后序，DONE / LEASED / BLOCKED 状态的票不动。
+      predecessor_ticket_id 是因果链的边——谁的前序是超时的那一棒，谁就被阻塞。
+    -->
+    <update id="blockSuccessors">
+        UPDATE contribution_ticket
+        SET status     = 'BLOCKED_BY_PREDECESSOR',
+            updated_at = #{now},
+            version    = version + 1
+        WHERE predecessor_ticket_id = #{predecessorTicketId}
+          AND status                = 'WAITING_PREDECESSOR'
+    </update>
+
+    <!--
+      冻结尾令牌（永远只有 1 根）。
+      通过 session_id 找到会话现在的尾令牌，把 AVAILABLE 的那根改成 FROZEN。
+      为什么不是「把所有 AVAILABLE 令牌都冻」：已消费的令牌（CONSUMED）是终态，不用动；
+      尾令牌是唯一还挂着 AVAILABLE 的那根。
+    -->
+    <update id="freezeTailToken">
+        UPDATE handoff_token ht
+          JOIN collaboration_session cs ON cs.tail_handoff_token_id = ht.id
+        SET ht.status     = 'FROZEN',
+            ht.version    = ht.version + 1
+        WHERE cs.id        = #{sessionId}
+          AND ht.status    = 'AVAILABLE'
+    </update>
+
+</mapper>

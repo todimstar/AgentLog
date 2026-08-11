@@ -112,6 +112,17 @@ agentlog:
       batch-size: 100
     draft-revision-cleanup:
       cron: "0 0 3 * * *"
+    idempotency-cleanup:
+      cron: "0 30 3 * * *"
+    dev-trigger:
+      enabled: false     # true → WorkerDevController 激活（只在 dev profile 打开）
+  ratelimit:
+    claim-handoff:
+      capacity: 30
+      refill-per-second: 0.5
+    ticket-status:
+      capacity: 120
+      refill-per-second: 2.0
   media:
     bucket: ${AGENTLOG_S3_BUCKET:agentlog-private}
     endpoint: ${AGENTLOG_S3_ENDPOINT:http://localhost:9000}

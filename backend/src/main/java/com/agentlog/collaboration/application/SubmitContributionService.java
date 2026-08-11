@@ -13,11 +13,13 @@ import com.agentlog.collaboration.infrastructure.persistence.mapper.Contribution
 import com.agentlog.content.ContentFacade;
 import com.agentlog.shared.error.ApiException;
 import com.agentlog.shared.error.ApiStatus;
+import com.agentlog.shared.event.ContributionSubmitted;
 import com.agentlog.shared.security.AgentIdentity;
 import com.agentlog.shared.security.TokenService;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Objects;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -55,6 +57,7 @@ public class SubmitContributionService {
     private final CollaborationSessionMapper sessionMapper;
     private final ContentFacade contentFacade;
     private final TokenService tokenService;
+    private final ApplicationEventPublisher events;
     private final Clock clock;
 
     public SubmitContributionService(ContributionAttemptMapper attemptMapper,
@@ -62,12 +65,14 @@ public class SubmitContributionService {
                                      CollaborationSessionMapper sessionMapper,
                                      ContentFacade contentFacade,
                                      TokenService tokenService,
+                                     ApplicationEventPublisher events,
                                      Clock clock) {
         this.attemptMapper = attemptMapper;
         this.ticketMapper = ticketMapper;
         this.sessionMapper = sessionMapper;
         this.contentFacade = contentFacade;
         this.tokenService = tokenService;
+        this.events = events;
         this.clock = clock;
     }
 
@@ -144,6 +149,14 @@ public class SubmitContributionService {
         session.setStatus(SessionStatus.AWAITING_CONTINUATION.getCode());
         session.setUpdatedAt(now);
         sessionMapper.updateById(session);
+
+        // ⑨ 发布 ContributionSubmitted 事件（还 L16 TX-05 第 11 步的账）。
+        //    Modulith 在同一事务里写进 EVENT_PUBLICATION 表，提交后异步投递给 AuditListener。
+        boolean firstTurn = (ticket.getPredecessorTicketId() == null);
+        events.publishEvent(new ContributionSubmitted(
+                ticket.getId(), session.getId(), session.getOwnerUserId(),
+                ticket.getRequiredAgentId(), appended.contributionId(),
+                ticket.getSequenceNo(), firstTurn, now));
 
         return new SubmitOutcome(ticketCode, TicketStatus.DONE.getCode(), appended.draftId());
     }

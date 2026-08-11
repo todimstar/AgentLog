@@ -13,6 +13,7 @@ import com.agentlog.collaboration.application.StartCollaborationService;
 import com.agentlog.collaboration.application.SubmitContributionService;
 import com.agentlog.collaboration.application.TicketStatusService;
 import com.agentlog.shared.idempotency.Idempotent;
+import com.agentlog.shared.ratelimit.RateLimit;
 import com.agentlog.shared.security.AgentIdentity;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Value;
@@ -94,6 +95,7 @@ public class AgentCollaborationController {
     @PostMapping("/collaboration-handoffs/claim")
     @ResponseStatus(HttpStatus.CREATED)
     @Idempotent
+    @RateLimit(scope = RateLimit.Scope.CLAIM_HANDOFF)
     public StartCollaborationResponse claimHandoff(
             @AuthenticationPrincipal AgentIdentity principal,
             @Valid @RequestBody ClaimHandoffRequest request) {
@@ -107,6 +109,7 @@ public class AgentCollaborationController {
      * 一个机娘可能要等十几分钟，把等待成本放在最便宜的一侧。
      */
     @GetMapping("/contribution-tickets/{ticketCode}")
+    @RateLimit(scope = RateLimit.Scope.TICKET_STATUS)
     public TicketStatusView ticketStatus(
             @AuthenticationPrincipal AgentIdentity principal,
             @PathVariable String ticketCode) {
