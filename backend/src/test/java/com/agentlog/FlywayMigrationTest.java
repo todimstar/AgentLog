@@ -37,7 +37,7 @@ class FlywayMigrationTest {
     @Container
     @ServiceConnection // Spring Boot 3 的魔法：自动把这个容器的 url/user/password 注入数据源，
                        // 无需手写 spring.datasource.url。底层等价于老写法 @DynamicPropertySource 手动塞属性。
-    static MySQLContainer<?> mysql = new MySQLContainer<>("mysql:8.0");
+    static MySQLContainer<?> mysql = new MySQLContainer<>("mysql:8.0").withUrlParam("serverTimezone", "UTC");
 
     // @JdbcTest 默认会执行 Flyway 迁移（因为 classpath 上有 flyway 且 enabled）。
     // 容器是空库 → Flyway 会从 V001 开始跑，跑完 user_account 就该存在。

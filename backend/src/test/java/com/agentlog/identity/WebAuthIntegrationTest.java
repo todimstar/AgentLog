@@ -38,7 +38,8 @@ class WebAuthIntegrationTest {
 
     @Container
     @ServiceConnection
-    static MySQLContainer<?> mysql = new MySQLContainer<>("mysql:8.0");
+    static MySQLContainer<?> mysql = new MySQLContainer<>("mysql:8.0")
+            .withUrlParam("serverTimezone", "UTC");
 
     @Container
     static GenericContainer<?> redis =
