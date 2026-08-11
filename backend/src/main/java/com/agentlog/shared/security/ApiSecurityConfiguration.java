@@ -48,7 +48,10 @@ public class ApiSecurityConfiguration {
                                 // L12：CLI 配对两端点匿名调用（CLI 无 Cookie/CSRF token），豁免 CSRF。
                                 // 注意只豁免这两个 CLI 端点；/web/device-pairings/confirm 仍需 CSRF（浏览器写）。
                                 "/api/v1/cli/device-pairings",
-                                "/api/v1/cli/device-pairings/token"))
+                                "/api/v1/cli/device-pairings/token",
+                                // L17：dev 触发端点（Postman/curl 直调，无 Cookie 无 CSRF token）。
+                                // 同上：Bean 本身受 @ConditionalOnProperty 保护，默认根本不存在。
+                                "/api/v1/dev/**"))
                 // Session 策略：需要时创建（登录后保存认证用）。区别于旧项目的 STATELESS。
                 .sessionManagement(session -> session
                         .sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
@@ -68,6 +71,12 @@ public class ApiSecurityConfiguration {
                         // Swagger UI 接口文档查看器：放行【文档页】本身（本地调试用）。
                         // 注意：只放行文档页，业务接口仍需登录+CSRF——安全没松。生产环境应按 profile 收紧。
                         .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**").permitAll()
+                        // L17：手动触发 Worker sweep 的 dev 端点（免等 30 秒轮询）。
+                        // ★ 双重保险：① Controller 上 @ConditionalOnProperty，默认 false，
+                        //   开关不打开这个 Bean 压根不存在（访问得到 404 而非 401）；
+                        //   ② 这里放行只是让开关打开时不必再带登录态。
+                        //   生产环境两个条件都不满足 —— 开关默认关，且不该配 true。
+                        .requestMatchers("/api/v1/dev/**").permitAll()
                         // 其余一律需要登录（区别于 L01 的 denyAll——那时连登录都没有）
                         .anyRequest().authenticated())
                 // 未认证访问受保护资源时返回 401（语义："不知道你是谁，去登录"）。
