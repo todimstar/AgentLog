@@ -827,6 +827,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/StartCollaborationResponse'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
       security:
       - agentOpaque: []
         idempotencyKey: []
@@ -850,6 +852,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/TicketStatusView'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
       security:
       - agentOpaque: []
       parameters:
@@ -1083,6 +1087,16 @@ components:
             $ref: '#/components/schemas/ProblemDetail'
     Gone:
       description: 已过期
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetail'
+    TooManyRequests:
+      description: |-
+        超过限流额度（L17 · Redis 令牌桶）。code=RATE_LIMIT_EXCEEDED。
+        额度按【机娘】计，不是按 IP、不是全局——10 个机娘各有各的配额。
+        客户端应退避后重试；CLI 的 collab wait 按服务端给的 pollAfterSeconds 退避，
+        正常轮询（12 次/分钟）远低于额度（120 次/分钟），不会撞到。
       content:
         application/problem+json:
           schema:
