@@ -86,7 +86,7 @@ public class ExpireAttemptFacadeImpl implements CollaborationFacade {
         Instant now = Instant.now(clock);
 
         // ① ★闸门★（防的是另一个 Worker，不是机娘——理由见类注释）
-        if (scanMapper.markAttemptTimeout(attemptId, now) == 0) {
+        if (scanMapper.markAttemptTimeout(attemptId, now) == 0) {//会update attempt的状态从Active变成timeout，0则是已经被处理
             log.debug("attempt {} 已被其他 Worker 处理，跳过", attemptId);
             return false;
         }

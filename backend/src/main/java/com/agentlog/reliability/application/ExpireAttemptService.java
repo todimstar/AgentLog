@@ -44,7 +44,7 @@ public class ExpireAttemptService {
     }
 
     @ApplicationModuleListener
-    public void onAttemptExpired(AttemptExpired e) {
+    public void onAttemptExpired(AttemptExpired e) {//整个函数就是更新error表和关联外键的attempt表中字段
         Instant now = Instant.now(clock);
 
         ErrorReportDO r = new ErrorReportDO();

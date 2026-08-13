@@ -1,0 +1,688 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>L17 代码陪读 · 导游版</title>
+<style>
+:root{--bg:#1e1f22;--panel:#2b2d30;--panel2:#232528;--line:#3c3f43;--txt:#dfe1e5;--dim:#9aa0a6;
+  --acc:#7f6fff;--acc2:#4fc3f7;--ok:#57c597;--warn:#e0a14c;--bad:#e06c75;--hl:#3a3f52;--cm:#7a8290}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--txt);
+  font:14px/1.75 "Segoe UI","PingFang SC","Microsoft YaHei",system-ui,sans-serif}
+a{color:var(--acc2)}
+header{padding:14px 20px;background:var(--panel);border-bottom:1px solid var(--line);
+  display:flex;align-items:center;gap:16px;flex-wrap:wrap;position:sticky;top:0;z-index:20}
+header b{font-size:16px}
+.badge{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:2px 10px;font-size:12px;color:var(--dim)}
+.intro{padding:16px 20px;background:var(--panel2);border-bottom:1px solid var(--line);font-size:13px}
+.intro .r{color:var(--warn)}
+main{display:grid;grid-template-columns:270px 1fr;min-height:calc(100vh - 120px)}
+nav{background:var(--panel2);border-right:1px solid var(--line);padding:12px 0;overflow-y:auto;
+  max-height:calc(100vh - 60px);position:sticky;top:60px}
+nav .chap{padding:10px 14px 4px;font-size:11px;color:var(--acc);letter-spacing:.5px;font-weight:700}
+nav a.stop{display:block;padding:6px 14px 6px 20px;font-size:12.5px;color:var(--dim);
+  text-decoration:none;border-left:3px solid transparent;cursor:pointer}
+nav a.stop:hover{background:#2f3236;color:var(--txt)}
+nav a.stop.on{background:#33364a;color:#fff;border-left-color:var(--acc)}
+nav a.stop .tag{font-size:10px;padding:1px 5px;border-radius:6px;margin-left:4px}
+.tag.n{background:#2c4a3c;color:var(--ok)}
+.tag.m{background:#4a412c;color:var(--warn)}
+.tag.k{background:#4a2c3c;color:var(--bad)}
+section.stop{display:none;padding:20px 26px 60px}
+section.stop.on{display:block}
+h2{margin:0 0 4px;font-size:19px}
+.path{font-family:Consolas,monospace;font-size:12px;color:var(--dim);margin-bottom:14px;word-break:break-all}
+.why{background:#252a35;border-left:3px solid var(--acc2);padding:10px 14px;margin:12px 0;border-radius:0 6px 6px 0}
+.okb{background:#22322b;border-left:3px solid var(--ok);padding:10px 14px;margin:12px 0;border-radius:0 6px 6px 0}
+.warnb{background:#332c22;border-left:3px solid var(--warn);padding:10px 14px;margin:12px 0;border-radius:0 6px 6px 0}
+.badb{background:#33242a;border-left:3px solid var(--bad);padding:10px 14px;margin:12px 0;border-radius:0 6px 6px 0}
+pre.code{background:#1b1c1f;border:1px solid var(--line);border-radius:8px;padding:12px 0;
+  overflow-x:auto;font-family:"JetBrains Mono",Consolas,monospace;font-size:12.5px;line-height:1.75;margin:12px 0}
+pre.code .row{display:flex;padding:0 12px}
+pre.code .row.hl{background:var(--hl)}
+pre.code .no{color:#5b6068;min-width:44px;text-align:right;padding-right:14px;user-select:none;flex:none}
+pre.code .src{white-space:pre;flex:1}
+.cm{color:var(--cm)}.kw{color:#c678dd}.st{color:#98c379}.nu{color:#d19a66}.fn{color:#61afef}
+table{border-collapse:collapse;width:100%;margin:12px 0;font-size:13px}
+th,td{border:1px solid var(--line);padding:7px 10px;text-align:left;vertical-align:top}
+th{background:var(--panel2);color:var(--acc2)}
+code{background:#2a2c30;padding:1px 5px;border-radius:4px;font-family:Consolas,monospace;font-size:12.5px}
+.nav-btm{display:flex;justify-content:space-between;gap:12px;margin-top:26px;padding-top:16px;border-top:1px solid var(--line)}
+button{background:var(--panel);color:var(--txt);border:1px solid var(--line);border-radius:8px;
+  padding:8px 16px;cursor:pointer;font-size:13px}
+button:hover{background:#34373b}
+button:disabled{opacity:.35;cursor:not-allowed}
+.chip{display:inline-block;background:var(--panel2);border:1px solid var(--line);border-radius:8px;
+  padding:2px 8px;font-size:11.5px;color:var(--dim);margin-right:6px}
+.flow{font-family:Consolas,monospace;font-size:12.5px;line-height:1.9;white-space:pre;
+  background:#1b1c1f;border:1px solid var(--line);border-radius:8px;padding:12px 14px;margin:12px 0;overflow-x:auto}
+.k2{color:var(--acc2)}.g2{color:var(--ok)}.r2{color:var(--bad)}.y2{color:var(--warn)}.d2{color:var(--dim)}
+</style>
+</head>
+<body>
+<header>
+  <b>🧭 L17 代码陪读 · 导游版</b>
+  <span class="badge">Worker、Audit、Modulith 与 Redis</span>
+  <span class="badge" id="cnt">—</span>
+  <span class="badge">左侧按顺序走，或直接跳到想看的文件</span>
+</header>
+
+<div class="intro">
+  <b>这份产物解决什么问题</b>：视频讲<b>大体设计</b>，讲义讲<b>重难点巧思</b>，
+  但「本课到底改了哪些文件、每个文件的代码长什么样、它们之间怎么串起来」——这是<b>陪读</b>的活。
+  <br>
+  <b>怎么用</b>：按左侧顺序一站一站走。每站告诉你<span class="r">① 这个文件是干什么的 ② 代码里哪几行值得停下来 ③ 它和别的文件怎么呼应</span>。
+  简单的地方我只说"看这里的注释"（代码里早写好了，不重复）；难的、有巧思的、跨文件的，我详讲。
+  <br>
+  <span class="chip">🆕 新增</span><span class="chip">🔧 修改</span><span class="chip">★ 难点/巧思</span>
+  行号都是<b>真实行号</b>，可以直接在 IDE 里跳过去对照。
+</div>
+
+<main>
+  <nav id="nav"></nav>
+  <div id="stage"></div>
+</main>
+
+<script>
+/* ═══════════════ 陪读站点数据 ═══════════════ */
+const STOPS=[];
+
+/* ═══════════════ L17 陪读站点数据 ═══════════════ */
+
+STOPS.push({chap:'0 · 出发前',nav:'阅读顺序为什么这样排',title:'0 · 出发前：这一课的 30 个文件怎么读',
+ path:'—',
+ body:`<div class="why"><b>这一课的文件比前两课都多</b>（3 张表、2 个新模块、4 个限流文件）。
+ 但它们的关系其实是一条直线——<b>顺着「一棒死掉之后发生了什么」走一遍就全懂了</b>。</div>
+ <div class="flow"><span class="d2">① 数据层</span>   V014 三张表                    <span class="d2">← 先认识"东西"</span>
+   ↓
+<span class="d2">② 扫描 SQL</span>  FOR UPDATE SKIP LOCKED         <span class="d2">← 本课技术核心</span>
+   ↓
+<span class="d2">③ 边界</span>     CollaborationFacade            <span class="y2">← 我被机器打红的地方</span>
+   ↓
+<span class="d2">④ 七步</span>     ExpireAttemptFacadeImpl        <span class="d2">← 状态怎么流转</span>
+   ↓
+<span class="d2">⑤ Worker</span>    定时器 + 毒丸防线               <span class="d2">← 只做两件事</span>
+   ↓
+<span class="d2">⑥ 事件链</span>   事件定义 → 两个监听器            <span class="y2">← 你问的那个矛盾在这</span>
+   ↓
+<span class="d2">⑦ 限流</span>     注解 + 切面 + Lua              <span class="d2">← 独立于业务</span>
+   ↓
+<span class="d2">⑧ 测试</span>     谁在守着这些设计
+   ↓
+<span class="d2">⑨ 零散</span>     配置、安全、顺带修的 bug</div>
+ <table><tr><th>约定</th><th>含义</th></tr>
+ <tr><td>只说"看注释"</td><td>代码里已写清楚，不重复</td></tr>
+ <tr><td>★ 标记</td><td>难点 / 巧思 / 跨文件呼应，详讲</td></tr>
+ <tr><td>高亮行</td><td>这一站真正要看的几行</td></tr></table>`,
+ after:`<div class="okb"><b>提示</b>：键盘 ← → 翻站。行号都是<b>真实行号</b>，可直接在 IDE 跳过去。</div>`});
+
+/* ───────── 1 数据层 ───────── */
+STOPS.push({chap:'1 · 数据层',nav:'V014 三张表',tag:['n','新增'],
+ title:'1.1 · V014：两张流水表 + 一个发件箱',
+ path:'backend/src/main/resources/db/migration/V014__create_reliability_audit_events.sql',
+ body:`<div class="why">这个文件建三张表。前两张是<b>流水表</b>——它们和你前面见过的所有表<b>长得都不一样</b>。</div>
+ <p>先看 <code>error_report</code>，重点是高亮那一行：</p>`,
+ from:32,hl:[[43,43],[45,45]],lang:'sql',
+ code:
+`CREATE TABLE error_report (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  owner_user_id BIGINT NOT NULL,           -- 多租户隔离锚点
+  session_id BIGINT NOT NULL,
+  ticket_id BIGINT NOT NULL,
+  attempt_id BIGINT NULL,
+  agent_id BIGINT NULL,
+  error_type VARCHAR(64) NOT NULL,         -- 机器可读：LEASE_TIMEOUT / ...
+  failed_stage VARCHAR(64) NOT NULL,       -- 卡在哪一步
+  summary VARCHAR(512) NOT NULL,           -- 人话摘要
+  technical_detail TEXT NULL,
+  suggested_actions_json JSON NOT NULL,    -- ★ 给你的建议动作 ["RETRY_TICKET","TERMINATE"]
+  created_at DATETIME(3) NOT NULL,         -- ★ 只有 created_at，没有 updated_at`,
+ after:`<div class="okb">★ <b>流水表与状态表的三处不同</b>（本课的建模教学点）：
+ <table><tr><th></th><th>状态表（ticket/attempt/session）</th><th>流水表（本表）</th></tr>
+ <tr><td><code>updated_at</code>/<code>version</code></td><td>✅ 有</td><td>❌ <b>没有</b>——只 INSERT 永不 UPDATE，<b>历史不能改</b></td></tr>
+ <tr><td>唯一键</td><td>✅ 有（防重复）</td><td>❌ <b>没有</b>——同一件事可能发生两次（retry 后再失败一次）</td></tr>
+ <tr><td>形状</td><td>列固定</td><td><b>大量可空列 + JSON 兜底</b></td></tr></table></div>
+ <div class="warnb">★ <b><code>suggested_actions_json</code> 是这张表的灵魂</b>：
+ 错误不只说「坏了」，还要说「<b>能怎么办</b>」。
+ <br>首棒失败 → <code>["TERMINATE_SESSION"]</code>（草稿从没建出来，没东西可救）
+ <br>中间棒失败 → <code>["RETRY_TICKET","TERMINATE_SESSION"]</code>（草稿还在，可以重试）
+ <br>这是 L13 那套 <code>recoveryActions</code> 思路的延续——L18 的时间线页会直接读它渲染按钮。</div>
+ <div class="why"><b>JSON 列的规矩</b>：需要<b>查</b>的字段必须提成正式列
+ （<code>owner_user_id</code>/<code>session_id</code>/<code>ticket_id</code>/<code>agent_id</code> 都提出来了），
+ 只是"看一眼"的细节才进 JSON。
+ <br>否则表会变成五十列、其中四十列永远是 NULL。</div>`});
+
+STOPS.push({chap:'1 · 数据层',nav:'审计表 + 发件箱',tag:['n','新增'],
+ title:'1.2 · audit_record 与 EVENT_PUBLICATION',
+ path:'V014__create_reliability_audit_events.sql（第 60 / 82 行）',
+ body:`<div class="badb">★ <b>先澄清一个最容易混的点</b>：<code>audit_record</code> 记的<b>不是</b>「帖子历史」。
+ <table><tr><th>表</th><th>记什么</th><th>哪课</th></tr>
+ <tr><td><code>audit_record</code></td><td><b>动作流水</b>：「机娘#7 在 14:03 领了第 2 棒的租约」</td><td>L17</td></tr>
+ <tr><td><code>post_version</code></td><td><b>已发布内容的不可变快照</b></td><td>L06 建表，L20 用</td></tr>
+ <tr><td><code>draft_revision</code></td><td><b>草稿编辑历史</b></td><td>L19</td></tr></table>
+ <b>这张表里没有正文，只有动作。</b></div>`,
+ from:82,hl:[[82,82],[88,88]],lang:'sql',
+ code:
+`CREATE TABLE IF NOT EXISTS EVENT_PUBLICATION (
+  ID               VARCHAR(36)   NOT NULL,
+  LISTENER_ID      VARCHAR(512)  NOT NULL,   -- 哪个监听器
+  EVENT_TYPE       VARCHAR(512)  NOT NULL,   -- 事件类名
+  SERIALIZED_EVENT VARCHAR(4000) NOT NULL,   -- ★ 事件对象本身（JSON）
+  PUBLICATION_DATE TIMESTAMP(6)  NOT NULL,
+  COMPLETION_DATE  TIMESTAMP(6)  DEFAULT NULL NULL,  -- NULL = 未完成/待重投
+  PRIMARY KEY (ID),
+  INDEX EVENT_PUBLICATION_BY_COMPLETION_DATE_IDX (COMPLETION_DATE)
+);`,
+ after:`<div class="okb">★ <b>这就是「事务性发件箱」的物理形态</b>（主人问过：发件箱里存着领域事件？<b>对</b>）：
+ <div class="flow"><span class="g2">领域事件</span>     = 一条消息（AttemptExpired 这个 record 对象）
+<span class="g2">事务性发件箱</span> = 保证它不丢的<span class="y2">机制</span>（就是这张表）</div>
+ 高亮的 <code>SERIALIZED_EVENT</code> 存的就是事件对象序列化后的 JSON。</div>
+ <div class="flow"><span class="d2">┌─ 业务事务 ────────────────────────┐</span>
+<span class="d2">│</span>  改 ticket/attempt/session        <span class="d2">│</span>
+<span class="d2">│</span>  INSERT EVENT_PUBLICATION         <span class="d2">│</span>  <span class="y2">← ★ 同一个事务</span>
+<span class="d2">└────────── 一起提交 ────────────────┘</span>
+        ↓
+   监听器执行 → 成功：<span class="g2">删除那一行</span>（completion-mode=delete）
+             → 失败：<span class="r2">那一行留着</span> → 重启后重投</div>
+ <div class="warnb">★ <b>关键在「同一个事务」</b>：业务改了状态，事件就一定在表里；业务回滚了，事件也跟着回滚。
+ <br><b>不会出现「状态改了但通知丢了」，也不会出现「通知发了但状态没改」。</b></div>
+ <div class="why"><b>为什么这张表要我们自己建</b>（Modulith 能自动建）：
+ 自动建表会<b>绕过 Flyway</b> → 破「数据库结构的唯一真相源是 Flyway」这条铁律（不同环境可能长得不一样）。
+ <br>代价：列定义要对齐 <code>spring-modulith-events-jdbc-1.4.11</code> 的 <code>schema-mysql.sql</code>，
+ <b>Modulith 升级需跟进</b>。这是有意接受的交换。</div>`});
+
+/* ───────── 2 扫描 SQL ───────── */
+STOPS.push({chap:'2 · 扫描 SQL',nav:'★ SKIP LOCKED',tag:['k','核心'],
+ title:'2.1 ★ 让数据库当任务队列',
+ path:'backend/src/main/resources/mapper/collaboration/ExpiredAttemptScanMapper.xml',
+ body:`<div class="why"><b>本课的技术核心</b>。三行 SQL，每一行都有讲究。</div>`,
+ from:25,hl:[[29,29],[32,32]],lang:'xml',
+ code:
+`<select id="lockExpiredAttempts" resultType="long">
+    SELECT id
+    FROM contribution_attempt
+    WHERE status          = 'ACTIVE'
+      AND lease_expires_at &lt; #{now}
+    ORDER BY lease_expires_at
+    LIMIT #{batchSize}
+    FOR UPDATE SKIP LOCKED
+</select>`,
+ after:`<div class="okb">★ <b>为什么 Worker 用 <code>FOR UPDATE</code>，而 L15/L16 用条件 UPDATE</b>
+ <table><tr><th></th><th>条件 UPDATE（L15/L16）</th><th><code>FOR UPDATE</code>（L17）</th></tr>
+ <tr><td>目的</td><td>判定<b>一行</b>能不能改</td><td><b>批量占有多行</b>，逐条慢慢处理</td></tr>
+ <tr><td>前提</td><td>整件事<b>只有一步</b></td><td>要做<b>七八件事</b>，塞不进一条 SQL</td></tr>
+ <tr><td>适合</td><td>抢占（谁赢谁改）</td><td>批处理（我要拿 50 条活儿）</td></tr></table>
+ 所以必须先「把这批占住」，再慢慢做。</div>
+ <div class="warnb">★ <b><code>SKIP LOCKED</code> 解决什么</b>——上线后同一个服务通常跑两份：
+ <div class="flow"><span class="r2">没有 SKIP LOCKED：</span>
+  实例1: SELECT ... FOR UPDATE  → 锁住 #1~#50
+  实例2: SELECT ... FOR UPDATE  → <span class="r2">排队等</span>实例1 处理完
+         → 两个 Worker 变成<span class="r2">串行</span>，白养一个
+
+<span class="g2">加上之后：</span>
+  实例2: SELECT ... FOR UPDATE <span class="g2">SKIP LOCKED</span>
+         → 发现被锁，<span class="g2">跳过</span> → 拿 #51~#100</div>
+ <b>金句</b>：<code>SKIP LOCKED</code> 把数据库的行，变成了一个<b>天然的任务队列</b>——
+ 不需要 Redis 锁、不需要消息队列、不需要选主。</div>
+ <div class="badb">⚠️ <b>高亮的 <code>#{now}</code>：这里比 L16 更危险</b>
+ <table><tr><th></th><th>L16 submit 的 <code>&gt;= #{now}</code></th><th>L17 Worker 的 <code>&lt; #{now}</code></th></tr>
+ <tr><td>判错的后果</td><td>该拒的放过 / 该放的拒了</td><td>少捞几条 / 多捞几条</td></tr>
+ <tr><td>测试能抓到吗</td><td>✅ <b>立刻红</b></td><td>❌ <b>静默</b>（只验"能捞到"，偏 8 小时也过）</td></tr></table>
+ → 所以专门写了一条探针：造<b>刚过期 1 秒</b>的 attempt，断言能捞到。时区一错立刻红。</div>
+ <div class="why"><b><code>ORDER BY lease_expires_at</code></b>：先处理死得最久的，避免某条记录永远排不上队（饥饿）。</div>`});
+
+STOPS.push({chap:'2 · 扫描 SQL',nav:'四条状态推进 SQL',tag:['n','新增'],
+ title:'2.2 · 另外四条：闸门 + 三步传播',
+ path:'ExpiredAttemptScanMapper.xml（第 45 / 55 / 68 / 83 行）',
+ body:`<div class="why">扫描之后是四条 UPDATE。<b>第一条是闸门，后三条是失败传播。</b></div>
+ <p>先看闸门（<b>下一章会专门讲它防的是谁</b>）：</p>`,
+ from:45,hl:[[51,52]],lang:'xml',
+ code:
+`<update id="markAttemptTimeout">
+    UPDATE contribution_attempt
+    SET status      = 'FAILED_TIMEOUT',
+        finished_at = #{now},
+        updated_at  = #{now}
+    WHERE id              = #{attemptId}
+      AND status          = 'ACTIVE'
+      AND lease_expires_at &lt; #{now}
+</update>`,
+ after:`<div class="okb"><b>后三条各管一件事</b>（都在同一个文件里，扫一眼即可）：
+ <table><tr><th>SQL</th><th>做什么</th><th>影响几行</th></tr>
+ <tr><td><code>markTicketTimeout</code></td><td>席位 → FAILED_TIMEOUT</td><td>1 张</td></tr>
+ <tr><td><code>blockSuccessors</code></td><td>后序 → BLOCKED_BY_PREDECESSOR</td><td><b>整条尾巴</b></td></tr>
+ <tr><td><code>freezeTailToken</code></td><td>尾令牌 → FROZEN</td><td><b>永远 1 根</b></td></tr></table></div>
+ <div class="badb">🔴 <b><code>blockSuccessors</code> 原来是错的——你读代码时发现的</b>
+ <br>原 SQL 只有 <code>WHERE predecessor_ticket_id = #{超时票}</code>，<b>只冻结直接后继一张</b>。
+ 第 4、5、6 棒的 <code>predecessor</code> 指向第 3 棒，<b>匹配不上</b>。
+ <br>而当时的测试只建了 3 棒（第 3 棒恰好就是直接后继）→ <b>测试全绿，但「N 张」从没被验证过</b>。
+ <div class="flow"><span class="r2">补的测试当场打红：</span>
+[ticket CT-5d0edc7...] expected: <span class="g2">"BLOCKED_BY_PREDECESSOR"</span>
+                        but was: <span class="r2">"WAITING_PREDECESSOR"</span>   <span class="d2">← 第 4 棒漏网</span></div>
+ <b>修法：递归 CTE</b>（MySQL 8.0+），从超时票出发沿因果链走到底。</div>
+ <div class="okb">★★ <b>修完才想清楚的判据——同一条链表，两个方向语义不同</b>：
+ <table><tr><th></th><th>唤醒（L16 <code>wakeSuccessor</code>）</th><th>冻结（L17 <code>blockSuccessors</code>）</th></tr>
+ <tr><td>走几步</td><td><b>一步</b></td><td><b>走到底</b></td></tr>
+ <tr><td>为什么</td><td>第 2 棒 DONE 后只有第 3 棒能写；第 4 棒的前序（第 3 棒）<b>本来就该继续等</b></td><td>第 2 棒死了，第 3 棒等不到，第 4 棒<b>也等不到</b>，一路传染到链尾</td></tr></table>
+ <b>不能因为「看起来对称」就照抄实现</b>——唤醒的理由（前序完成了）只对直接后继成立，
+ 阻塞的理由（内容缺了一块）对整条尾巴都成立。</div>
+ <div class="warnb">★ <b>一个实现细节</b>：<code>status = 'WAITING_PREDECESSOR'</code> 必须放<b>最外层 UPDATE</b>，
+ 不能塞进 CTE 的递归项——否则遇到一张非 WAITING 的票（比如中间有一棒已 DONE），
+ <b>链条就断了</b>，后面的票找不到。
+ <br><b>CTE 负责「找出整条尾巴」，UPDATE 负责「只动其中还在等的」。</b></div>
+ <div class="okb">★ <b>后两条是【两个正交的维度】</b>（正是 L15 把票和接力棒分成两张表的原因）：
+ <table><tr><th></th><th>管什么</th><th>数量</th></tr>
+ <tr><td><code>ticket → BLOCKED</code></td><td>「<b>已经进来的人</b>能不能写」</td><td>整条尾巴</td></tr>
+ <tr><td><code>handoff → FROZEN</code></td><td>「<b>还能不能有新人</b>进来」</td><td>1 根</td></tr></table>
+ 尾令牌永远只有悬空那一根，前面已 <code>CONSUMED</code> 的是终态，不用动。</div>`});
+
+/* ───────── 3 边界 ───────── */
+STOPS.push({chap:'3 · 模块边界',nav:'★ 被机器打红的 12 条',tag:['k','故事'],
+ title:'3.1 ★ CollaborationFacade：我做错、被测试纠正',
+ path:'backend/src/main/java/com/agentlog/collaboration/CollaborationFacade.java',
+ body:`<div class="badb"><b>这是本课最有价值的一次「被机器纠正」，诚实记录。</b>
+ <br>施工蓝图里我把七步状态推进放在了 <code>reliability</code> 模块，<code>ModularityTest</code> 一次跑出 <b>12 条违规</b>：
+ <div class="flow"><span class="r2">Module 'reliability' depends on non-exposed type</span>
+  ...ContributionAttemptMapper <span class="d2">within module 'collaboration'!</span>
+  ...ContributionTicketDO      <span class="d2">within module 'collaboration'!</span>
+  ...<span class="d2">（共 12 条）</span></div>
+ Worker 要改 attempt/ticket/session，就得 import collaboration 的<b>私有子包</b>。</div>`,
+ from:32,hl:[[32,32],[59,60]],lang:'java',
+ code:
+`public interface CollaborationFacade {          // ← 模块【根包】= 公开 API
+
+    /** 扫描并锁定一批已过期的 attempt。锁在本方法事务结束时即释放。 */
+    @Transactional
+    List<Long> lockExpiredAttempts(Instant now, int batchSize);
+
+    /**
+     * 宣告一条 attempt 超时，并把失败沿因果链传播出去。
+     * ★ REQUIRES_NEW：每条一个独立小事务（毒丸隔离）。
+     * @return true = 本次真的由我宣告；false = 闸门返回 0（已被其他 Worker 处理）
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    boolean expireAttempt(long attemptId);
+}`,
+ after:`<div class="okb">★ <b>修完之后才想清楚的划分判据</b>：
+ <br><b>「何时做」归 reliability，「做什么」归 collaboration。</b>
+ <br><br>那七步全是 <b>ACPP 协议自己的状态机推进</b>，是 collaboration 的领域知识；
+ reliability 的职责只是<b>触发时机</b>（定时扫描、批量占有、毒丸隔离）——
+ 它不该知道「一棒死了以后状态该怎么流转」。</div>
+ <div class="warnb">★ <b>返回 <code>boolean</code> 而不是 <code>void</code></b>——这个签名本身就是设计：
+ 它在说「<b>调用方可以知道这次是不是我真的干成了</b>」。
+ <br>并发测试正是靠它做<b>同步断言</b>：两个线程各调一次，<b>恰好一个返回 true</b>。
+ <br>（原来的测试断言异步写入的 error_report 条数，那测的其实是"发件箱投递了几次"。）</div>
+ <div class="why"><b>教训</b>：<code>ModularityTest</code>（L02 建的）的价值在这里兑现了——
+ <b>边界不靠自觉，靠机器强制</b>。人在赶工时一定会顺手 import；测试不红，这个设计缺陷会一直留在代码里。
+ <br><br>这个分工顺带给 <b>L18 的 retry 留好了落点</b>：那同样是状态机推进，同样该由本 Facade 暴露。</div>`});
+
+/* ───────── 4 七步 ───────── */
+STOPS.push({chap:'4 · 七步推进',nav:'★ 那道闸门防的是谁',tag:['k','难点'],
+ title:'4.1 ★ 主人质疑过的那道闸门',
+ path:'collaboration/application/ExpireAttemptFacadeImpl.java',
+ body:`<div class="why"><b>你在施工蓝图评审时问过</b>：
+ <br>「ids 都是从 attempt 里找出来的超时请求，<b>就算之后机娘 submit 了也不应该对草稿做出任何改变吧</b>？应该不用再来一个闸门了吧？」</div>`,
+ from:84,hl:[[88,92]],lang:'java',
+ code:
+`@Transactional(propagation = Propagation.REQUIRES_NEW)   // ★ 毒丸隔离
+public boolean expireAttempt(long attemptId) {
+    Instant now = Instant.now(clock);
+
+    // ① ★闸门★（防的是另一个 Worker，不是机娘——理由见类注释）
+    if (scanMapper.markAttemptTimeout(attemptId, now) == 0) {
+        log.debug("attempt {} 已被其他 Worker 处理，跳过", attemptId);
+        return false;
+    }
+    // ——— 走到这里，这条 attempt 独占归我，下面没有竞争者 ———`,
+ after:`<div class="okb">★ <b>你说得对</b>——两个条件互斥，机娘确实已经提交不进来了：
+ <div class="flow"><span class="k2">submit</span> 的 WHERE： status='ACTIVE' AND lease_expires_at <span class="g2">&gt;=</span> #{now}   <span class="d2">← 未过期才能提交</span>
+<span class="k2">Worker</span> 的 WHERE： status='ACTIVE' AND lease_expires_at <span class="r2">&lt;</span>  #{now}   <span class="d2">← 已过期才会被捞</span></div></div>
+ <div class="warnb">★ <b>但闸门防的是另一个 Worker</b>：
+ <div class="flow"><span class="d2">Worker A：</span> lockExpiredAttempts → 捞到 attempt#5，锁住
+<span class="d2">Worker A：</span> <span class="y2">第一个事务结束 → 锁释放</span>   <span class="r2">← 关键就在这里</span>
+<span class="d2">Worker B：</span> 也捞到 attempt#5（已经没锁了），先跑完 expireAttempt
+<span class="d2">Worker A：</span> 才开始 → markAttemptTimeout 发现 status 已是 FAILED_TIMEOUT
+         → <span class="g2">affectedRows = 0 → 直接 return，什么都不做 ✅</span></div>
+ <b>为什么第一步的锁会释放</b>：<code>lockExpiredAttempts</code> 有自己的 <code>@Transactional</code>，
+ 方法一返回事务就提交了，行锁跟着放。这是<b>有意为之</b>——它只负责「声明这批活归我这轮」，
+ 真正的处理放在各自独立的小事务里（毒丸隔离）。</div>
+ <div class="badb">★ <b>且必须放在七步【之前】</b>：
+ 若放到第四步才检查，前三步已经改了状态，闸门返回 0 时<b>那些改动收不回来</b>。
+ <br>——这与 L15/L16「闸门必须排在建票/建 attempt 之前」是<b>同一条铁律</b>。</div>`});
+
+STOPS.push({chap:'4 · 七步推进',nav:'剩下六步',tag:['n','新增'],
+ title:'4.2 · 过了闸门之后：六步没有竞争者',
+ path:'ExpireAttemptFacadeImpl.java（第 95~137 行）',
+ body:`<div class="why">过了闸门，这条记录就独占归我了。剩下六步<b>没有任何竞争者</b>，可以放心地一步步做。</div>`,
+ from:112,hl:[[122,126],[131,136]],lang:'java',
+ code:
+`    // ③ ticket → FAILED_TIMEOUT
+    scanMapper.markTicketTimeout(ticket.getId(), now);
+    // ④ 后序票 → BLOCKED（N 张，与 submit 里 wakeSuccessor 方向相反）
+    scanMapper.blockSuccessors(ticket.getId(), now);
+    // ⑤ 尾令牌 → FROZEN（永远 1 根）
+    scanMapper.freezeTailToken(session.getId(), now);
+
+    // ⑥ session 状态推进
+    boolean firstTurn = (ticket.getPredecessorTicketId() == null);
+    String newStatus = firstTurn ? "INVALIDATED" : "PAUSED_ON_ERROR";
+    session.setStatus(newStatus);
+    sessionMapper.updateById(session);
+
+    // ⑦ 发布事件。error_report / audit_record 由各自模块的监听器写
+    events.publishEvent(new AttemptExpired(
+            attemptId, ticket.getId(), session.getId(),
+            session.getOwnerUserId(), ticket.getRequiredAgentId(),
+            ticket.getSequenceNo(), firstTurn, null, now));`,
+ after:`<div class="okb">★ <b>第 ⑥ 步那个三元表达式，是本课最容易写错的分支</b>：
+ <table><tr><th>谁死了</th><th>session 落什么</th><th>为什么</th></tr>
+ <tr><td><b>首棒</b>（<code>predecessor == null</code>）</td><td><code>INVALIDATED</code></td><td>post/draft <b>从来没被创建过</b>（L15 那条「首棒失败不暴露空草稿」）——<b>没有任何东西可救</b></td></tr>
+ <tr><td><b>中间棒</b></td><td><code>PAUSED_ON_ERROR</code></td><td>草稿还在，<b>保留 + 阻塞后序 + 等主人 retry</b></td></tr></table>
+ <b>我在测试里踩过这个坑</b>：给测试起名「后序阻塞」却用首棒超时，期望 <code>PAUSED_ON_ERROR</code> 自然对不上。
+ <b>代码是对的，测试自己错了。</b></div>
+ <div class="warnb">★ <b>第 ⑦ 步：为什么前六步不发事件，第七步才发</b>（你问的那个矛盾，下一章专讲）
+ <br>先记住一句：<b>这里的 publishEvent 写在方法【内部】</b>，所以它天然在这个小事务里——
+ <b>这一条回滚，它的事件也跟着回滚，不会发出去。</b></div>
+ <div class="why"><b>② 步的三个 null 检查</b>（第 95~110 行）只是防御性编程：
+ 闸门通过却读不到数据 = 数据被外部改坏了，宁可记 error 日志跳过，也不要带着半截数据往下跑。</div>`});
+
+/* ───────── 5 Worker ───────── */
+STOPS.push({chap:'5 · Worker',nav:'★ 毒丸的两道防线',tag:['k','难点'],
+ title:'5.1 ★ Worker 只做两件事',
+ path:'backend/src/main/java/com/agentlog/reliability/worker/ExpiredAttemptWorker.java',
+ body:`<div class="why">Worker 本身非常薄：<b>拿活、分发</b>。<b>一行业务逻辑都没有</b>——业务全在上一章那个 Facade 里。</div>`,
+ from:49,hl:[[58,65]],lang:'java',
+ code:
+`@Scheduled(fixedDelayString = "\${agentlog.worker.expired-attempt.interval:PT30S}")
+public void sweep() {
+    Instant now = Instant.now(clock);
+    List<Long> ids = collaboration.lockExpiredAttempts(now, batchSize);
+    if (ids.isEmpty()) return;
+
+    int ok = 0, skip = 0;
+    for (Long id : ids) {
+        try {
+            collaboration.expireAttempt(id);
+            ok++;
+        } catch (Exception e) {
+            // ★ 毒丸防线：一条失败不影响其余。记日志后继续。
+            log.error("[Worker] attempt {} 处理失败，跳过（将在下一轮重试）", id, e);
+            skip++;
+        }
+    }
+}`,
+ after:`<div class="badb">★ <b>毒丸消息（poison pill）：大事务会怎样</b>
+ <div class="flow">一个大事务包住 50 条：
+  第 1~22 条 处理成功
+  第 23 条  <span class="r2">💥 数据有问题，抛异常</span>
+     ↓
+  <span class="r2">整批回滚</span> —— 前面 22 条的成果全没了
+     ↓
+  30 秒后又扫到<span class="r2">同样这 50 条</span> → 又在第 23 条炸 → 又全回滚
+     ↓
+  <span class="r2">永久卡死</span>，那 49 条正常的<span class="r2">永远处理不了</span></div></div>
+ <div class="okb">★★ <b>两样东西配合，缺一不可</b>（很多人只答出一半）：
+ <table><tr><th></th><th>谁负责</th><th>管什么</th><th><b>少了它会怎样</b></th></tr>
+ <tr><td><code>REQUIRES_NEW</code></td><td>Spring 代理<br>（在 Facade 方法上）</td><td>第 23 条炸<b>只回滚它自己</b></td><td>异常把外层事务标记 <code>rollback-only</code>，<b>前 22 条白做</b>；且 catch 里再碰数据库会报错（同 L16 幂等踩的坑）</td></tr>
+ <tr><td><code>try-catch</code></td><td>这个循环</td><td>保证<b>循环不中断</b></td><td>异常往上抛，<b>第 24~50 条这轮直接不处理</b></td></tr></table>
+ <b>金句</b>：一条坏数据不该毒死整个队列——<b>独立事务保证它不牵连别人，try-catch 保证队伍不停下。</b></div>
+ <div class="warnb">★ <b>30 秒的延迟是【体验参数】不是【安全参数】</b>：
+ 过期判定写在 submit 那条 UPDATE 的 WHERE 里做惰性执行，
+ 即使超时租约还挂着 ACTIVE，也<b>一定提交不进来</b>。
+ <br><b>Worker 只是把状态刷得好看，它不是安全防线。</b> 改成 10 分钟也不会数据错乱。</div>`});
+
+/* ───────── 6 事件链 ───────── */
+STOPS.push({chap:'6 · 事件链',nav:'★ 什么时候该用事件',tag:['k','必读'],
+ title:'6.1 ★ 你问出的那个矛盾（我之前说错了）',
+ path:'shared/event/AttemptExpired.java',
+ body:`<div class="badb"><b>你在看完视频后问了一个把我问住的问题</b>：
+ <br>「我之前还以为是因为不在同一领域所以发布领域事件的，<b>但是现在更改状态也不在同一模块啊</b>，
+ 如果更新状态也用 mapper 那么日志更新不也可以用 mapper 不用领域事件了吗？」</div>
+ <div class="why"><b>先看事件长什么样</b>——它只是一个 record，没有任何逻辑：</div>`,
+ from:19,hl:[[19,19]],lang:'java',
+ code:
+`public record AttemptExpired(
+        Long attemptId,
+        Long ticketId,
+        Long sessionId,
+        Long ownerUserId,
+        Long agentId,
+        Integer sequenceNo,
+        boolean firstTurn,       // 首棒？决定建议动作与 session 状态
+        Long errorReportId,
+        Instant occurredAt
+) {}`,
+ after:`<div class="okb">★ <b>你自己后来推对了一半</b>：
+ <br>「因为我们 worker 调用 collaborationFacade 去引用执行，<b>所以其实是在 collaboration 模块执行的前四步</b>」
+ <br><br>完全正确。代码验证（grep 结果）：
+ <div class="flow">写 ticket/attempt/session 的类  →  <span class="g2">全部在 collaboration/ 包下</span>
+写 error_report 的类           →  <span class="k2">reliability/</span>
+写 audit_record 的类           →  <span class="k2">audit/</span></div>
+ <code>ExpireAttemptFacadeImpl</code> 虽然是 Worker 调的，但<b>它自己在 collaboration 包里</b>——
+ 前六步是 collaboration 在写<b>自己的表</b>，一次跨模块写都没有。
+ <br>★ <b>判据不是「谁触发」，是「谁的手在动」。</b></div>
+ <div class="badb">★★ <b>但你指出的矛盾是真的——我之前的说法不准确</b>
+ <br>我说「事件是为了跨模块」。这解释不了：<b>既然 collaboration 能开 Facade 让 reliability 调，
+ 那 audit 为什么不能也开一个 AuditFacade 让 collaboration 调？跨模块明明有两条路。</b>
+ <br><br><b>你对。跨模块只是必要条件，不是充分条件。</b></div>
+ <div class="okb">★★ <b>真正的判据</b>：
+ <table><tr><th></th><th>前六步（改状态）</th><th>后两步（写日志/报告）</th></tr>
+ <tr><td>它是什么</td><td><b>不变量</b>——错一次就出脏数据</td><td><b>派生行为</b>——晚点、偶尔重投都无所谓</td></tr>
+ <tr><td>能不能异步</td><td>❌ <b>绝对不能</b>（异步 = 有一段时间状态是错的）</td><td>✅ 可以</td></tr>
+ <tr><td>失败了</td><td><b>整个事务回滚</b>，当没发生过</td><td>留发件箱<b>重投</b>，业务不受影响</td></tr>
+ <tr><td>将来会变吗</td><td>协议规定死的</td><td><b>会</b>（L22 加通知、以后可能加统计）</td></tr>
+ <tr><td>选什么</td><td><b>同步直调</b></td><td><b>事件</b></td></tr></table>
+ <b>不变量必须同步，派生行为才用事件。</b>
+ <br><b>跨不跨模块只决定「同步调用要不要走 Facade」，不决定该不该用事件。</b></div>`});
+
+STOPS.push({chap:'6 · 事件链',nav:'两个监听器',tag:['n','新增'],
+ title:'6.2 · 一个事件、两个消费者',
+ path:'reliability/application/ExpireAttemptService.java · audit/application/AuditListener.java',
+ body:`<div class="why">同一个 <code>AttemptExpired</code> 事件，<b>两个模块各自监听、互不知道对方存在</b>。
+ 这就是事件解耦的价值——L22 加通知模块时，Worker 和 collaboration <b>一个字都不用改</b>。</div>`,
+ from:46,hl:[[46,46],[62,64]],lang:'java',
+ code:
+`@ApplicationModuleListener        // = @Async + @Transactional(REQUIRES_NEW) + 发件箱
+public void onAttemptExpired(AttemptExpired e) {
+    ErrorReportDO r = new ErrorReportDO();
+    r.setOwnerUserId(e.ownerUserId());
+    // ...
+    r.setErrorType("LEASE_TIMEOUT");
+    r.setSummary(String.format("第 %d 棒的机娘租约超时，未能在有效期内提交内容", e.sequenceNo()));
+    // ★ 建议动作因「首棒 / 中间棒」而不同
+    r.setSuggestedActionsJson(e.firstTurn()
+            ? "[\\"TERMINATE_SESSION\\"]"                      // 没东西可救
+            : "[\\"RETRY_TICKET\\", \\"TERMINATE_SESSION\\"]");   // 草稿还在
+    errorReportMapper.insert(r);
+    errorReportMapper.linkAttemptToErrorReport(e.attemptId(), r.getId(), now);
+}`,
+ after:`<div class="okb">★ <b><code>@ApplicationModuleListener</code> 一个注解顶三个</b>：
+ <div class="flow"><span class="k2">@Async</span>                              <span class="d2">异步执行，不拖慢业务事务</span>
+<span class="k2">@Transactional(REQUIRES_NEW)</span>       <span class="d2">自己独立事务，失败不牵连业务</span>
+<span class="k2">+ 事务性发件箱</span>                     <span class="d2">失败留存、重启重投</span></div></div>
+ <div class="why"><b>audit 那边同理</b>（<code>AuditListener</code>），但它一次写<b>两条</b>审计：
+ <br>① <code>ATTEMPT_EXPIRED</code>（这一棒超时了）
+ <br>② <code>SESSION_INVALIDATED</code> 或 <code>SESSION_PAUSED</code>（会话因此变成什么状态）
+ <br>——因为审计要回答「这篇文章是怎么来的」，<b>每个状态变化都要留痕</b>。</div>
+ <div class="warnb">★ <b>顺带还了 L16 的一笔账</b>：<code>SubmitContributionService</code> 现在也发
+ <code>ContributionSubmitted</code> 事件（L16 的 TX-05 第 11 步写着"发布领域事件"，当时没做）。
+ <br>⚠️ 注意边界：<b>状态推进仍在原事务内同步完成</b>，事件只承载派生的审计行为。</div>
+ <div class="okb"><b>与消息队列的关系</b>（你问的）：<b>思想同源，但不等同</b>——
+ Modulith 是<b>单进程</b>版（同库同事务，零运维），MQ 是<b>跨进程</b>版（走网络，要额外做发件箱+中继）。
+ <br>有意思的是：<b>发件箱这个模式本来就是为了配合 MQ 才发明的</b>，Modulith 把「中继+Broker」压进了同一个进程。
+ <br>真到拆微服务那天，事件定义已经现成，换的只是传输层。</div>`});
+
+/* ───────── 7 限流 ───────── */
+STOPS.push({chap:'7 · 限流',nav:'Lua 令牌桶',tag:['n','新增'],
+ title:'7.1 · 同一个思想的第三种形态',
+ path:'backend/src/main/resources/redis-token-bucket.lua',
+ body:`<div class="why">限流四个文件（注解 / 切面 / 限流器 / 配置）结构与 L16 的幂等<b>完全同构</b>——
+ 你已经懂了那一套，这里只讲<b>不一样的地方</b>。</div>`,
+ from:6,hl:[[10,10]],lang:'lua',
+ code:
+`local state  = redis.call("HMGET", key, "tokens", "ts")
+local tokens = tonumber(state[1]) or capacity
+local ts     = tonumber(state[2]) or now
+local delta  = math.max(0, now - ts) / 1000
+tokens = math.min(capacity, tokens + delta * refill)   -- 按时间补充
+
+local allowed = 0
+if tokens >= requested then
+  tokens = tokens - requested
+  allowed = 1
+end
+redis.call("HMSET", key, "tokens", tokens, "ts", now)
+return {allowed, math.floor(tokens)}`,
+ after:`<div class="okb">★ <b>为什么必须是 Lua 脚本</b>：算令牌要<b>四步</b>——读当前值 → 算这段时间补了多少 → 判断够不够 → 写回。
+ <br>分四条命令发过去，中间会被别的请求插进来 → <b>又是 TOCTOU</b>。Redis 执行 Lua 是<b>原子</b>的。</div>
+ <div class="warnb">★★ <b>这是同一个思想的第三种形态</b>：
+ <table><tr><th>场景</th><th>手段</th><th>哪课</th></tr>
+ <tr><td>改已有的行</td><td>条件 UPDATE，<code>affectedRows</code> 裁决</td><td>L15/L16</td></tr>
+ <tr><td>建全新的行</td><td>抢占 INSERT，唯一键冲突裁决</td><td>L16 幂等</td></tr>
+ <tr><td>Redis 侧</td><td><b>Lua 脚本</b></td><td>L17</td></tr></table>
+ 三种实现、一个道理：<b>让「检查」和「动作」在一个不可分割的单位里完成。</b></div>
+ <div class="okb">★ <b>为什么限流能放 Redis，而那些闸门不行</b>：
+ <br><b>限流不是不变量</b>——少限多限几次不会导致数据错乱；
+ 而谁抢到令牌、谁抢到租约是<b>真不变量</b>，错一次就出脏数据。
+ <br><b>判断一个东西能不能放进"快但不那么可靠"的地方，看它是不是不变量。</b></div>
+ <div class="why"><b>令牌桶 vs 每分钟计数器</b>：计数器有「整分钟边界」问题——
+ <code>00:59.9</code> 打 120 次、<code>01:00.1</code> 再打 120 次，0.2 秒内实际 240 次，
+ 但两个窗口各自都"没超"。
+ <br>令牌桶是<b>连续</b>的：<b>桶容量 = 瞬时能爆发多少，补充速率 = 长期平均多少</b>，两个参数分别管两件事。</div>
+ <div class="warnb"><b>Redis 挂了</b>：本课两个端点走 <b>fail open</b>（直接放行）——限流只是容量保护，
+ 不该因为它挂了就拦住正常业务。登录/配对那类才走 fail closed（安全优先）。</div>`});
+
+/* ───────── 8 测试 ───────── */
+STOPS.push({chap:'8 · 测试',nav:'谁在守这些设计',tag:['n','新增'],
+ title:'8.1 · 6 条测试，两条被打红过',
+ path:'backend/src/test/java/com/agentlog/reliability/WorkerIntegrationTest.java',
+ body:`<div class="why"><b>看测试就知道我们真正在乎什么。</b></div>
+ <table><tr><th>测试</th><th>守前面哪一站</th></tr>
+ <tr><td>刚过期 1 秒能被捞到</td><td>2.1 的时区陷阱（<b>静默失败</b>，必须专门守）</td></tr>
+ <tr><td>中间棒超时 → 后序 BLOCKED</td><td><b>硬验收①</b>（4.2 的分支）</td></tr>
+ <tr><td>首棒超时 → INVALIDATED 且无草稿</td><td>4.2 的另一个分支</td></tr>
+ <tr><td>两 Worker 不重复</td><td><b>硬验收②</b>（4.1 的闸门）</td></tr>
+ <tr><td>Worker 先行 → submit 拿 410</td><td>并发清单 #3</td></tr>
+ <tr><td>审计记录写入</td><td>6.2 的事件链路</td></tr></table>`,
+ from:0,hl:[[3,8]],lang:'java',
+ code:
+`// ★ 两个线程同时 sweep，模拟两个实例
+AtomicInteger declared = new AtomicInteger();
+Runnable sweepAndCount = () -> { if (sweepDeclaredOne(ticketCode)) declared.incrementAndGet(); };
+// ...
+// ★ 同步证据：恰好一个线程真正拿到了「宣告权」（闸门只放行一个）
+assertThat(declared.get())
+        .as("两个 Worker 并发扫描，只能有一个真正宣告这条 attempt 超时")
+        .isEqualTo(1);
+
+// 异步证据：事故报告也只有一条（等发件箱投递完成）
+await(5000, () -> countErrorReports(ticketCode) > 0);
+assertThat(countErrorReports(ticketCode)).isEqualTo(1L);`,
+ after:`<div class="badb">★ <b>这条测试被我改过一次，原因值得记</b>：
+ <br>原来只断言 <code>error_report</code> 有 1 条。但 Facade 重构后 error_report 改由<b>异步监听器</b>写——
+ <b>测的其实是「发件箱投递了几次」，而不是「Worker 宣告了几次」</b>。
+ <br>改成断言 <code>expireAttempt</code> 的返回值（同步、确定），异步产物只当辅证。
+ <br>★ <b>判据：并发测试的主断言必须同步且确定，异步产物只能当辅证。</b></div>
+ <div class="warnb">★ <b>另一条打红的：<code>timeoutBlocksSuccessors</code></b>
+ <br>我起名「后序阻塞」却用<b>首棒</b>超时 → 走的是 <code>INVALIDATED</code> 分支，期望 <code>PAUSED_ON_ERROR</code> 自然对不上。
+ <br><b>代码是对的，测试自己错了。</b> 修正为<b>先让首棒真正 submit 成功</b>，第二棒才算"中间棒"。
+ <br>★ <b>教训：测试名必须与它实际走的分支一致。</b></div>
+ <div class="why">⚠️ <b>本测试类不加 <code>@Transactional</code></b>：Worker 与测试业务必须各自独立事务，
+ 否则根本形成不了竞争——测试会绿，但绿得毫无意义（L15/L16 同款理由）。</div>`});
+
+/* ───────── 9 零散 ───────── */
+STOPS.push({chap:'9 · 零散但重要',nav:'配置 + 顺带修的 bug',tag:['m','修改'],
+ title:'9.1 · 五处零散改动',
+ path:'AgentLogApplication / application.yml / ApiStatus / GlobalExceptionHandler / ApiSecurityConfiguration',
+ body:`<div class="why">最后一站。这些文件每个只改了几行，但<b>少任何一处，前面的设计都落不了地</b>。</div>
+ <table><tr><th>文件</th><th>改了什么</th><th>为什么</th></tr>
+ <tr><td><code>AgentLogApplication</code></td><td>+<code>@EnableScheduling</code></td><td>🔴 此前只有 <code>@EnableAsync</code>，<b><code>@Scheduled</code> 根本不会触发</b>——Worker 写得再好也不跑</td></tr>
+ <tr><td><code>application.yml</code></td><td>Worker 参数 + 限流额度 + dev 开关</td><td>扫描间隔、批大小、桶容量<b>全部可配</b>，运维不用改代码</td></tr>
+ <tr><td><code>ApiStatus</code></td><td>+<code>RATE_LIMIT_EXCEEDED</code>(429)<br>+<code>CREDENTIALS_INVALID</code>(401)</td><td>后者见下</td></tr>
+ <tr><td><code>GlobalExceptionHandler</code></td><td>+<code>@ExceptionHandler(AuthenticationException)</code></td><td>修 L05 遗留 bug</td></tr>
+ <tr><td><code>ApiSecurityConfiguration</code></td><td>放行 <code>/api/v1/dev/**</code> + 豁免 CSRF</td><td>验收端点用；双重保险见下</td></tr></table>`,
+ after:`<div class="warnb">★ <b>顺带修的一个 L05 遗留 bug</b>（主人验收时输错一次密码撞出来的）：
+ <br><b>症状</b>：密码打错返回 <b>500 INTERNAL_ERROR</b>，而控制台明明写着 <code>BadCredentialsException</code>。
+ <div class="flow">authenticate() 抛 AuthenticationException
+    ↓ <span class="d2">它是从【Controller 内部】抛的</span>
+Security 的 ExceptionTranslationFilter <span class="r2">在过滤器链上，管不着已进 Controller 的异常</span>
+    ↓
+落到 @ExceptionHandler(<span class="r2">Exception.class</span>) 兜底 → <span class="r2">500</span></div>
+ 代码里原有注释写着「交给 Security 翻成 401」——<b>这个假设从 L05 起就是错的</b>，只是没人试过输错密码。
+ <br><br>两个修法细节：
+ <br>① <b>不区分「用户不存在」与「密码错误」</b>——区分开会变成<b>账号枚举探测器</b>（同 ACPP 跨租户一律 404 的思路）；
+ <br>② <b>日志只记一行不打堆栈</b>——密码错是<b>预期内的业务分支</b>，不是故障，打堆栈会让真故障淹没在噪音里。</div>
+ <div class="okb"><b>dev 端点的双重保险</b>：
+ <br>① <code>WorkerDevController</code> 上有 <code>@ConditionalOnProperty</code>，默认 <code>false</code> ——
+ 开关不打开，这个 Bean <b>压根不存在</b>（访问得到 404 而非 401）；
+ <br>② 安全链放行只是让开关打开时不必再带登录态。
+ <br>生产环境两个条件都不满足。</div>
+ <div class="why"><b>走完了。</b>本课 30 个改动文件、10 章、14 站。
+ <br><br><b>下一步建议</b>：拿 Postman 的 ③④ 两组再跑一遍，
+ 边跑边对照 4.1（闸门）和 4.2（六步）——<b>把纸上的流程变成你亲手触发的现象</b>。</div>`});
+
+/* ═══════════════ 引擎 ═══════════════ */
+const $=id=>document.getElementById(id);
+function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function paint(raw,lang){
+  let s=esc(raw);
+  if(lang==='sql'){
+    s=s.replace(/(--[^\n]*)/g,'<span class="cm">$1</span>')
+       .replace(/\b(CREATE|TABLE|ALTER|ADD|CONSTRAINT|UNIQUE|KEY|FOREIGN|REFERENCES|PRIMARY|NOT|NULL|DEFAULT|UPDATE|SET|WHERE|AND|OR|SELECT|FROM|MODIFY|COLUMN|CHECK|IN|MAX|INSERT|INTO|VALUES|ORDER|BY|LIMIT|IS)\b/g,'<span class="kw">$1</span>')
+       .replace(/\b(BIGINT|INT|VARCHAR|DATETIME|BINARY|JSON|CHAR|AUTO_INCREMENT)\b/g,'<span class="nu">$1</span>')
+       .replace(/'([^']*)'/g,'<span class="st">\'$1\'</span>');
+  }else if(lang==='java'){
+    s=s.replace(/(\/\/[^\n]*)/g,'<span class="cm">$1</span>')
+       .replace(/(\/\*[\s\S]*?\*\/)/g,'<span class="cm">$1</span>')
+       .replace(/\b(public|private|protected|class|interface|record|enum|return|if|else|new|try|catch|throw|throws|final|static|void|import|package|implements|extends|for|while|null|true|false|int|long|boolean|byte)\b/g,'<span class="kw">$1</span>')
+       .replace(/(@\w+)/g,'<span class="fn">$1</span>')
+       .replace(/"([^"]*)"/g,'<span class="st">"$1"</span>');
+  }else if(lang==='xml'){
+    s=s.replace(/(&lt;!--[\s\S]*?--&gt;)/g,'<span class="cm">$1</span>')
+       .replace(/(&lt;\/?[\w-]+)/g,'<span class="kw">$1</span>')
+       .replace(/\b(UPDATE|SET|WHERE|AND|SELECT|FROM|MAX)\b/g,'<span class="kw">$1</span>')
+       .replace(/'([^']*)'/g,'<span class="st">\'$1\'</span>');
+  }
+  return s;
+}
+function codeBlock(st){
+  if(!st.code) return '';
+  const lines=st.code.replace(/\n$/,'').split('\n');
+  const hl=st.hl||[];
+  const from=st.from||1;
+  return '<pre class="code">'+lines.map((ln,i)=>{
+    const no=from+i;
+    const on=hl.some(r=>no>=r[0]&&no<=r[1]);
+    return '<div class="row'+(on?' hl':'')+'"><span class="no">'+no+'</span><span class="src">'+paint(ln,st.lang)+'</span></div>';
+  }).join('')+'</pre>';
+}
+let cur=0;
+function render(){
+  const chaps=[...new Set(STOPS.map(s=>s.chap))];
+  $('nav').innerHTML=chaps.map(c=>
+    '<div class="chap">'+c+'</div>'+
+    STOPS.map((s,i)=>s.chap!==c?'':
+      '<a class="stop'+(i===cur?' on':'')+'" data-i="'+i+'">'+s.nav+
+      (s.tag?'<span class="tag '+s.tag[0]+'">'+s.tag[1]+'</span>':'')+'</a>').join('')
+  ).join('');
+  $('stage').innerHTML=STOPS.map((s,i)=>
+    '<section class="stop'+(i===cur?' on':'')+'">'+
+    '<h2>'+s.title+'</h2><div class="path">'+(s.path||'')+'</div>'+
+    (s.body||'')+codeBlock(s)+(s.after||'')+
+    '<div class="nav-btm"><button data-go="-1"'+(i===0?' disabled':'')+'>← 上一站</button>'+
+    '<span class="badge">'+(i+1)+' / '+STOPS.length+'</span>'+
+    '<button data-go="1"'+(i===STOPS.length-1?' disabled':'')+'>下一站 →</button></div>'+
+    '</section>').join('');
+  $('cnt').textContent=STOPS.length+' 站 · 覆盖本课全部改动文件';
+  document.querySelectorAll('nav a.stop').forEach(a=>a.onclick=()=>{cur=+a.dataset.i;render();window.scrollTo(0,0);});
+  document.querySelectorAll('button[data-go]').forEach(b=>b.onclick=()=>{cur+=+b.dataset.go;render();window.scrollTo(0,0);});
+}
+render();
+document.addEventListener('keydown',e=>{
+  if(e.key==='ArrowRight'&&cur<STOPS.length-1){cur++;render();window.scrollTo(0,0);}
+  if(e.key==='ArrowLeft'&&cur>0){cur--;render();window.scrollTo(0,0);}
+});
+</script>
+</body>
+</html>

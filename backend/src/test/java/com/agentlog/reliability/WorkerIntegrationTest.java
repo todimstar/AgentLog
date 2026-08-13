@@ -177,6 +177,49 @@ class WorkerIntegrationTest {
         assertThat(reports).anyMatch(r -> "LEASE_TIMEOUT".equals(r.getErrorType()));
     }
 
+    // ── 2b. ★ 阻塞必须传播到【整条尾巴】，不只是直接后继 ──────────────────
+    //
+    // ★ 这条测试是主人 2026-08-14 读代码陪读时发现的 bug 补的：
+    //   原来的 blockSuccessors 只匹配 predecessor_ticket_id = 超时票，
+    //   也就是【只冻结直接后继一张】。第 4、5、6 棒的 predecessor 指向第 3 棒，匹配不上。
+    //   而上面那条测试只建了 3 棒（第 3 棒恰好就是直接后继），所以【测绿了但没测到】。
+    //   ——「后序 N 张」这个说法在测试里从没被真正验证过。
+    @Test
+    void timeoutBlocksEntireTail() {
+        Fixture f = fixture();
+        AgentIdentity agA = agent(f.agentId(),  f.ownerUserId());
+        AgentIdentity agB = agent(f.agent2Id(), f.ownerUserId());
+
+        // 首棒正常完成
+        var started    = startService.start(agA, startReq("整条尾巴阻塞", f.channelId()));
+        String ticket1 = started.contributionTicket().ticketCode();
+        var lease1     = claimLeaseService.claim(agA, ticket1);
+        submitService.submit(agA, ticket1, lease1.leaseToken(),
+                new SubmitContributionRequest("第一棒", null));
+
+        // 排出 4 棒的队：#2(中间棒·会死) → #3 → #4
+        var join2 = claimHandoffService.claim(agB, new ClaimHandoffRequest(started.nextHandoffToken()));
+        String ticket2 = join2.contributionTicket().ticketCode();
+        var join3 = claimHandoffService.claim(agA, new ClaimHandoffRequest(join2.nextHandoffToken()));
+        String ticket3 = join3.contributionTicket().ticketCode();
+        var join4 = claimHandoffService.claim(agB, new ClaimHandoffRequest(join3.nextHandoffToken()));
+        String ticket4 = join4.contributionTicket().ticketCode();
+
+        assertTicketStatus(ticket3, "WAITING_PREDECESSOR");
+        assertTicketStatus(ticket4, "WAITING_PREDECESSOR");
+
+        // 第 2 棒超时
+        claimLeaseService.claim(agB, ticket2);
+        forceExpireAttempt(ticket2);
+        worker.sweepOnce();
+
+        assertTicketStatus(ticket2, "FAILED_TIMEOUT");
+        assertTicketStatus(ticket3, "BLOCKED_BY_PREDECESSOR");   // 直接后继
+        // ★★ 关键断言：隔了一层的 #4 也必须被阻塞。
+        //    第 2 棒的内容缺失，第 4 棒同样会基于残缺文章续写——阻塞理由对整条尾巴都成立。
+        assertTicketStatus(ticket4, "BLOCKED_BY_PREDECESSOR");
+    }
+
     // ── 3. 首棒超时 → INVALIDATED + 无草稿 ─────────────────────────────────
     @Test
     void firstTurnTimeoutInvalidatesSessionAndLeavesNoDraft() {
