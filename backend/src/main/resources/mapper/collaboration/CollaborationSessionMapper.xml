@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.agentlog.collaboration.infrastructure.persistence.mapper.CollaborationSessionMapper">
+
+    <!--
+      ★★★ L18 起：会话状态推进一律走这里，不再用 updateById ★★★
+
+      为什么（施工期被死锁打红之后才想清楚的）：
+        updateById 会 SET【全部列】，其中 owner_user_id / planned_channel_id / tail_handoff_token_id
+        是三个【外键列】。哪怕值一个字都没变，InnoDB 仍会为它们做外键检查，
+        对 user_account / forum_channel / handoff_token 的父行各加一把 S 锁。
+
+        而 AuditListener 正在异步插 audit_record，它的 4 个外键要对
+        collaboration_session / contribution_ticket / agent_account 的父行加 S 锁。
+        两边加锁顺序相反 → 成环 → Deadlock。
+
+      ★ 判据：updateById 的代价不是"多写几列"，是"多锁几张表"。
+        一条 UPDATE 碰到的外键列越多，牵连的锁越多，与并发写入者撞车的面越大。
+
+      ⚠️ 为什么 L15-L17 没炸：并发度不够。审计事件此前只有「超时」「提交」两种，稀疏。
+         L18 给 claim lease 补上 LEASE_CLAIMED 后，每领一次租约就多一次审计写入，
+         这个从 L15 就埋着的隐患才浮出来。
+         ——并发缺陷的暴露需要压力，而压力常常由一个看似无关的新功能提供。
+
+      下面每一条都遵循同一原则：
+        ① 只 SET 真正要改的列（绝不碰外键列，除非那正是要改的东西）
+        ② WHERE 带状态条件 —— 顺手把「谁的决定优先」也表达清楚了
+    -->
+
+    <!--
+      有人开始写了。OPEN（首棒）或 AWAITING_CONTINUATION（后续棒）→ RUNNING。
+
+      🔴 L18 修的 L16 遗留 bug 就在这个 IN 里：
+         L16 的 submit 注释写着「等下一棒 claim lease 时再回到 RUNNING」，
+         但 ClaimLeaseService 里只判了 OPEN —— 那个「再回到」【从来没有被实现过】。
+         于是从第 2 棒起，机娘正在写的时候，会话永远停在「等人来接」。
+
+         ★ 为什么能潜伏两课：session.status 在整个模块里【被写 4 处、读来做判定 0 处】。
+           一个从来没被读过的状态，写错了也没人会发现 ——
+           直到 L18 的时间线页把它显示出来。
+    -->
+    <update id="promoteToRunning">
+        UPDATE collaboration_session
+        SET status     = 'RUNNING',
+            updated_at = #{now},
+            version    = version + 1
+        WHERE id     = #{sessionId}
+          AND status IN ('OPEN', 'AWAITING_CONTINUATION')
+    </update>
+
+    <!--
+      一棒写完。状态一律落 AWAITING_CONTINUATION（无分支）：
+      因果链是串行的，submit 完成那一刻必然没有任何一棒在写。
+
+      ⚠️ WHERE 限定「还在跑」的三个状态：主人若恰好在此刻结束了协作，这条影响 0 行 ——
+         内容与席位照常落库，但会话状态不被拉回。这正是我们要的：主人的「结束」决定优先。
+         （L18 之前这里是 updateById，靠 @Version 乐观锁，效果类似但语义含糊：
+           它表达的是"有人先改过"，而不是"这个状态下不该再推进"。）
+    -->
+    <update id="markAwaitingContinuation">
+        UPDATE collaboration_session
+        SET status                  = 'AWAITING_CONTINUATION',
+            last_completed_sequence = #{sequenceNo},
+            updated_at              = #{now},
+            version                 = version + 1
+        WHERE id     = #{sessionId}
+          AND status IN ('OPEN', 'RUNNING', 'AWAITING_CONTINUATION')
+    </update>
+
+    <!--
+      一棒失败。首棒 → INVALIDATED（post/draft 从未创建，没东西可救）；
+                中间棒 → PAUSED_ON_ERROR（草稿还在，等主人 retry）。
+      判据是【有没有草稿可救】，不是【怎么失败的】—— Worker 超时与机娘自报走同一条。
+    -->
+    <update id="markFailed">
+        UPDATE collaboration_session
+        SET status     = #{status},
+            updated_at = #{now},
+            version    = version + 1
+        WHERE id     = #{sessionId}
+          AND status IN ('OPEN', 'RUNNING', 'AWAITING_CONTINUATION', 'PAUSED_ON_ERROR')
+    </update>
+
+    <!-- 换链尾指针。这一列本身就是外键，但这次是【真的要改它】，锁得其所。 -->
+    <update id="updateTailHandoffToken">
+        UPDATE collaboration_session
+        SET tail_handoff_token_id = #{tokenId},
+            updated_at            = #{now},
+            version               = version + 1
+        WHERE id = #{sessionId}
+    </update>
+
+    <!--
+      首棒 submit 后把新建的 post/draft 挂回会话。
+      WHERE 里的 draft_id IS NULL 是「只有首棒才做」的机器化表达 ——
+      比在 Java 里写 if (session.getDraftId() == null) 更可靠：
+      并发下那个 if 读的是事务快照，而这里读的是当前行。
+    -->
+    <update id="linkPostAndDraft">
+        UPDATE collaboration_session
+        SET post_id    = #{postId},
+            draft_id   = #{draftId},
+            updated_at = #{now},
+            version    = version + 1
+        WHERE id       = #{sessionId}
+          AND draft_id IS NULL
+    </update>
+
+</mapper>

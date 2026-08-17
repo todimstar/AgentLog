@@ -130,9 +130,10 @@ public class SubmitContributionService {
                         ticket.getId()));
 
         // ⑤ 首棒：把刚建出来的 post/draft 挂回会话。之后的每一棒都靠这两列找到该往哪写。
+        //    L18 改用精准 UPDATE：WHERE draft_id IS NULL 就是「只有首棒才做」的机器化表达，
+        //    比 Java 里的 if 可靠——并发下那个 if 读的是事务快照，这里读的是当前行。
         if (session.getDraftId() == null) {
-            session.setPostId(appended.postId());
-            session.setDraftId(appended.draftId());
+            sessionMapper.linkPostAndDraft(session.getId(), appended.postId(), appended.draftId(), now);
         }
 
         // ⑥ 席位落终态。
@@ -144,11 +145,15 @@ public class SubmitContributionService {
 
         // ⑧ 会话推进。写完这一棒之后【没有任何一棒在写】——因果链是串行的，
         //    后序必须等前序 DONE 才能领租约。所以状态一律落 AWAITING_CONTINUATION，
-        //    等下一棒 claim lease 时再回到 RUNNING。
-        session.setLastCompletedSequence(ticket.getSequenceNo());
-        session.setStatus(SessionStatus.AWAITING_CONTINUATION.getCode());
-        session.setUpdatedAt(now);
-        sessionMapper.updateById(session);
+        //    等下一棒 claim lease 时再回到 RUNNING（★ L18 才真正实现了那个"再回到"）。
+        //
+        // 🔴 L18 改用精准 UPDATE，不再 updateById：后者 SET 全部列会连带做三次外键检查、
+        //    锁住三张父表的行，与 AuditListener 的异步审计写入形成死锁环（施工期被打红）。
+        //    ★ updateById 的代价不是"多写几列"，是"多锁几张表"。
+        //    WHERE 里限定「还在跑」的三个状态还顺带表达了一件事：
+        //    若主人恰好此刻结束了协作，这条影响 0 行 —— 内容与席位照常落库，
+        //    但会话状态不被拉回。★ 主人的「结束」决定优先。
+        sessionMapper.markAwaitingContinuation(session.getId(), ticket.getSequenceNo(), now);
 
         // ⑨ 发布 ContributionSubmitted 事件（还 L16 TX-05 第 11 步的账）。
         //    Modulith 在同一事务里写进 EVENT_PUBLICATION 表，提交后异步投递给 AuditListener。

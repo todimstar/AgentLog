@@ -57,6 +57,7 @@ public class ExpireAttemptFacadeImpl implements CollaborationFacade {
     private final ContributionAttemptMapper attemptMapper;
     private final ContributionTicketMapper ticketMapper;
     private final CollaborationSessionMapper sessionMapper;
+    private final FailurePropagation failurePropagation;
     private final ApplicationEventPublisher events;
     private final Clock clock;
 
@@ -64,12 +65,14 @@ public class ExpireAttemptFacadeImpl implements CollaborationFacade {
                                    ContributionAttemptMapper attemptMapper,
                                    ContributionTicketMapper ticketMapper,
                                    CollaborationSessionMapper sessionMapper,
+                                   FailurePropagation failurePropagation,
                                    ApplicationEventPublisher events,
                                    Clock clock) {
         this.scanMapper = scanMapper;
         this.attemptMapper = attemptMapper;
         this.ticketMapper = ticketMapper;
         this.sessionMapper = sessionMapper;
+        this.failurePropagation = failurePropagation;
         this.events = events;
         this.clock = clock;
     }
@@ -109,24 +112,14 @@ public class ExpireAttemptFacadeImpl implements CollaborationFacade {
             return false;
         }
 
-        // ③ ticket → FAILED_TIMEOUT
-        scanMapper.markTicketTimeout(ticket.getId(), now);
-
-        // ④ 后序票 → BLOCKED（N 张，与 submit 里 wakeSuccessor 方向相反）
-        scanMapper.blockSuccessors(ticket.getId(), now);
-
-        // ⑤ 尾令牌 → FROZEN（永远 1 根）
-        //    ★ 与④是两个正交维度：④管「已经进来的人能不能写」，⑤管「还能不能有新人进来」。
-        scanMapper.freezeTailToken(session.getId(), now);
-
-        // ⑥ session 状态推进
-        //    首棒失败 → INVALIDATED：post/draft 从来没被创建过（「首棒失败不暴露空草稿」），没东西可救。
-        //    中间棒失败 → PAUSED_ON_ERROR：草稿还在，等主人 retry（L18）。
-        boolean firstTurn = (ticket.getPredecessorTicketId() == null);
+        // ③④⑤⑥ 失败沿因果链传播（L18 抽成 FailurePropagation 共用）。
+        //    ★ 为什么抽出来：L18 出现了【第二个触发者】——机娘自报失败（不等 15 分钟超时）。
+        //      两者「做什么」完全相同，只是「何时做」不同。
+        //      这恰好验证了 L17 定的判据（「何时做」归 reliability，「做什么」归 collaboration）：
+        //      把「做什么」独立出来之后，加一个新触发者【不需要复制任何逻辑】——
+        //      而复制出来的两份一定会漂移（一边改了另一边忘了）。
+        boolean firstTurn = failurePropagation.propagate(ticket, session, now);
         String newStatus = firstTurn ? "INVALIDATED" : "PAUSED_ON_ERROR";
-        session.setStatus(newStatus);
-        session.setUpdatedAt(now);
-        sessionMapper.updateById(session);
 
         // ⑦ 发布事件。error_report / audit_record 由各自模块的监听器写——
         //    Modulith 的事务性发件箱保证「业务成功了，派生行为一定不会丢」。
