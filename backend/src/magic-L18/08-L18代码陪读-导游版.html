@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>L18 代码陪读 · 导游版</title>
+<style>
+:root{--bg:#0f1419;--card:#1a212b;--card2:#232c39;--line:#2d3846;--tx:#e3e8ef;
+ --tx2:#93a1b5;--tx3:#5f7085;--new:#00c9a7;--mod:#ffa940;--hot:#ff6b9d}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--tx);font:14px/1.75 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif}
+.top{padding:20px 24px 14px;border-bottom:1px solid var(--line)}
+h1{font-size:23px}h1 small{font-size:13px;color:var(--tx2);font-weight:400;margin-left:8px}
+.top p{color:var(--tx2);margin-top:6px;max-width:920px;font-size:13px}
+.top p b{color:var(--hot)}
+.layout{display:grid;grid-template-columns:330px 1fr;min-height:calc(100vh - 96px)}
+.nav{border-right:1px solid var(--line);overflow-y:auto;max-height:calc(100vh - 96px);padding:14px 0}
+.stop{padding:9px 18px 4px;color:var(--tx3);font-size:11.5px;font-weight:700;letter-spacing:.4px}
+.stop span{color:var(--tx2);font-weight:400;letter-spacing:0}
+.f{padding:7px 18px;cursor:pointer;border-left:3px solid transparent;font-size:12.5px;transition:.12s}
+.f:hover{background:var(--card)}
+.f.sel{background:var(--card2);border-left-color:var(--hot)}
+.f .nm{font-family:ui-monospace,Consolas,monospace}
+.f .tag{font-size:9.5px;padding:1px 5px;border-radius:4px;margin-right:5px;font-weight:700}
+.t-new{background:rgba(0,201,167,.16);color:var(--new)}
+.t-mod{background:rgba(255,169,64,.16);color:var(--mod)}
+.t-hot{background:rgba(255,107,157,.16);color:var(--hot)}
+.body{padding:22px 30px;overflow-y:auto;max-height:calc(100vh - 96px)}
+.ph{color:var(--tx3);text-align:center;padding:70px 0}
+.body h2{font-size:19px;font-family:ui-monospace,Consolas,monospace;margin-bottom:3px;word-break:break-all}
+.body .path{color:var(--tx3);font-size:12px;font-family:ui-monospace,Consolas,monospace;margin-bottom:14px}
+.sec{margin-bottom:15px}
+.sec .lbl{font-size:11.5px;color:var(--tx3);font-weight:700;letter-spacing:.4px;margin-bottom:5px}
+.sec .val{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:11px 14px;font-size:13.5px}
+.sec.hot .val{border-color:var(--hot);background:rgba(255,107,157,.06)}
+.sec .val code{background:var(--card2);padding:1px 5px;border-radius:4px;font-size:12px;color:var(--new)}
+.sec .val b{color:var(--hot)}
+.lines{display:flex;flex-wrap:wrap;gap:6px;margin-top:7px}
+.lines span{background:var(--card2);border:1px solid var(--line);border-radius:5px;padding:2px 8px;
+  font-family:ui-monospace,Consolas,monospace;font-size:11.5px;color:var(--tx2)}
+.nx{margin-top:22px;padding-top:14px;border-top:1px solid var(--line);color:var(--tx3);font-size:12.5px}
+.nx b{color:var(--tx2)}
+</style>
+</head>
+<body>
+<div class="top">
+  <h1>L18 代码陪读 <small>导游版 · 34 个文件按【阅读顺序】走一遍</small></h1>
+  <p>陪读的定位是<b>验收，不是启蒙</b>——你已经在黑板课/辩论/施工蓝图里过过一遍设计了，这里看的是「实际长什么样、和蓝图哪里不同、为什么」。
+  三条原则：<b>有顺序</b>（为什么先读这个）· <b>简单的交给注释</b>（代码里写好的只指路）· <b>难的和有跨文件呼应的才详讲</b>。</p>
+</div>
+<div class="layout">
+  <div class="nav" id="nav"></div>
+  <div class="body" id="body"><div class="ph">← 从第一站开始，按顺序点</div></div>
+</div>
+<script>
+const STOPS=[
+{name:"地基：状态值集怎么变的",why:"先知道多了哪些状态，后面所有代码才有落点",files:[
+ {n:"V015__l18_retry_cancel_and_audit_actions.sql",t:"new",
+  p:"backend/src/main/resources/db/migration/",
+  order:"本课唯一的「正常」迁移。先读它，你就知道后面所有代码在往哪几个新状态上写。",
+  lines:["文件头：为什么本课只加值不加表","① CANCELLED 那一大段注释","③ 说明：为什么不动 ck_collab_status"],
+  deep:"⚠️ MySQL 改 CHECK 约束<b>必须先 DROP 再 ADD</b>，不能直接改。<br>而且——<b>绝不能去改 V012/V014</b>：Flyway 的 checksum 按整个文件算，改一条注释就会让你的开发库启动失败（L16 血教训）。所以本课新增的值只能写在新迁移里。",
+  link:"值集在这里定，Java 侧的字典在 <code>domain/TicketStatus.java</code>（下一个），而真正往这些值上写的 SQL 在 <code>OwnerCollaborationMapper.xml</code>（第 3 站）。"},
+ {n:"V016__drop_audit_table_foreign_keys.sql",t:"hot",
+  p:"backend/src/main/resources/db/migration/",
+  order:"紧接着读，因为它<b>不是设计好的，是踩出来的</b>——单独成一条迁移就是为了留下这个痕迹。",
+  lines:["═ 症状 ═ / ═ 排查 ═ / ═ 根因 ═ 三段","③ 索引全部保留（别连带删掉）"],
+  deep:"两层根因，第一层容易想到、第二层才是真凶：<br>① <code>updateById</code> SET 全部列，其中三列是外键 → 三张父表各一把 S 锁；<br>② <b>AuditListener 异步插 audit_record 时，它的 4 个外键在抢同一批行的 S 锁，加锁顺序相反 → 成环</b>。<br>★ <b>外键不是「免费的完整性」，它是隐式的锁。</b>",
+  link:"修法的另一半在 <code>CollaborationSessionMapper.xml</code>（第 2 站）——那 5 条精准 UPDATE。"},
+ {n:"TicketStatus.java",t:"mod",p:"backend/src/main/java/com/agentlog/collaboration/domain/",
+  order:"Java 侧的状态字典。它的类注释是本课<b>唯一一处把三条链表遍历并排列出来</b>的地方。",
+  lines:["类注释：★ 三条链表遍历，方向与深度各不相同（表格）","CANCELLED 的 javadoc"],
+  deep:"注释里那张表值得记住：<b>唤醒走一步、冻结走到底、解冻也走到底，但三者的目标态各不相同</b>。<br>理由不是「对称」而是「阻塞的理由对谁成立」——唤醒的理由（前序完成了）只对直接后继成立，阻塞/解冻的理由对整条尾巴都成立。",
+  link:"这张表的三个实现分别在：L16 <code>ContributionTicketMapper.xml#wakeSuccessor</code> · L17 <code>ExpiredAttemptScanMapper.xml#blockSuccessors</code> · L18 <code>OwnerCollaborationMapper.xml#unblockSuccessors</code>。<b>三条 SQL 对照着看一遍，这一课就懂了一半。</b>"}]},
+
+{name:"还旧账（先还账，再干活）",why:"本课要让 session.status 承担判定职责，所以必须先修掉它错了两课的 bug",files:[
+ {n:"CollaborationSessionMapper.java + .xml",t:"hot",
+  p:"backend/src/main/java/.../infrastructure/persistence/mapper/ · resources/mapper/collaboration/",
+  order:"死锁修复的另一半。<b>先读接口的类注释</b>——它把整个死锁的因果链讲完了。",
+  lines:["接口类注释：为什么不再用 updateById（含 SQL 示意）","XML 顶部：★ 判据 + ⚠️ 为什么 L15-L17 没炸","promoteToRunning 的注释"],
+  deep:"★ <b><code>updateById</code> 的代价不是「多写几列」，是「多锁几张表」。</b><br>这与 L17 让 <code>ExpiredAttemptScanMapper</code> 故意不继承 <code>BaseMapper</code> 是同一条思路（那次为了不暴露绕过闸门的写法），只是这次的理由更硬——<b>它真的把系统锁死了</b>。<br>★ 还有一条元结论：<b>并发缺陷的暴露需要压力，而压力常常由一个看似无关的新功能提供</b>（这次的压力来自新加的一个审计事件）。",
+  link:"5 个调用点被改：ClaimLease / Submit / Start / ClaimHandoff / FailurePropagation。"},
+ {n:"ClaimLeaseService.java",t:"hot",p:"backend/src/main/java/.../collaboration/application/",
+  order:"本课改动最集中的既有文件，<b>三处改动都在第 ⑤⑥ 步</b>。",
+  lines:["⑤ 的整段注释（bug 的来龙去脉 + 为什么能潜伏两课）","⑥ 发 LeaseClaimed 事件"],
+  deep:"🔴 原来只有 <code>if (OPEN)</code> 一个分支，而 L16 的 submit 注释写着「等下一棒 claim lease 时再回到 RUNNING」——<b>那个「再回到」从来没被实现过</b>。<br>★ 为什么两轮测试全绿：<code>session.status</code> <b>被写 4 处、读来做判定 0 处</b>，没有任何 SQL 的 WHERE 用到它。<br>★ <b>一个从来没被读过的状态，连骗人的机会都没有——它只是静静地错着，直到有人把它显示出来。</b>",
+  link:"「有人把它显示出来」= <code>CollaborationTimelineService</code>（第 6 站）；「第一次承担判定」= <code>StopCollaborationService</code> 的闸门（第 4 站）。"},
+ {n:"StartCollaborationService · ClaimHandoffService",t:"mod",p:"backend/src/main/java/.../collaboration/application/",
+  order:"另外两笔事件欠账。改动都在方法末尾（发事件）+ 会话更新改精准 UPDATE。",
+  lines:["Start 的 ⑥ 发 CollaborationStarted","ClaimHandoff 的 ⑥ 发 HandoffClaimed"],
+  deep:"这两个动作从 V014 起就在 <code>ck_audit_action_type</code> 的值集里，<b>却从来没有代码产生过</b>。后果是时间线页会<b>凭空从「第 1 棒提交成功」开始</b>——谁开的局、谁接的棒全是空白。<br>★ <b>CHECK 值集里有个值，不等于有代码会产生它。值集是承诺，不是实现。</b>"},
+ {n:"TicketStatusView · TicketStatusService",t:"mod",p:"backend/src/main/java/.../collaboration/api/dto/response/ · application/",
+  order:"第三笔旧账：<code>errorReportId</code> 从 L16 起就承诺「L17 会填」，直到本课才真填上。",
+  lines:["TicketStatusView 的 from() javadoc（🔴 L18 补的旧账那一段）","pollAfterSecondsFor：CANCELLED 返回 0"],
+  deep:"后果比看起来严重：机娘看到 <code>FAILED_TIMEOUT</code> 却拿不到事故报告指针 ⇒ 读不到 <code>suggested_actions_json</code> ⇒ <b>Skill 那套自愈引导在 CLI 侧是断的</b>。<br>顺带加了 <code>attemptNo</code>：<code>&gt;1</code> 说明「你在续摊，不是开新的」。"},
+ {n:"shared/event/（7 个事件）",t:"new",p:"backend/src/main/java/com/agentlog/shared/event/",
+  order:"3 个是还账（Started/HandoffClaimed/LeaseClaimed）、4 个是本课新增。每个类的 javadoc 都写了它「为什么存在」。",
+  lines:["CollaborationStarted：值集是承诺不是实现","TicketRetried：为什么 retry 必须由人","CollaborationStopped：为什么只有一个出口","HandoffReissued：为什么吊销流水不是可选项"],
+  deep:"注意 <code>HandoffReissued</code> 只带 <code>newTokenId</code>、<b>不带明文</b>——事件会被序列化进 <code>EVENT_PUBLICATION</code> 表，<b>令牌明文绝不能落库</b>。"},
+ {n:"AuditListener.java",t:"mod",p:"backend/src/main/java/com/agentlog/audit/application/",
+  order:"事件发出来了，得有人接。7 个新监听方法都在 L18 那道分隔注释下面。",
+  lines:["════ L18 补齐 ════ 那段分隔注释","onCollaborationStopped：为什么席位取消只记一条汇总"],
+  deep:"★ 席位取消<b>记一条 session 级汇总</b>而不是每票一条：时间线是给人看的，N 张票刷 N 条噪音只会淹没真正重要的那几条。"}]},
+
+{name:"retry 主线",why:"本课的核心动作。SQL 先读，因为所有判断都在 WHERE 里",files:[
+ {n:"OwnerCollaborationMapper.xml",t:"new",p:"backend/src/main/resources/mapper/collaboration/",
+  order:"★ <b>本课最该细读的一个文件。</b>三个动作的闸门、递归 CTE 解冻、四步收尾全在这里，而每条 SQL 的注释就是它的设计说明。",
+  lines:["retryTicket：★★ 为什么 session 条件必须合进这一条 SQL","unblockSuccessors：与 L17 的两个关键点 + 目标态为什么不同","revokeActiveAttempts：本课唯一的真竞态","cancelUnfinishedTickets：为什么排除 DONE","recalcLastCompletedSequence：被 @Version 逼出来的","revokeHandoffById：为什么闸门落在旧令牌上"],
+  deep:"三个闸门落在<b>三个不同对象</b>上（票 / 会话 / 令牌）。★ <b>判据：闸门要选那个「能唯一代表这次操作发生过」的对象。</b><br>★ 进阶（施工期才想清楚）：<b>当两个操作的闸门落在不同对象上时，必须有一方把对方的条件纳入自己的 WHERE</b>——否则两把锁各自都「成功」，合起来却破坏了不变量（协作已收工、却有一张票被改回可写）。",
+  link:"把 <code>unblockSuccessors</code> 与 L17 的 <code>blockSuccessors</code>、L16 的 <code>wakeSuccessor</code> 三条并排看——<b>同一条链表的三种遍历</b>。"},
+ {n:"RetryTicketService.java",t:"new",p:"backend/src/main/java/.../collaboration/application/",
+  order:"SQL 读完再读它，你会发现这个 Service <b>几乎没有业务判断</b>——判断全在 SQL 的 WHERE 里。这正是本项目的范式。",
+  lines:["类注释：为什么必须由人 + 解冻不是冻结的倒放（表格）","② 闸门那一行 + 注释","rejectionFor：为什么顺序不能反"],
+  deep:"★ <b>retry 不需要为「后面怎么继续」做任何准备</b>：等原机娘重新写完，L16 的 <code>wakeSuccessor</code> 会自动唤醒下一棒。<b>恢复之后的流转靠原来那套机制自己跑</b>——这正是状态机设计对了的标志。<br>★ <code>rejectionFor</code> 的注释重申了 L16 的教训：<b>回查读到的状态本来就可能与失败的真实原因不同</b>（事务快照），它只用来给提示，<b>绝不能当判定依据</b>。"},
+ {n:"RetryTicketResponse.java",t:"new",p:"backend/src/main/java/.../collaboration/api/dto/response/",
+  order:"一个<b>删字段</b>的决定，比加字段更值得读。",
+  lines:["类注释整段"],
+  deep:"契约原本把 <code>attemptNo</code> 列为<b>必填</b>——那是蓝图 A 方案的遗留（A 方案里 retry 会真的建出 attempt 行）。我们选了 B 方案，那一行<b>此刻并不存在</b>：返回预告值 = <b>为一个已不成立的设计保留一个没有消费者的字段</b>，而且叫 attemptNo 会让人以为库里已经有那行了。<br>★ <b>同一个字段在不同端点的价值可以完全相反</b>——真正需要它的是机娘侧的查票端点，本课给那里<b>加上了</b>。"}]},
+
+{name:"结束协作",why:"你推翻蓝图的那个决定，落到代码是什么样",files:[
+ {n:"StopCollaborationService.java",t:"new",p:"backend/src/main/java/.../collaboration/application/",
+  order:"读它之前先想一个问题：<b>结束协作会删内容吗？</b>然后看类注释的答案。",
+  lines:["类注释：它的本质是「解锁」不是「放弃」","为什么只有一个出口（你的论证）","④ 的竞态注释（机娘赢 / 我们赢）","⑦ 为什么要重算"],
+  deep:"④⑤⑥ 三步一次性用上了<b>三个至今没有任何代码产生过的状态值</b>：<code>Attempt.REVOKED</code>（V013 建了两课）· <code>Ticket.CANCELLED</code>（V015 新增）· <code>Handoff.REVOKED</code>（V012 建了三课）。<br>★ 你在辩论时问「其他两处的撤销状态是什么时候用到」——答案就在这三行。",
+  link:"竞态的另一半在 L16 的 <code>ContributionAttemptMapper.xml#consumeActiveLease</code>：两条 UPDATE 争同一行。"},
+ {n:"StopCollaborationResponse.java",t:"new",p:"backend/src/main/java/.../collaboration/api/dto/response/",
+  order:"短，但 <code>revokedRunningAttempt</code> 这个字段的 javadoc 值得看——它把竞态的两个结果都解释了。",
+  lines:["revokedRunningAttempt 的 @param"],
+  deep:"若它为 false 而你以为有人在写，说明<b>那只机娘刚好赶在你按下按钮之前提交成功了</b>——它的内容保住了。<b>竞态的两个结果都是自洽的</b>，这才叫设计对了。"}]},
+
+{name:"重新签发尾令牌",why:"一次「UX 需求撞上安全模型」的处理",files:[
+ {n:"ReissueHandoffService.java",t:"new",p:"backend/src/main/java/.../collaboration/application/",
+  order:"类注释里有本课最反直觉的一段：<b>为什么「查看令牌」物理上做不到</b>。",
+  lines:["类注释：明文的一生（那个流程图）","为什么存摘要（既然 CLI 每次都发明文）","什么时候用得上（三个场景，第三个最关键）","为什么闸门落在旧令牌上"],
+  deep:"★ <b>判据：当 UX 需求撞上安全模型时，往往不是砍需求，而是换一个能满足它的机制。</b>你真正要的是「拿到一根可用的令牌」，不是「看那一根特定的令牌」。<br>★ 存摘要防的<b>不是传输被看到</b>（用的时候必然是明文），是<b>脱库</b>——摘要要 pepper 才能验证，pepper 在应用配置里不在库里：<b>两个独立的攻击面</b>。",
+  link:"复用了 <code>StartCollaborationService.issueTailToken</code>（package-private）——签发内核只有一份。"},
+ {n:"ReissueHandoffResponse.java",t:"new",p:"backend/src/main/java/.../collaboration/api/dto/response/",
+  order:"注意 <code>claimCommand</code> 这个字段——它是本课「服务端怎么通知机娘」的答案。",
+  lines:["claimCommand 的 @param"],
+  deep:"★ <b>这就是「通知」的正确形态：经由主人，且让主人零思考。</b>与 L15 接力棒必须经过人手复制粘贴是<b>同一个架构决定</b>。"}]},
+
+{name:"时间线（唯一的读路径）",why:"跨模块只读投影的第二个先例",files:[
+ {n:"Timeline{Ticket,Attempt,Audit,Error}Row.java",t:"new",p:"backend/src/main/java/.../infrastructure/persistence/dataobject/",
+  order:"四个投影行。<b>只读 TimelineAuditRow 的类注释就够了</b>——它把跨模块只读的做法与代价都写了。",
+  lines:["TimelineAuditRow 类注释","TimelineErrorRow：suggestedActionsJson 为什么不写死按钮"],
+  deep:"三个模块的表 join 在一条 SQL 里，但<b>一个 Java 类都不 import</b>——SQL 只依赖<b>表结构</b>，不依赖<b>类型</b>，而 ModularityTest 检查的是字节码引用。<br>⚠️ 代价诚实说：这几条 SQL 与别模块的表结构<b>隐式耦合</b>，编译器不替你检查，对方改列名这里运行时才炸。"},
+ {n:"CollaborationTimelineService.java",t:"new",p:"backend/src/main/java/.../collaboration/application/",
+  order:"你在带练第 6 题答偏了的那个点，答案在这个类的注释里。",
+  lines:["类注释：★ 为什么不开 Facade（读/写/派生 三条路的表格）","为什么在内存里组装而不是一条大 SQL","parseActions：诊断工具的可用性优先"],
+  deep:"★ 项目的分工是按「<b>读 / 写 / 派生</b>」分的，<b>不是</b>按「跨不跨模块」分的。Facade 的价值是「写要保证事务边界与不变量」；<b>读不改变任何东西</b>。<br>⚠️ 而领域事件在这里<b>根本用不了</b>：你没法「发个事件然后等它把数据告诉你」。<br>★ <code>parseActions</code> 解析失败返回空列表而不抛异常——<b>诊断工具的可用性优先级高于它自身的严格性</b>：时间线就是出事时给你看的，因为一条脏 JSON 整页 500，恰恰在最需要它的时刻失效。"},
+ {n:"CollaborationDetailView.java",t:"new",p:"backend/src/main/java/.../collaboration/api/dto/response/",
+  order:"三段数据回答三个不同的问题。类注释开头那段是本课最重要的一句话之一。",
+  lines:["类注释：★ 它是 session.status 的第一个真正消费者","三段数据（tickets / timeline / errors）","AttemptDetail：retry 过的票会有多条"],
+  deep:"★ 「<b>没人读的状态连骗人的机会都没有</b>」这句话的另一半在这里兑现：这个 DTO 就是那个「有人把它显示出来」的时刻。"}]},
+
+{name:"自报失败 + 一次被逼出来的抽取",why:"L17 那条分工判据的价值在这里兑现",files:[
+ {n:"FailurePropagation.java",t:"new",p:"backend/src/main/java/.../collaboration/application/",
+  order:"★ <b>这是全课最值得学的一次重构</b>——它不是为了整洁，是被第二个调用方逼出来的。",
+  lines:["类注释：为什么值得抽（不是为了整洁）","为什么它【不含】闸门"],
+  deep:"L17 定的判据是「<b>何时做归 reliability，做什么归 collaboration</b>」。当时只有一个「何时」；L18 出现了第二个（机娘自报失败），而两者「做什么」完全相同。<br>★ <b>把「做什么」独立出来之后，加一个新触发者不需要复制任何逻辑</b>——若当初写死在 Worker 里，L18 只能复制粘贴，而复制出来的两份<b>一定会漂移</b>。<br>★ 它<b>故意不含闸门</b>：两个调用方判定的是不同的事（已过期 vs 凭证对得上）。"},
+ {n:"ReportClientFailureService.java",t:"new",p:"backend/src/main/java/.../collaboration/application/",
+  order:"读它主要是看<b>两道闸门为什么互补</b>。",
+  lines:["类注释：为什么值得为它单开一个端点","两道闸门的对照（Worker vs 自报）"],
+  deep:"★ 主要收益<b>不是省那 15 分钟，是把「症状」换成「原因」</b>：超时那条只能写「租约超时」，服务端根本不知道为什么。<br>★ 闸门<b>故意不校验是否过期</b>——机娘说「我写不下去了」这件事，租约过没过期都成立。若与 Worker 撞上，谁先谁赢都不影响正确性，<b>因为两条路径后续做的事完全相同</b>。"},
+ {n:"ExpireAttemptFacadeImpl · ExpireAttemptService",t:"mod",p:"backend/src/main/java/.../collaboration/application/ · reliability/application/",
+  order:"L17 的两个文件被本课改动。前者七步变四步（三步抽走），后者多监听一个事件。",
+  lines:["FacadeImpl 的 ③④⑤⑥ 注释（为什么抽出来）","ExpireAttemptService.onAttemptFailedByClient 的 javadoc"],
+  deep:"注意 <code>onAttemptFailedByClient</code> 里那句：<b>建议动作的分叉与超时那条完全一致</b>——判据不是「怎么失败的」，而是<b>「有没有草稿可救」</b>。首棒失败无论怎么失败都只能结束协作。"}]},
+
+{name:"前文缺口（你验收时问出来的）",why:"一个跑了四课都没人问的问题",files:[
+ {n:"PrecedingContentMapper.java + .xml",t:"hot",
+  p:"backend/src/main/java/.../mapper/ · resources/mapper/collaboration/",
+  order:"★ 先读<b>接口的类注释</b>（缺口的来龙去脉 + Raft 的外部佐证），再读 XML（三个设计判断）。",
+  lines:["接口类注释：它补的是什么 + 代价没人算过","XML 顶部：★★ 三个设计判断都在这条 SQL 里"],
+  deep:"★ 最硬的判断是<b>返回哪一层</b>：<code>draft_block.rendered_content</code>（渲染层）而不是 <code>contribution.raw_content</code>（原始层）。<br>因为<b>续写要基于「文章现在是什么样」</b>——你润色过第 1 棒之后，第 2 棒若读到原始版本，会<b>基于一段已经不存在的文字</b>往下写。<br>★ 而且渲染层<b>严格优于</b>：两层是同一次 submit 用同一个字符串写的，<b>没润色时等价、润色过才更对，没有任何情况下更差</b>。",
+  link:"两层结构的来源：<code>APPROVAL_RECORD.md</code>「主人润色 → 只改 DraftBlock」；写入点在 <code>ContentService.java:262/282</code>（同一个方法里写两层）。"},
+ {n:"PrecedingContentService.java",t:"new",p:"backend/src/main/java/.../collaboration/application/",
+  order:"权限边界那一段值得细看——它<b>沿用了 L16 已确立的判据</b>，不是新发明的。",
+  lines:["类注释：权限按【租户】划不按【机娘】划","「只能读已完成的」不需要写任何过滤条件","MAX_BLOCKS 的注释（为什么不做分页）"],
+  deep:"★ 若按机娘过滤，<b>第 3 棒就读不到第 2 棒写的东西，这个端点会直接失效</b>。L16 的原话是：「谁能<b>写</b>」由闸门把关、「谁能<b>看</b>」按租户划——两件事，别混。<br>★ 首棒返回<b>空而非报错</b>：这是「首棒失败不暴露空草稿」的另一面——草稿不存在时读路径查不到任何东西，<b>不需要任何 if 去「藏」它</b>。"},
+ {n:"PrecedingContentView.java",t:"new",p:"backend/src/main/java/.../collaboration/api/dto/response/",
+  order:"注意 <code>truncated</code> 这个字段为什么必须有。",
+  lines:["truncated 的 @param"],
+  deep:"★ <b>宁可如实说「截断了」，也不要静悄悄少给——沉默的截断会让机娘以为自己读到了全文</b>，然后基于残缺的上下文续写。"}]},
+
+{name:"入口层",why:"最后读 Controller —— 它其实最薄",files:[
+ {n:"OwnerCollaborationController.java",t:"new",p:"backend/src/main/java/.../collaboration/api/",
+  order:"读到这里你会发现它<b>薄得几乎没有逻辑</b>——四个方法都是「调 Service、拼响应」。这是对的：判定在 SQL、编排在 Service、表现层只管表现。",
+  lines:["类注释：本项目第一组「人的决策」端点","★ 为什么这些端点不走 CollaborationFacade","★ 为什么四个端点都没有 @Idempotent","★ 路径里为什么有 postTicket 又有 ticketCode"],
+  deep:"★ L17 的 Facade 注释说「让 L18 的 retry 有现成的落点」，很容易误读成「retry 要挂 Facade」。<b>不需要</b>——Facade 是给<b>别的模块</b>调的，而本控制器就在 collaboration 内部。<br>★ <code>postTicket</code> 技术上冗余（ticket_code 全局唯一），但服务端<b>必须真的校验它</b>：<b>一个不被检查的参数比没有这个参数更糟</b>，它会制造「系统检查过了」的错觉。<br>★ 展示名在<b>表现层</b>补（<code>selectAgentNickname</code>）：Service 只管状态机推进，不必知道「页面要显示什么」。"},
+ {n:"AgentCollaborationController.java",t:"mod",p:"backend/src/main/java/.../collaboration/api/",
+  order:"机娘链加了两个端点（前文 / 自报失败）。类注释顶部的端点清单也更新了。",
+  lines:["precedingContent 的 javadoc","reportFailure 的 javadoc"],
+  deep:"注意<b>租约令牌走请求头</b>而不是请求体（同 submit）：令牌就不会出现在请求日志的 body 里。这是从 L16 起没变过的处置。"},
+ {n:"ApiStatus.java",t:"mod",p:"backend/src/main/java/com/agentlog/shared/error/",
+  order:"4 个新错误码。<b>看它们的分组注释</b>——本课这批与之前那批性质不同。",
+  lines:["「ACPP 人的决策链」那段分组注释"],
+  deep:"★ 之前那批是「<b>机娘做错了事</b>」，这批是「<b>状态已经不允许这件事了</b>」。所以自愈动作不是「换个姿势重试」，而是「去看看现在到底是什么局面」。<br><code>ACPP_TICKET_NOT_RETRYABLE</code> 尤其挡住了「跳过死掉那一棒」这个很自然但错误的想法。"}]},
+
+{name:"CLI 与前端",why:"人的决策链的两端：机娘怎么续、你怎么点",files:[
+ {n:"CollabCommand.java",t:"mod",p:"cli/src/main/java/com/agentlog/cli/",
+  order:"加了 <code>Resume</code>/<code>Fail</code> 两个子命令 + 一个 <code>printPrecedingContent</code>。<b>先读 Resume 的类注释</b>——它记录了一次「我定位错了、被你问出来」的过程。",
+  lines:["Resume 类注释：★ 它的价值不是「接收 retry 通知」","printPrecedingContent 的 javadoc","Fail 类注释：主要收益是把症状换成原因","Wait 里新增的 CANCELLED 分支","doClaimTurn（抽出来供两处共用）"],
+  deep:"★ <b>推送的前提是接收方活着。当你最需要通知的时刻恰好是接收方死掉的时刻，通信机制就不是答案——人才是。</b><br>业界（stripe listen 出站长连接 / gh run watch 轮询）确有成熟方案，但都要求进程<b>常驻</b>，而机娘是一次一条命令的 AI 对话。<br>★ <code>resume</code> 真正的价值是<b>替机娘省掉「我现在该跑哪条命令」这个判断</b>——Skill 文档因此能从五分支决策树简化成一句话。<br>★ 前文打到 <b>stderr</b> 而不是 stdout：stdout=机器（JSON 管道）、stderr=人。这条约定从 L12 起没破过。"},
+ {n:"OwnerCollaborationPage.vue",t:"new",p:"web/src/pages/",
+  order:"按 Pack 六条 UX 规格做完整。<b>先读文件头的注释块</b>（含那六条规则的落实对照）。",
+  lines:["文件头注释块（六条 UX 规格逐条对照）","retryableTicketCodes 的注释：为什么按钮由服务端驱动","copy() 的注释：这才是「通知」的正确形态","onStop 的确认文案（强调不删内容）"],
+  deep:"★ <b>retry 按钮的显示条件由 <code>suggested_actions_json</code> 驱动，不在前端写死</b>：写死意味着「什么时候能 retry」这条规则<b>存在两份</b>（前后端各一），而两份规则一定会漂移。让服务端说了算，前端只负责渲染。<br>★ 新令牌那一块有一句「<b>只显示这一次，刷新页面就再也拿不到了</b>」——UI 必须如实告诉用户这个物理事实。"},
+ {n:"router/index.ts",t:"mod",p:"web/src/",
+  order:"一行路由 + 三行注释。注释解释了这个页面为什么特殊。",
+  lines:["/owner/collaborations/:ticket 那条的注释"],
+  deep:"★ 「整个项目第一个『机器有能力做、但故意留给人做』的界面」——这句话值得记住，它是本课的一句话总结。"}]}
+];
+const nav=document.getElementById('nav'), body=document.getElementById('body');
+let flat=[];
+STOPS.forEach((st,si)=>{
+  const h=document.createElement('div');h.className='stop';
+  h.innerHTML=`第 ${si+1} 站 · ${st.name}<br><span>${st.why}</span>`;
+  nav.appendChild(h);
+  st.files.forEach(f=>{
+    const i=flat.length; flat.push(f);
+    const e=document.createElement('div'); e.className='f'; e.dataset.i=i;
+    e.innerHTML=`<span class="tag t-${f.t}">${f.t==='new'?'🆕':f.t==='hot'?'🔴':'🔧'}</span><span class="nm">${f.n}</span>`;
+    e.onclick=()=>show(i); nav.appendChild(e);
+  });
+});
+function show(i){
+  const f=flat[i];
+  document.querySelectorAll('.f').forEach(x=>x.classList.toggle('sel',x.dataset.i==i));
+  let h=`<h2>${f.n}</h2><div class="path">${f.p}</div>`;
+  h+=`<div class="sec"><div class="lbl">为什么这时候读它</div><div class="val">${f.order}</div></div>`;
+  if(f.lines) h+=`<div class="sec"><div class="lbl">直接看这几处（注释里已写透，不重复讲）</div>
+     <div class="val"><div class="lines">${f.lines.map(l=>`<span>${l}</span>`).join('')}</div></div></div>`;
+  if(f.deep) h+=`<div class="sec hot"><div class="lbl">★ 这个文件里真正难的地方</div><div class="val">${f.deep}</div></div>`;
+  if(f.link) h+=`<div class="sec"><div class="lbl">跨文件呼应</div><div class="val">${f.link}</div></div>`;
+  const nf=flat[i+1];
+  h+=`<div class="nx">${nf?`下一个 → <b>${nf.n}</b>`:'读完了。回讲义 §12 做那 11 道自测题。'}</div>`;
+  body.innerHTML=h; body.scrollTop=0;
+}
+</script>
+</body>
+</html>
