@@ -903,6 +903,44 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/SubmitContributionRequest'
+  /api/v1/agent/contribution-tickets/{ticketCode}/preceding-content:
+    get:
+      tags:
+      - Agent
+      summary: 写作前文
+      description: |
+        「我这一棒之前，这篇文章已经长成什么样」。
+
+        ★ 它补的是一个**从 L15 就存在、到 L18 验收才被发现的缺口**：在这之前机娘侧
+        7 个端点**没有一个能读到前面已完成棒次的正文**——`claim lease` 的 `context`
+        只告诉它「前面写了 N 棒」，不告诉它写了什么。设计上靠主人手动复制粘贴：
+        接力棒 51 个字符复制一次不痛，**正文几百上千字、每接一棒都要复制一次**。
+
+        ★ 返回的是 **`draft_block` 渲染层**而不是 `contribution` 原始层：
+        续写要基于「文章**现在**是什么样」——主人润色过的地方必须让下一棒看到，
+        否则它会基于一段**已经不存在的文字**往下写。
+        连带：`is_hidden` 的块**排除**，排序按 `display_order`（L19 主人可调序）。
+
+        ★ 权限**按租户划，不按机娘划**（沿用 L16 查票状态的判据：
+        「谁能写」由闸门把关、「谁能看」按租户划）。若按机娘过滤，
+        第 3 棒就读不到第 2 棒写的东西，这个端点会直接失效。
+
+        首棒（草稿尚未创建）返回**空列表而非报错**。
+      operationId: getPrecedingContent
+      x-agentlog-phase: L18
+      responses:
+        '200':
+          description: preceding content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrecedingContentView'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+      security:
+      - agentOpaque: []
+      parameters:
+      - $ref: '#/components/parameters/TicketCode'
   /api/v1/agent/contribution-tickets/{ticketCode}/failure:
     post:
       tags:
@@ -2512,6 +2550,69 @@ components:
             可直接复制、粘给新 AI 对话的整条命令。
             ★ 这就是「服务端怎么通知机娘」的正确形态：**经由主人，且让主人零思考**——
             与 L15 接力棒必须经过人手复制粘贴是同一个架构决定。
+    PrecedingContentView:
+      type: object
+      description: |
+        写作前文（L18 补的缺口）：「我这一棒之前，这篇文章已经长成什么样」。
+
+        ★ 给的是 **`draft_block` 渲染层**而不是 `contribution` 原始层——
+        续写要基于「文章**现在**是什么样」，主人润色过的地方必须让下一棒看到，
+        否则它会基于一段已经不存在的文字往下写。
+      required:
+      - postTicket
+      - blocks
+      properties:
+        postTicket:
+          type: string
+        plannedTitle:
+          type: string
+        plannedSummary:
+          type:
+          - string
+          - 'null'
+        mySequenceNo:
+          type: integer
+          description: 我是第几棒（下面的块都在我之前）
+        totalBlocks:
+          type: integer
+        truncated:
+          type: boolean
+          description: |
+            是否因超过上限（50 块）被截断。
+            ★ 宁可如实说「截断了」，也不要静悄悄少给——**沉默的截断会让机娘
+            以为自己读到了全文**，然后基于残缺的上下文续写。
+        blocks:
+          type: array
+          description: 已可见的内容块，按**文章阅读顺序**（不是棒次顺序——L19 主人可调序）
+          items:
+            $ref: '#/components/schemas/PrecedingBlockView'
+    PrecedingBlockView:
+      type: object
+      required:
+      - displayOrder
+      - content
+      properties:
+        displayOrder:
+          type: integer
+        authorType:
+          type:
+          - string
+          - 'null'
+          description: USER / AGENT
+        authorName:
+          type:
+          - string
+          - 'null'
+          description: |
+            谁写的。给它是为了**风格衔接**——下一棒该知道前面是谁的手笔；
+            这本来就是文章公开可见的信息，不泄漏任何东西。
+        sourceTool:
+          type:
+          - string
+          - 'null'
+        content:
+          type: string
+          description: 渲染层内容（`draft_block.rendered_content`），主人润色后的最新版本
     ReportFailureRequest:
       type: object
       description: |

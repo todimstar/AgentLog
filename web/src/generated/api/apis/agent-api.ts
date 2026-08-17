@@ -30,6 +30,8 @@ import type { ClaimLeaseResponse } from '../models';
 // @ts-ignore
 import type { CreateAgentDraftRequest } from '../models';
 // @ts-ignore
+import type { PrecedingContentView } from '../models';
+// @ts-ignore
 import type { ProblemDetail } from '../models';
 // @ts-ignore
 import type { ReportFailureRequest } from '../models';
@@ -164,6 +166,44 @@ export const AgentApiAxiosParamCreator = function (configuration?: Configuration
             let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
             localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
             localVarRequestOptions.data = serializeDataIfNeeded(createAgentDraftRequest, localVarRequestOptions, configuration)
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * 「我这一棒之前，这篇文章已经长成什么样」。  ★ 它补的是一个**从 L15 就存在、到 L18 验收才被发现的缺口**：在这之前机娘侧 7 个端点**没有一个能读到前面已完成棒次的正文**——`claim lease` 的 `context` 只告诉它「前面写了 N 棒」，不告诉它写了什么。设计上靠主人手动复制粘贴： 接力棒 51 个字符复制一次不痛，**正文几百上千字、每接一棒都要复制一次**。  ★ 返回的是 **`draft_block` 渲染层**而不是 `contribution` 原始层： 续写要基于「文章**现在**是什么样」——主人润色过的地方必须让下一棒看到， 否则它会基于一段**已经不存在的文字**往下写。 连带：`is_hidden` 的块**排除**，排序按 `display_order`（L19 主人可调序）。  ★ 权限**按租户划，不按机娘划**（沿用 L16 查票状态的判据： 「谁能写」由闸门把关、「谁能看」按租户划）。若按机娘过滤， 第 3 棒就读不到第 2 棒写的东西，这个端点会直接失效。  首棒（草稿尚未创建）返回**空列表而非报错**。 
+         * @summary 写作前文
+         * @param {string} ticketCode 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        getPrecedingContent: async (ticketCode: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'ticketCode' is not null or undefined
+            assertParamExists('getPrecedingContent', 'ticketCode', ticketCode)
+            const localVarPath = `/api/v1/agent/contribution-tickets/{ticketCode}/preceding-content`
+                .replace('{ticketCode}', encodeURIComponent(String(ticketCode)));
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'GET', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication agentOpaque required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            localVarHeaderParameter['Accept'] = 'application/json,application/problem+json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
 
             return {
                 url: toPathString(localVarUrlObj),
@@ -397,6 +437,19 @@ export const AgentApiFp = function(configuration?: Configuration) {
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
         /**
+         * 「我这一棒之前，这篇文章已经长成什么样」。  ★ 它补的是一个**从 L15 就存在、到 L18 验收才被发现的缺口**：在这之前机娘侧 7 个端点**没有一个能读到前面已完成棒次的正文**——`claim lease` 的 `context` 只告诉它「前面写了 N 棒」，不告诉它写了什么。设计上靠主人手动复制粘贴： 接力棒 51 个字符复制一次不痛，**正文几百上千字、每接一棒都要复制一次**。  ★ 返回的是 **`draft_block` 渲染层**而不是 `contribution` 原始层： 续写要基于「文章**现在**是什么样」——主人润色过的地方必须让下一棒看到， 否则它会基于一段**已经不存在的文字**往下写。 连带：`is_hidden` 的块**排除**，排序按 `display_order`（L19 主人可调序）。  ★ 权限**按租户划，不按机娘划**（沿用 L16 查票状态的判据： 「谁能写」由闸门把关、「谁能看」按租户划）。若按机娘过滤， 第 3 棒就读不到第 2 棒写的东西，这个端点会直接失效。  首棒（草稿尚未创建）返回**空列表而非报错**。 
+         * @summary 写作前文
+         * @param {string} ticketCode 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async getPrecedingContent(ticketCode: string, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<PrecedingContentView>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.getPrecedingContent(ticketCode, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['AgentApi.getPrecedingContent']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
          * 
          * @summary Ticket 状态
          * @param {string} ticketCode 
@@ -490,6 +543,16 @@ export const AgentApiFactory = function (configuration?: Configuration, basePath
             return localVarFp.createAgentDraft(createAgentDraftRequest, options).then((request) => request(axios, basePath));
         },
         /**
+         * 「我这一棒之前，这篇文章已经长成什么样」。  ★ 它补的是一个**从 L15 就存在、到 L18 验收才被发现的缺口**：在这之前机娘侧 7 个端点**没有一个能读到前面已完成棒次的正文**——`claim lease` 的 `context` 只告诉它「前面写了 N 棒」，不告诉它写了什么。设计上靠主人手动复制粘贴： 接力棒 51 个字符复制一次不痛，**正文几百上千字、每接一棒都要复制一次**。  ★ 返回的是 **`draft_block` 渲染层**而不是 `contribution` 原始层： 续写要基于「文章**现在**是什么样」——主人润色过的地方必须让下一棒看到， 否则它会基于一段**已经不存在的文字**往下写。 连带：`is_hidden` 的块**排除**，排序按 `display_order`（L19 主人可调序）。  ★ 权限**按租户划，不按机娘划**（沿用 L16 查票状态的判据： 「谁能写」由闸门把关、「谁能看」按租户划）。若按机娘过滤， 第 3 棒就读不到第 2 棒写的东西，这个端点会直接失效。  首棒（草稿尚未创建）返回**空列表而非报错**。 
+         * @summary 写作前文
+         * @param {string} ticketCode 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        getPrecedingContent(ticketCode: string, options?: RawAxiosRequestConfig): AxiosPromise<PrecedingContentView> {
+            return localVarFp.getPrecedingContent(ticketCode, options).then((request) => request(axios, basePath));
+        },
+        /**
          * 
          * @summary Ticket 状态
          * @param {string} ticketCode 
@@ -569,6 +632,17 @@ export class AgentApi extends BaseAPI {
      */
     public createAgentDraft(createAgentDraftRequest: CreateAgentDraftRequest, options?: RawAxiosRequestConfig) {
         return AgentApiFp(this.configuration).createAgentDraft(createAgentDraftRequest, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * 「我这一棒之前，这篇文章已经长成什么样」。  ★ 它补的是一个**从 L15 就存在、到 L18 验收才被发现的缺口**：在这之前机娘侧 7 个端点**没有一个能读到前面已完成棒次的正文**——`claim lease` 的 `context` 只告诉它「前面写了 N 棒」，不告诉它写了什么。设计上靠主人手动复制粘贴： 接力棒 51 个字符复制一次不痛，**正文几百上千字、每接一棒都要复制一次**。  ★ 返回的是 **`draft_block` 渲染层**而不是 `contribution` 原始层： 续写要基于「文章**现在**是什么样」——主人润色过的地方必须让下一棒看到， 否则它会基于一段**已经不存在的文字**往下写。 连带：`is_hidden` 的块**排除**，排序按 `display_order`（L19 主人可调序）。  ★ 权限**按租户划，不按机娘划**（沿用 L16 查票状态的判据： 「谁能写」由闸门把关、「谁能看」按租户划）。若按机娘过滤， 第 3 棒就读不到第 2 棒写的东西，这个端点会直接失效。  首棒（草稿尚未创建）返回**空列表而非报错**。 
+     * @summary 写作前文
+     * @param {string} ticketCode 
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public getPrecedingContent(ticketCode: string, options?: RawAxiosRequestConfig) {
+        return AgentApiFp(this.configuration).getPrecedingContent(ticketCode, options).then((request) => request(this.axios, this.basePath));
     }
 
     /**

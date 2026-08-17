@@ -8,6 +8,7 @@ import com.agentlog.collaboration.application.ClaimHandoffService;
 import com.agentlog.collaboration.application.ClaimLeaseService;
 import com.agentlog.collaboration.application.CollaborationTimelineService;
 import com.agentlog.collaboration.application.ReissueHandoffService;
+import com.agentlog.collaboration.application.PrecedingContentService;
 import com.agentlog.collaboration.application.ReportClientFailureService;
 import com.agentlog.collaboration.application.RetryTicketService;
 import com.agentlog.collaboration.application.StartCollaborationService;
@@ -82,6 +83,7 @@ class OwnerCollaborationIntegrationTest {
     @Autowired ReissueHandoffService reissueService;
     @Autowired CollaborationTimelineService timelineService;
     @Autowired ReportClientFailureService reportFailureService;
+    @Autowired PrecedingContentService precedingContentService;
     @Autowired ExpiredAttemptWorker worker;
     @Autowired JdbcTemplate jdbc;
 
@@ -501,8 +503,120 @@ class OwnerCollaborationIntegrationTest {
         assertTicketStatus(t2, "READY_TO_WRITE");
     }
 
-    // ══════════════════════ 夹具与断言 ══════════════════════
+    // ═══════════════ ⑧ 写作前文（L18 补的缺口）═══════════════
 
+    /**
+     * ★ 下一棒能读到前面已写的正文——主人在 L18 验收时发现的缺口。
+     *
+     * <p>在这之前机娘侧 7 个端点<b>没有一个能读到前文</b>，设计上靠主人手动复制粘贴：
+     * 接力棒 51 字符复制一次不痛，<b>正文几百上千字、每接一棒都要复制一次</b>。
+     *
+     * <p>同时验证三条边界：首棒读到<b>空而非报错</b>（草稿还不存在）、
+     * 同主人名下的<b>另一只</b>机娘也能读（权限按租户划不按机娘划）、跨主人 404。
+     */
+    @Test
+    void nextTurnCanReadWhatPreviousTurnsWrote() {
+        Fixture f = fixture();
+        AgentIdentity agA = agent(f.agentId(), f.ownerUserId());
+        AgentIdentity agB = agent(f.agent2Id(), f.ownerUserId());
+
+        var started = startService.start(agA, startReq("前文可读", f.channelId()));
+        String t1 = started.contributionTicket().ticketCode();
+
+        // ① 首棒：草稿还不存在 → 空列表，不是报错
+        //    ★ 这是「首棒失败不暴露空草稿」的另一面：草稿不存在时读路径查不到任何东西，
+        //      不需要任何 if 去"藏"它。
+        var beforeAnyWrite = precedingContentService.get(agA, t1);
+        assertThat(beforeAnyWrite.blocks()).isEmpty();
+        assertThat(beforeAnyWrite.plannedTitle()).isEqualTo("前文可读");
+
+        var lease1 = claimLeaseService.claim(agA, t1);
+        submitService.submit(agA, t1, lease1.leaseToken(),
+                new SubmitContributionRequest("# 第一棒\n\n这是第一棒写下的正文。", null));
+
+        // ② 第 2 棒（另一只机娘）能读到第 1 棒的内容
+        var join2 = claimHandoffService.claim(agB, new ClaimHandoffRequest(started.nextHandoffToken()));
+        String t2 = join2.contributionTicket().ticketCode();
+
+        var view = precedingContentService.get(agB, t2);
+        assertThat(view.mySequenceNo()).isEqualTo(2);
+        assertThat(view.blocks()).hasSize(1);
+        assertThat(view.blocks().get(0).content()).contains("这是第一棒写下的正文");
+        assertThat(view.blocks().get(0).authorType()).isEqualTo("AGENT");
+        assertThat(view.truncated()).isFalse();
+
+        // ③ ★ 权限按【租户】划不按【机娘】划：机娘A（不是第2棒的持有者）同样能读
+        //    若按机娘过滤，第 3 棒就读不到第 2 棒写的东西，这个端点会直接失效。
+        assertThat(precedingContentService.get(agA, t2).blocks()).hasSize(1);
+
+        // ④ 跨主人 → 404（不是 403，避免泄漏资源存在性）
+        Fixture other = fixture();
+        assertThatThrownBy(() -> precedingContentService.get(
+                agent(other.agentId(), other.ownerUserId()), t2))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("席位不存在");
+    }
+
+    /**
+     * ★ 读的是<b>渲染层</b>（{@code draft_block.rendered_content}），不是原始层
+     * （{@code contribution.raw_content}）——主人润色过之后，下一棒必须看到<b>润色后</b>的版本。
+     *
+     * <p>否则它会基于一段<b>已经不存在的文字</b>往下写。
+     * 这两层是 {@code APPROVAL_RECORD} 冻结的结构：contribution 永不覆盖、主人润色只改 draft_block。
+     */
+    @Test
+    void precedingContentReflectsOwnerEditsNotOriginalSubmission() {
+        Fixture f = fixture();
+        AgentIdentity agA = agent(f.agentId(), f.ownerUserId());
+        AgentIdentity agB = agent(f.agent2Id(), f.ownerUserId());
+
+        var started = startService.start(agA, startReq("渲染层优先", f.channelId()));
+        String t1 = started.contributionTicket().ticketCode();
+        var lease1 = claimLeaseService.claim(agA, t1);
+        submitService.submit(agA, t1, lease1.leaseToken(),
+                new SubmitContributionRequest("机娘交上来的原始文字", null));
+
+        // 模拟主人润色（L19 的编辑功能，这里直接改库验证读路径取的是哪一层）
+        jdbc.update("UPDATE draft_block db JOIN collaboration_session cs ON cs.draft_id=db.draft_id "
+                        + "SET db.rendered_content=? WHERE cs.post_ticket=?",
+                "主人润色之后的文字", started.postTicket());
+
+        var join2 = claimHandoffService.claim(agB, new ClaimHandoffRequest(started.nextHandoffToken()));
+        var view = precedingContentService.get(agB, join2.contributionTicket().ticketCode());
+
+        assertThat(view.blocks().get(0).content())
+                .as("下一棒该看到润色后的版本")
+                .isEqualTo("主人润色之后的文字");
+
+        // 原始贡献不受影响 —— contribution 是不可变原始层
+        String raw = jdbc.queryForObject(
+                "SELECT c.raw_content FROM contribution c JOIN collaboration_session cs "
+                        + "ON cs.id=c.session_id WHERE cs.post_ticket=?", String.class, started.postTicket());
+        assertThat(raw).as("原始贡献永不被覆盖").isEqualTo("机娘交上来的原始文字");
+    }
+
+    /** 主人隐藏的块不该被下一棒读到——隐藏它就是不要它出现在文章里。 */
+    @Test
+    void hiddenBlocksAreExcludedFromPrecedingContent() {
+        Fixture f = fixture();
+        AgentIdentity agA = agent(f.agentId(), f.ownerUserId());
+        AgentIdentity agB = agent(f.agent2Id(), f.ownerUserId());
+
+        var started = startService.start(agA, startReq("隐藏块排除", f.channelId()));
+        String t1 = started.contributionTicket().ticketCode();
+        var lease1 = claimLeaseService.claim(agA, t1);
+        submitService.submit(agA, t1, lease1.leaseToken(),
+                new SubmitContributionRequest("这段会被主人隐藏", null));
+
+        jdbc.update("UPDATE draft_block db JOIN collaboration_session cs ON cs.draft_id=db.draft_id "
+                + "SET db.is_hidden=TRUE WHERE cs.post_ticket=?", started.postTicket());
+
+        var join2 = claimHandoffService.claim(agB, new ClaimHandoffRequest(started.nextHandoffToken()));
+        assertThat(precedingContentService.get(agB, join2.contributionTicket().ticketCode()).blocks())
+                .isEmpty();
+    }
+
+    // ══════════════════════ 夹具与断言 ══════════════════════
     /** 一个「首棒完成、中间棒超时、第三棒被阻塞」的标准局面——本课绝大多数测试的起点。 */
     private record Scenario(Long ownerUserId, String postTicket,
                             String doneTicket, String deadTicket, String blockedTicket,

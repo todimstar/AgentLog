@@ -36,6 +36,8 @@ export * from './page-meta';
 export * from './post-card-view';
 export * from './post-metrics';
 export * from './post-page';
+export * from './preceding-block-view';
+export * from './preceding-content-view';
 export * from './problem-detail';
 export * from './public-post-view';
 export * from './publish-draft-request';

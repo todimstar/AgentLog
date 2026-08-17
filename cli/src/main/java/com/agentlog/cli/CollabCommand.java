@@ -317,6 +317,57 @@ public class CollabCommand implements Runnable {
         }
 
         /**
+         * 打印「我这一棒之前文章已经长成什么样」（L18 补的缺口）。
+         *
+         * <h3>★ 为什么这一步值得存在</h3>
+         * 在这之前，机娘<b>没有任何办法读到前面写了什么</b>——设计上靠主人手动复制粘贴。
+         * 接力棒 51 个字符复制一次不痛，<b>正文几百上千字、每接一棒都要复制一次</b>。
+         * <p>现在 {@code resume} 领到租约后顺手把前文打出来，机娘<b>一条命令就拿到了全部上下文</b>。
+         *
+         * <p>★ 写到 <b>stderr</b>：它是给机娘（人类可读的诊断流）看的写作参考，
+         * 不是给管道消费的机器数据——stdout 那一份 JSON 仍然只有状态。
+         * 这条 stdout/stderr 分流约定从 L12 起没变过。
+         */
+        void printPrecedingContent(String ticketCode, String actingToken) {
+            ApiClient.Result res = api().getJson(
+                    ticketPath(ticketCode) + "/preceding-content", actingToken);
+            if (!res.ok()) {
+                // 拿不到前文不该让整条命令失败 —— 租约已经领到了，机娘照样能写。
+                System.err.println("[i] 前文拉取失败（不影响写作）：" + res.body().path("detail").asText(""));
+                return;
+            }
+            JsonNode body = res.body();
+            JsonNode blocks = body.path("blocks");
+            System.err.println();
+            System.err.println("──────── 这篇文章目前的内容（你要接着往下写）────────");
+            System.err.println("标题：" + body.path("plannedTitle").asText(""));
+            String summary = body.path("plannedSummary").asText("");
+            if (!summary.isBlank() && !"null".equals(summary)) {
+                System.err.println("摘要：" + summary);
+            }
+            if (blocks.isEmpty()) {
+                System.err.println("（还没有任何正文——你是第一棒，从零开始写）");
+            } else {
+                for (JsonNode b : blocks) {
+                    String who = b.path("authorName").asText("");
+                    String tool = b.path("sourceTool").asText("");
+                    System.err.println();
+                    System.err.println("【第 " + b.path("displayOrder").asInt() + " 段"
+                            + (who.isBlank() ? "" : " · " + who)
+                            + (tool.isBlank() || "null".equals(tool) ? "" : "（" + tool + "）") + "】");
+                    System.err.println(b.path("content").asText(""));
+                }
+                if (body.path("truncated").asBoolean(false)) {
+                    System.err.println();
+                    System.err.println("⚠️ 内容较多已截断，只显示了前 " + blocks.size() + " 段。");
+                }
+            }
+            System.err.println("──────────────────────────────────────────────────");
+            System.err.println("★ 以上是【当前文章的样子】（含主人润色后的版本），请在此基础上续写。");
+            System.err.println();
+        }
+
+        /**
          * 接力棒寿命的人话。
          *
          * ★ L16 起默认<b>永不过期</b>（DRIFT D-16，主人 2026-08-02 提出并说服我）：
@@ -730,7 +781,11 @@ public class CollabCommand implements Runnable {
             switch (status) {
                 case "READY_TO_WRITE" -> {
                     System.err.println("[OK] 轮到你了，正在自动领取写作许可……");
-                    return doClaimTurn(ticket, actingToken);
+                    int rc = doClaimTurn(ticket, actingToken);
+                    if (rc == 0) {
+                        printPrecedingContent(ticket, actingToken);
+                    }
+                    return rc;
                 }
                 case "LEASED" -> {
                     String localLease = ticketStore.read(ticket, "leaseToken");

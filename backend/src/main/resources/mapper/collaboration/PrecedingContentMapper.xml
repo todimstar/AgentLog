@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.agentlog.collaboration.infrastructure.persistence.mapper.PrecedingContentMapper">
+
+    <!--
+      「我这一棒之前，文章已经长成什么样」——跨模块只读投影（content 的 draft_block
+      + identity 的 agent_account / user_account），本模块一个类都不 import。
+
+      ★★ 三个设计判断都在这条 SQL 里 ★★
+
+      ① 读 rendered_content（渲染层），不读 contribution.raw_content（原始层）
+         APPROVAL_RECORD 冻结的两层结构：
+           contribution.raw_content     机娘交的原文，永不覆盖  —— 不可变原始层
+           draft_block.rendered_content 文章【现在】的样子      —— 主人润色只改这里
+         续写要基于「文章现在是什么样」。主人润色过第 1 棒之后，
+         第 2 棒若还读到原始版本，就会基于一段【已经不存在的文字】往下写。
+
+      ② is_hidden = FALSE
+         主人隐藏一个块，就是不要它出现在文章里 —— 机娘更不该基于它续写。
+
+      ③ ORDER BY display_order，不是棒次
+         L19 之后主人可以拖拽调序，那时「第几棒写的」与「在文章里排第几」就分叉了。
+         机娘要读的是【文章的阅读顺序】。
+
+      作者名两路合一：AGENT 取 agent_account.nickname、USER 取 user_account.username。
+      为什么要给作者名：让下一棒知道前面是谁写的、用什么工具写的 ——
+      风格衔接需要这个信息，而它本来就是文章公开可见的一部分（不泄漏任何东西）。
+    -->
+    <select id="selectVisibleBlocks"
+            resultType="com.agentlog.collaboration.infrastructure.persistence.dataobject.PrecedingBlockRow">
+        SELECT db.display_order,
+               db.author_type,
+               COALESCE(aa.nickname, ua.username) AS author_name,
+               db.source_tool,
+               db.rendered_content AS content
+        FROM draft_block db
+        LEFT JOIN agent_account aa ON aa.id = db.author_agent_id
+        LEFT JOIN user_account  ua ON ua.id = db.author_user_id
+        WHERE db.draft_id  = #{draftId}
+          AND db.is_hidden = FALSE
+        ORDER BY db.display_order
+        LIMIT #{limit}
+    </select>
+
+</mapper>

@@ -1,0 +1,1670 @@
+{
+  "info": {
+    "name": "AgentLog-L18 · Retry 与 Terminate（v2 修订版）",
+    "description": "L18 验收集合 v2 —— 修掉了 v1 的 8 个错误（字段名/请求头/变量流转）。\n\n【认证方式速查】三条链各不相同，v1 就是错在这里：\n  Chain 1  /api/v1/owner/**  → Session Cookie（Postman 自动带）+ X-XSRF-TOKEN\n  Chain 2  /api/v1/cli/**    → Authorization: Bearer {{ownerAccessToken}}\n  Chain 3  /api/v1/agent/**  → Authorization: Bearer {{agentActingToken}}\n\n【跑之前】\n1. 重启 IDEA 里的后端（你的库还停在 V014，V015/V016 要启动时才应用）；\n2. application-local.yml 的 attempt-lease-ttl: PT30S 已帮你打开，验收完记得注释回去。\n\n【唯一要手动等的地方】第一幕第 7 步跑完等 35 秒再跑第 8 步。\n【令牌过期了】跑前置组最后那条 🔄 refresh（字段名是 refreshToken，且是一次性轮换）。",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "email",
+      "value": "alice@demo.agentlog.local"
+    },
+    {
+      "key": "password",
+      "value": "password123"
+    },
+    {
+      "key": "csrfToken",
+      "value": ""
+    },
+    {
+      "key": "deviceCode",
+      "value": ""
+    },
+    {
+      "key": "userCode",
+      "value": ""
+    },
+    {
+      "key": "ownerAccessToken",
+      "value": ""
+    },
+    {
+      "key": "ownerRefreshToken",
+      "value": ""
+    },
+    {
+      "key": "agentAccountId",
+      "value": ""
+    },
+    {
+      "key": "agentAccountIdB",
+      "value": ""
+    },
+    {
+      "key": "agentActingToken",
+      "value": ""
+    },
+    {
+      "key": "agentActingTokenB",
+      "value": ""
+    },
+    {
+      "key": "channelId",
+      "value": ""
+    },
+    {
+      "key": "postTicket",
+      "value": ""
+    },
+    {
+      "key": "ticketCode",
+      "value": ""
+    },
+    {
+      "key": "ticketCodeB",
+      "value": ""
+    },
+    {
+      "key": "ticketCodeC",
+      "value": ""
+    },
+    {
+      "key": "ticketCodeD",
+      "value": ""
+    },
+    {
+      "key": "handoffToken",
+      "value": ""
+    },
+    {
+      "key": "oldHandoff",
+      "value": ""
+    },
+    {
+      "key": "leaseToken",
+      "value": ""
+    },
+    {
+      "key": "leaseTokenB",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "① 前置（自包含）· 含 🔄 refresh 续期",
+      "item": [
+        {
+          "name": "1. 发起配对（匿名）",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/cli/device-pairings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "cli",
+                "device-pairings"
+              ]
+            },
+            "description": "字段是 installationCode + deviceName（对照 L16 集合核实）。",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"installationCode\": \"postman-l18-{{$randomUUID}}\",\n  \"deviceName\": \"Postman L18\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201', ()=>pm.response.to.have.status(201));",
+                  "const b=pm.response.json();",
+                  "pm.collectionVariables.set('deviceCode', b.deviceCode);",
+                  "pm.collectionVariables.set('userCode', b.userCode);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2. 登录（拿 Session Cookie）",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/web/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "web",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "账号密码是去库里查的真值：alice@demo.agentlog.local / password123。",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', ()=>pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3. 取 CSRF token",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/web/csrf",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "web",
+                "csrf"
+              ]
+            },
+            "description": "★ 后面【所有 owner 网页端点】都要带 X-XSRF-TOKEN，值就是这里取的。"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', ()=>pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('csrfToken', pm.response.json().token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "4. 浏览器批准配对",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{csrfToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/web/device-pairings/confirm",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "web",
+                "device-pairings",
+                "confirm"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userCode\": \"{{userCode}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('204 已批准', ()=>pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "5. 换 owner 令牌",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/cli/device-pairings/token",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "cli",
+                "device-pairings",
+                "token"
+              ]
+            },
+            "description": "★ 字段名是 ownerAccessToken（不是 accessToken）——上一版我写错了这里，导致后面全断。",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"deviceCode\": \"{{deviceCode}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('APPROVED', ()=>pm.expect(pm.response.json().status).to.eql('APPROVED'));",
+                  "const b=pm.response.json();",
+                  "pm.collectionVariables.set('ownerAccessToken', b.ownerAccessToken);",
+                  "pm.collectionVariables.set('ownerRefreshToken', b.ownerRefreshToken || b.refreshToken || '');",
+                  "pm.test('★ ownerAccessToken 已流转', ()=>pm.expect(pm.collectionVariables.get('ownerAccessToken')).to.be.a('string').and.not.empty);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "6. 列出我的机娘",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerAccessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/cli/agents",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "cli",
+                "agents"
+              ]
+            },
+            "description": "返回【你名下所有非 DELETED 的机娘】（服务端过滤条件是 status != DELETED，不是 == ACTIVE——上一版我把这句描述写错了）。这里只是取列表里的前两只。"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', ()=>pm.response.to.have.status(200));",
+                  "const list=pm.response.json();",
+                  "const arr=Array.isArray(list)?list:(list.items||list.content||[]);",
+                  "pm.test('至少两只（接力要两个身份；不够请先在浏览器建一只）', ()=>pm.expect(arr.length).to.be.at.least(2));",
+                  "pm.collectionVariables.set('agentAccountId', arr[0].agentId||arr[0].id);",
+                  "pm.collectionVariables.set('agentAccountIdB', arr[1].agentId||arr[1].id);",
+                  "console.log('机娘A=',arr[0].nickname,' 机娘B=',arr[1].nickname);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "7. assume 机娘A → Chain 3 令牌",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerAccessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/cli/agents/{{agentAccountId}}/assume",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "cli",
+                "agents",
+                "{{agentAccountId}}",
+                "assume"
+              ]
+            },
+            "description": "★ 字段名是 agentActingToken——上一版我写错了，导致第一幕全要手填。",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sourceTool\": \"postman\",\n  \"clientRunId\": \"l18-run-a\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', ()=>pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('agentActingToken', pm.response.json().agentActingToken);",
+                  "pm.test('★ 机娘A令牌已流转', ()=>pm.expect(pm.collectionVariables.get('agentActingToken')).to.be.a('string').and.not.empty);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "7b. assume 机娘B → 第二把 Chain 3 令牌",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerAccessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/cli/agents/{{agentAccountIdB}}/assume",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "cli",
+                "agents",
+                "{{agentAccountIdB}}",
+                "assume"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sourceTool\": \"postman\",\n  \"clientRunId\": \"l18-run-b\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', ()=>pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('agentActingTokenB', pm.response.json().agentActingToken);",
+                  "pm.test('★ 机娘B令牌已流转', ()=>pm.expect(pm.collectionVariables.get('agentActingTokenB')).to.be.a('string').and.not.empty);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "8. 取一个分区 id",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/public/channels",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "public",
+                "channels"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const list=pm.response.json();",
+                  "const arr=Array.isArray(list)?list:(list.items||list.content||[]);",
+                  "pm.collectionVariables.set('channelId', arr[0].channelId||arr[0].id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "🔄 owner 令牌过期了？跑这条续期（RTR 轮换）",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/cli/auth/refresh",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "cli",
+                "auth",
+                "refresh"
+              ]
+            },
+            "description": "★ 字段名是 refreshToken（不是 ownerRefreshToken）——你手写时用错了这个名字，Jackson 反序列化成 null，所以返回 401 OWNER_TOKEN_INVALID。\n⚠️ 这是 RTR（轮换式刷新）：换成功后【旧的立刻作废】，所以新的 refreshToken 必须存回来，下次用新的。ADR-0002。",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{ownerRefreshToken}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', ()=>pm.response.to.have.status(200));",
+                  "const b=pm.response.json();",
+                  "pm.collectionVariables.set('ownerAccessToken', b.ownerAccessToken||b.accessToken);",
+                  "pm.collectionVariables.set('ownerRefreshToken', b.ownerRefreshToken||b.refreshToken);",
+                  "console.log('★ 旧 refreshToken 已作废，新的已存回变量');"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "② 第一幕：排 4 棒的队，第 2 棒死掉",
+      "item": [
+        {
+          "name": "1. 机娘A 开局（第 1 棒）",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{agentActingToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/agent/collaboration-sessions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "agent",
+                "collaboration-sessions"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"L18 验收：冻住之后谁来解冻\",\n  \"channelId\": \"{{channelId}}\",\n  \"summary\": \"四棒接力，第 2 棒会超时\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201', ()=>pm.response.to.have.status(201));",
+                  "const j=pm.response.json();",
+                  "pm.collectionVariables.set('postTicket', j.postTicket);",
+                  "pm.collectionVariables.set('ticketCode', j.contributionTicket.ticketCode);",
+                  "pm.collectionVariables.set('handoffToken', j.nextHandoffToken);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2. 第 1 棒领租约",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{agentActingToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/agent/contribution-tickets/{{ticketCode}}/leases",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "agent",
+                "contribution-tickets",
+                "{{ticketCode}}",
+                "leases"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201', ()=>pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('leaseToken', pm.response.json().leaseToken);",
+                  "console.log('★ 注意 context 里【没有前面的正文】——这是 ACPP 的一个真实缺口，见讲义');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3. 第 1 棒提交（草稿诞生）",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{agentActingToken}}"
+              },
+              {
+                "key": "X-Turn-Lease-Token",
+                "value": "{{leaseToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/agent/contribution-tickets/{{ticketCode}}/contributions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "agent",
+                "contribution-tickets",
+                "{{ticketCode}}",
+                "contributions"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"# 第一棒\\n\\n这一棒正常写完了，草稿从这里诞生。\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201', ()=>pm.response.to.have.status(201));",
+                  "pm.test('票落 DONE', ()=>pm.expect(pm.response.json().ticketStatus).to.eql('DONE'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "4. 机娘B 接第 2 棒（会死的那一棒）",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{agentActingTokenB}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/agent/collaboration-handoffs/claim",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "agent",
+                "collaboration-handoffs",
+                "claim"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"handoffToken\": \"{{handoffToken}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201', ()=>pm.response.to.have.status(201));",
+                  "const j=pm.response.json();",
+                  "pm.collectionVariables.set('ticketCodeB', j.contributionTicket.ticketCode);",
+                  "pm.collectionVariables.set('handoffToken', j.nextHandoffToken);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "4b. ★ 第 2 棒读前文（本轮新补的缺口）",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{agentActingTokenB}}"
+              }
+            ],
+            "description": "★ 你在验收时问的那个问题：「之前的正文怎么传给后续接力的机娘？」\n在这个端点之前——【传不了】，机娘侧 7 个端点没有一个能读到前文，只能靠你手动复制粘贴。\n★ 返回的是 draft_block 渲染层（你润色后的版本），不是 contribution 原始层：\n  续写要基于「文章现在是什么样」，否则它会基于一段已经不存在的文字往下写。",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/agent/contribution-tickets/{{ticketCodeB}}/preceding-content",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "agent",
+                "contribution-tickets",
+                "{{ticketCodeB}}",
+                "preceding-content"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', ()=>pm.response.to.have.status(200));",
+                  "const j=pm.response.json();",
+                  "pm.test('★ 读到了第 1 棒的正文', ()=>pm.expect(j.blocks.length).to.eql(1));",
+                  "pm.test('内容对得上', ()=>pm.expect(j.blocks[0].content).to.include('第一棒'));",
+                  "pm.test('我是第 2 棒', ()=>pm.expect(j.mySequenceNo).to.eql(2));",
+                  "pm.test('没被截断', ()=>pm.expect(j.truncated).to.be.false);",
+                  "console.log('★ 前面是谁写的：', j.blocks[0].authorName, '（', j.blocks[0].sourceTool, '）');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "5. 机娘A 接第 3 棒",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{agentActingToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/agent/collaboration-handoffs/claim",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "agent",
+                "collaboration-handoffs",
+                "claim"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"handoffToken\": \"{{handoffToken}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201', ()=>pm.response.to.have.status(201));",
+                  "const j=pm.response.json();",
+                  "pm.collectionVariables.set('ticketCodeC', j.contributionTicket.ticketCode);",
+                  "pm.collectionVariables.set('handoffToken', j.nextHandoffToken);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "6. 机娘B 接第 4 棒 ★ 必须排到 4 棒",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{agentActingTokenB}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/agent/collaboration-handoffs/claim",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "agent",
+                "collaboration-handoffs",
+                "claim"
+              ]
+            },
+            "description": "★ 为什么必须 4 棒：3 棒时「直接后继」与「整条尾巴」不可区分，写错的实现也能测绿。\n★ 这一步顺便把链尾令牌存成 oldHandoff——上一版我漏了，害你手动回翻。",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"handoffToken\": \"{{handoffToken}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201', ()=>pm.response.to.have.status(201));",
+                  "const j=pm.response.json();",
+                  "pm.collectionVariables.set('ticketCodeD', j.contributionTicket.ticketCode);",
+                  "pm.collectionVariables.set('handoffToken', j.nextHandoffToken);",
+                  "// ★ 现在就把这根链尾令牌存成 oldHandoff，第五幕验证重签作废时要用它",
+                  "pm.collectionVariables.set('oldHandoff', j.nextHandoffToken);",
+                  "console.log('★ oldHandoff 已存下，第五幕直接用，不用回翻');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "7. 第 2 棒领租约（然后让它超时）",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{agentActingTokenB}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/agent/contribution-tickets/{{ticketCodeB}}/leases",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "agent",
+                "contribution-tickets",
+                "{{ticketCodeB}}",
+                "leases"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201', ()=>pm.response.to.have.status(201));",
+                  "console.log('⏱ 现在等 35 秒（local 配了 PT30S），再跑下一条');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "8. ⏱ 等 35 秒后 → 手动触发 Worker",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/dev/worker/sweep",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "dev",
+                "worker",
+                "sweep"
+              ]
+            },
+            "description": "需要 application-local.yml 的 agentlog.worker.dev-trigger.enabled=true（已帮你打开）。"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', ()=>pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "③ 第二幕：时间线（验证补上的三笔欠账）",
+      "item": [
+        {
+          "name": "★ 协作时间线（本课主角）",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{csrfToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/owner/collaboration-sessions/{{postTicket}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "owner",
+                "collaboration-sessions",
+                "{{postTicket}}"
+              ]
+            },
+            "description": "GET 不需要 CSRF，但带着无害（Chain 1 只对写方法校验）。"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', ()=>pm.response.to.have.status(200));",
+                  "const j=pm.response.json();",
+                  "pm.test('会话已暂停', ()=>pm.expect(j.status).to.eql('PAUSED_ON_ERROR'));",
+                  "pm.test('四张席位', ()=>pm.expect(j.tickets.length).to.eql(4));",
+                  "const acts=j.timeline.map(e=>e.actionType);",
+                  "console.log('时间线：', acts.join(' → '));",
+                  "pm.test('★ 有开局（本课补的欠账）', ()=>pm.expect(acts).to.include('COLLAB_STARTED'));",
+                  "pm.test('★ 有接棒（本课补的欠账）', ()=>pm.expect(acts).to.include('HANDOFF_CLAIMED'));",
+                  "pm.test('★ 有开始写作（本课补的欠账）', ()=>pm.expect(acts).to.include('LEASE_CLAIMED'));",
+                  "pm.test('有超时记录', ()=>pm.expect(acts).to.include('ATTEMPT_EXPIRED'));",
+                  "pm.test('★ 错误带建议动作', ()=>pm.expect(j.errors[0].suggestedActions).to.include('RETRY_TICKET'));",
+                  "pm.test('第3棒被阻塞', ()=>pm.expect(j.tickets[2].status).to.eql('BLOCKED_BY_PREDECESSOR'));",
+                  "pm.test('★ 第4棒【也】被阻塞（隔了一层）', ()=>pm.expect(j.tickets[3].status).to.eql('BLOCKED_BY_PREDECESSOR'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "④ 第三幕：retry + 原机娘约束 + 两道闸门",
+      "item": [
+        {
+          "name": "1. ★ retry 第 2 棒",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{csrfToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/owner/collaboration-sessions/{{postTicket}}/tickets/{{ticketCodeB}}/retry",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "owner",
+                "collaboration-sessions",
+                "{{postTicket}}",
+                "tickets",
+                "{{ticketCodeB}}",
+                "retry"
+              ]
+            },
+            "description": "★ Chain 1 端点：靠【Session Cookie（Postman 自动带）+ X-XSRF-TOKEN】认证，不需要 Authorization Bearer（那是 Chain 2/3 的）。上一版我漏了这个头，害你手填。\n★ 若 unblockedCount 是 1，就是 L17 那个 bug 的翻版（只解冻一层）。"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', ()=>pm.response.to.have.status(200));",
+                  "const j=pm.response.json();",
+                  "pm.test('票回到可写', ()=>pm.expect(j.status).to.eql('READY_TO_WRITE'));",
+                  "pm.test('★ 解冻了 2 张后序（第3、第4棒）', ()=>pm.expect(j.unblockedCount).to.eql(2));",
+                  "pm.test('尾令牌也解冻了', ()=>pm.expect(j.handoffUnfrozen).to.be.true);",
+                  "console.log('现在该去叫：', j.requiredAgentNickname);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2. 验证：整条尾巴回到【排队】而非【可写】",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/owner/collaboration-sessions/{{postTicket}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "owner",
+                "collaboration-sessions",
+                "{{postTicket}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const j=pm.response.json();",
+                  "pm.test('第2棒可写', ()=>pm.expect(j.tickets[1].status).to.eql('READY_TO_WRITE'));",
+                  "pm.test('★ 第3棒回到排队，不是可写', ()=>pm.expect(j.tickets[2].status).to.eql('WAITING_PREDECESSOR'));",
+                  "pm.test('★ 第4棒也回到排队', ()=>pm.expect(j.tickets[3].status).to.eql('WAITING_PREDECESSOR'));",
+                  "pm.test('★ 会话是等人来接，不是 RUNNING', ()=>pm.expect(j.status).to.eql('AWAITING_CONTINUATION'));",
+                  "pm.test('★ 错误历史保留', ()=>pm.expect(j.tickets[1].attempts[0].status).to.eql('FAILED_TIMEOUT'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3. ★ 原机娘约束：换机娘A 来领 → 403",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{agentActingToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/agent/contribution-tickets/{{ticketCodeB}}/leases",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "agent",
+                "contribution-tickets",
+                "{{ticketCodeB}}",
+                "leases"
+              ]
+            },
+            "description": "★ 验收栏「原机娘恢复」。这条规则不需要任何新代码——票的 required_agent_id 是 join 时由「谁消费了令牌」决定的，retry 不动它。"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('403', ()=>pm.response.to.have.status(403));",
+                  "pm.test('ACPP_WRONG_AGENT', ()=>pm.expect(pm.response.json().code).to.eql('ACPP_WRONG_AGENT'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "4. 原机娘B 回来（新对话）→ 放行",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{agentActingTokenB}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/agent/contribution-tickets/{{ticketCodeB}}/leases",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "agent",
+                "contribution-tickets",
+                "{{ticketCodeB}}",
+                "leases"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201', ()=>pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('leaseTokenB', pm.response.json().leaseToken);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "5. 查票：这是第 2 次尝试",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{agentActingTokenB}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/agent/contribution-tickets/{{ticketCodeB}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "agent",
+                "contribution-tickets",
+                "{{ticketCodeB}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const j=pm.response.json();",
+                  "pm.test('★ attemptNo=2（本课新加的字段）', ()=>pm.expect(j.attemptNo).to.eql(2));",
+                  "pm.test('★ errorReportId 不再恒为 null（还的第三笔旧账）', ()=>pm.expect(j.errorReportId).to.not.be.null);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "6. ★ 连点两次 retry：第二次被闸门挡下",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{csrfToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/owner/collaboration-sessions/{{postTicket}}/tickets/{{ticketCodeB}}/retry",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "owner",
+                "collaboration-sessions",
+                "{{postTicket}}",
+                "tickets",
+                "{{ticketCodeB}}",
+                "retry"
+              ]
+            },
+            "description": "★ 闸门本身就是幂等，不需要 Idempotency-Key。"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('409', ()=>pm.response.to.have.status(409));",
+                  "pm.test('ACPP_TICKET_NOT_RETRYABLE', ()=>pm.expect(pm.response.json().code).to.eql('ACPP_TICKET_NOT_RETRYABLE'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "7. ★ 不能跳过死棒：retry 第 3 棒（BLOCKED 的）",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{csrfToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/owner/collaboration-sessions/{{postTicket}}/tickets/{{ticketCodeC}}/retry",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "owner",
+                "collaboration-sessions",
+                "{{postTicket}}",
+                "tickets",
+                "{{ticketCodeC}}",
+                "retry"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('409', ()=>pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "⑤ 第四幕：机娘自报失败",
+      "item": [
+        {
+          "name": "★ 机娘B 自报失败（不用干等 15 分钟）",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{agentActingTokenB}}"
+              },
+              {
+                "key": "X-Turn-Lease-Token",
+                "value": "{{leaseTokenB}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/agent/contribution-tickets/{{ticketCodeB}}/failure",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "agent",
+                "contribution-tickets",
+                "{{ticketCodeB}}",
+                "failure"
+              ]
+            },
+            "description": "★ 填上了 FAILED_CLIENT —— 从 V013 起就在值集里、却从没有代码能产生的状态。",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"上一棒缺少关键前提，我无法续写\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', ()=>pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "验证：错误里记的是【真实原因】",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/owner/collaboration-sessions/{{postTicket}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "owner",
+                "collaboration-sessions",
+                "{{postTicket}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const j=pm.response.json();",
+                  "const e=j.errors[j.errors.length-1];",
+                  "pm.test('★ 类型是机娘自报', ()=>pm.expect(e.errorType).to.eql('CLIENT_REPORTED_FAILURE'));",
+                  "pm.test('★ 摘要里有机娘说的原因', ()=>pm.expect(e.summary).to.include('缺少关键前提'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "⑥ 第五幕：重新签发尾令牌",
+      "item": [
+        {
+          "name": "★ 重新签发尾令牌（旧的立即作废）",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{csrfToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/owner/collaboration-sessions/{{postTicket}}/handoff",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "owner",
+                "collaboration-sessions",
+                "{{postTicket}}",
+                "handoff"
+              ]
+            },
+            "description": "★ oldHandoff 在第一幕第 6 步就存好了，不用回翻。"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', ()=>pm.response.to.have.status(200));",
+                  "const j=pm.response.json();",
+                  "pm.collectionVariables.set('handoffToken', j.handoffToken);",
+                  "pm.test('拿到新明文', ()=>pm.expect(j.handoffToken).to.be.a('string').and.not.empty);",
+                  "pm.test('新旧不同', ()=>pm.expect(j.handoffToken).to.not.eql(pm.collectionVariables.get('oldHandoff')));",
+                  "console.log('★ 只出现这一次：', j.claimCommand);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "验证：旧令牌已作废",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{agentActingToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/agent/collaboration-handoffs/claim",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "agent",
+                "collaboration-handoffs",
+                "claim"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"handoffToken\": \"{{oldHandoff}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('旧的不能用了', ()=>pm.expect(pm.response.code).to.be.oneOf([404,409,410]));",
+                  "console.log('返回码', pm.response.code, pm.response.json().code);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "⑦ 第六幕：结束协作 + CANCELLED 的意义",
+      "item": [
+        {
+          "name": "★ 结束协作（唯一出口）",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{csrfToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/owner/collaboration-sessions/{{postTicket}}/stop",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "owner",
+                "collaboration-sessions",
+                "{{postTicket}}",
+                "stop"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', ()=>pm.response.to.have.status(200));",
+                  "const j=pm.response.json();",
+                  "pm.test('会话交审稿', ()=>pm.expect(j.sessionStatus).to.eql('READY_FOR_OWNER_REVIEW'));",
+                  "pm.test('取消了未完成席位', ()=>pm.expect(j.cancelledTicketCount).to.be.at.least(2));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "验证：历史不动，未完成的被取消",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/owner/collaboration-sessions/{{postTicket}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "owner",
+                "collaboration-sessions",
+                "{{postTicket}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const j=pm.response.json();",
+                  "pm.test('★ 第1棒 DONE 原样保留', ()=>pm.expect(j.tickets[0].status).to.eql('DONE'));",
+                  "pm.test('★ 第3棒被取消', ()=>pm.expect(j.tickets[2].status).to.eql('CANCELLED'));",
+                  "pm.test('★ 第4棒被取消', ()=>pm.expect(j.tickets[3].status).to.eql('CANCELLED'));",
+                  "pm.test('草稿还在（内容一个字没丢）', ()=>pm.expect(j.draftId).to.not.be.null);",
+                  "console.log('★ 草稿地址：{{baseUrl}}/#/owner/drafts/'+j.draftId);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "★ CANCELLED 的意义：机娘查票被告知别等了",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{agentActingToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/agent/contribution-tickets/{{ticketCodeC}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "agent",
+                "contribution-tickets",
+                "{{ticketCodeC}}"
+              ]
+            },
+            "description": "★ 这是新增 CANCELLED 的【全部意义】：在它之前服务端只会答「前一棒尚未完成」（真话），于是机娘会等一个永远不来的信号直到 900 秒超时。"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const j=pm.response.json();",
+                  "pm.test('票已取消', ()=>pm.expect(j.status).to.eql('CANCELLED'));",
+                  "pm.test('★ pollAfterSeconds=0 —— 别再问了', ()=>pm.expect(j.pollAfterSeconds).to.eql(0));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "结束之后不能再 retry",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-XSRF-TOKEN",
+                "value": "{{csrfToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/owner/collaboration-sessions/{{postTicket}}/tickets/{{ticketCodeB}}/retry",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "owner",
+                "collaboration-sessions",
+                "{{postTicket}}",
+                "tickets",
+                "{{ticketCodeB}}",
+                "retry"
+              ]
+            },
+            "description": "★ 跨闸门竞态：retry 的闸门在【票】上、stop 的在【会话】上，两把锁互相拦不住，所以 retry 的 UPDATE 必须把 session 条件纳入自己的 WHERE。"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('409', ()=>pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

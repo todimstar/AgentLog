@@ -6,10 +6,12 @@ import com.agentlog.collaboration.api.dto.request.StartCollaborationRequest;
 import com.agentlog.collaboration.api.dto.request.SubmitContributionRequest;
 import com.agentlog.collaboration.api.dto.response.ClaimLeaseResponse;
 import com.agentlog.collaboration.api.dto.response.StartCollaborationResponse;
+import com.agentlog.collaboration.api.dto.response.PrecedingContentView;
 import com.agentlog.collaboration.api.dto.response.SubmitContributionResponse;
 import com.agentlog.collaboration.api.dto.response.TicketStatusView;
 import com.agentlog.collaboration.application.ClaimHandoffService;
 import com.agentlog.collaboration.application.ClaimLeaseService;
+import com.agentlog.collaboration.application.PrecedingContentService;
 import com.agentlog.collaboration.application.ReportClientFailureService;
 import com.agentlog.collaboration.application.StartCollaborationService;
 import com.agentlog.collaboration.application.SubmitContributionService;
@@ -66,6 +68,7 @@ public class AgentCollaborationController {
     private final ClaimLeaseService claimLeaseService;
     private final SubmitContributionService submitContributionService;
     private final ReportClientFailureService reportClientFailureService;
+    private final PrecedingContentService precedingContentService;
 
     /** 前端基址：机娘拿不到浏览器地址，草稿审稿链接必须由服务端拼好给它（同 L14）。 */
     private final String webBaseUrl;
@@ -76,6 +79,7 @@ public class AgentCollaborationController {
                                        ClaimLeaseService claimLeaseService,
                                        SubmitContributionService submitContributionService,
                                        ReportClientFailureService reportClientFailureService,
+                                       PrecedingContentService precedingContentService,
                                        @Value("${agentlog.web.base-url}") String webBaseUrl) {
         this.startCollaborationService = startCollaborationService;
         this.claimHandoffService = claimHandoffService;
@@ -83,6 +87,7 @@ public class AgentCollaborationController {
         this.claimLeaseService = claimLeaseService;
         this.submitContributionService = submitContributionService;
         this.reportClientFailureService = reportClientFailureService;
+        this.precedingContentService = precedingContentService;
         this.webBaseUrl = webBaseUrl;
     }
 
@@ -155,6 +160,31 @@ public class AgentCollaborationController {
                 // ★ 恒为 null（DRIFT D-16 第 2 条）：令牌明文绝不落库，submit 时拿不回尾令牌明文；
                 //   而主人在 join 时早已拿到过它。安全铁律不为一个冗余字段让步。
                 null);
+    }
+
+    /**
+     * 写作前文（L18 补）：「我这一棒之前，这篇文章已经长成什么样」。
+     *
+     * <h3>★ 它补的是一个从 L15 就存在、到 L18 验收才被发现的缺口</h3>
+     * 在这之前，机娘侧所有端点<b>没有一个能读到前面已完成棒次的正文</b>——
+     * {@code claim lease} 的 {@code writingContext} 只告诉它「前面写了 N 棒」，
+     * <b>不告诉它写了什么</b>。设计上靠主人手动复制粘贴：
+     * 接力棒 51 个字符复制一次不痛，<b>正文几百上千字、每接一棒都要复制一次</b>。
+     *
+     * <p>★ 外部佐证：多智能体协作平台 Raft（raft.build）把「新人能从之前工作过的 agent
+     * 那里拿到全部上下文」列为核心卖点——<b>上下文传递是这类产品的基本盘</b>。
+     *
+     * <p>返回的是 <b>{@code draft_block} 渲染层</b>而不是 {@code contribution} 原始层：
+     * 续写要基于「文章<b>现在</b>是什么样」，主人润色过的地方必须让下一棒看到。
+     *
+     * <p>限流复用 {@code TICKET_STATUS}：它和查票一样是机娘会反复调的读端点。
+     */
+    @GetMapping("/contribution-tickets/{ticketCode}/preceding-content")
+    @RateLimit(scope = RateLimit.Scope.TICKET_STATUS)
+    public PrecedingContentView precedingContent(
+            @AuthenticationPrincipal AgentIdentity principal,
+            @PathVariable String ticketCode) {
+        return precedingContentService.get(principal, ticketCode);
     }
 
     /**

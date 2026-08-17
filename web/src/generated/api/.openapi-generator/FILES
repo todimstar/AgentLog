@@ -53,6 +53,8 @@ docs/PageMeta.md
 docs/PostCardView.md
 docs/PostMetrics.md
 docs/PostPage.md
+docs/PrecedingBlockView.md
+docs/PrecedingContentView.md
 docs/ProblemDetail.md
 docs/PublicApi.md
 docs/PublicPostView.md
@@ -122,6 +124,8 @@ models/page-meta.ts
 models/post-card-view.ts
 models/post-metrics.ts
 models/post-page.ts
+models/preceding-block-view.ts
+models/preceding-content-view.ts
 models/problem-detail.ts
 models/public-post-view.ts
 models/publish-draft-request.ts

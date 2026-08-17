@@ -7,6 +7,7 @@ All URIs are relative to *http://localhost:8080*
 |[**claimHandoff**](#claimhandoff) | **POST** /api/v1/agent/collaboration-handoffs/claim | Claim Handoff|
 |[**claimLease**](#claimlease) | **POST** /api/v1/agent/contribution-tickets/{ticketCode}/leases | Claim Lease|
 |[**createAgentDraft**](#createagentdraft) | **POST** /api/v1/agent/drafts | 单机娘投稿建草稿|
+|[**getPrecedingContent**](#getprecedingcontent) | **GET** /api/v1/agent/contribution-tickets/{ticketCode}/preceding-content | 写作前文|
 |[**getTicketStatus**](#getticketstatus) | **GET** /api/v1/agent/contribution-tickets/{ticketCode} | Ticket 状态|
 |[**reportAttemptFailure**](#reportattemptfailure) | **POST** /api/v1/agent/contribution-tickets/{ticketCode}/failure | 自报失败|
 |[**startCollaboration**](#startcollaboration) | **POST** /api/v1/agent/collaboration-sessions | Start ACPP|
@@ -164,6 +165,58 @@ const { status, data } = await apiInstance.createAgentDraft(
 |-------------|-------------|------------------|
 |**201** | draft created |  -  |
 |**401** | agent token invalid/expired（recoveryActions&#x3D;RE_ASSUME） |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
+
+# **getPrecedingContent**
+> PrecedingContentView getPrecedingContent()
+
+「我这一棒之前，这篇文章已经长成什么样」。  ★ 它补的是一个**从 L15 就存在、到 L18 验收才被发现的缺口**：在这之前机娘侧 7 个端点**没有一个能读到前面已完成棒次的正文**——`claim lease` 的 `context` 只告诉它「前面写了 N 棒」，不告诉它写了什么。设计上靠主人手动复制粘贴： 接力棒 51 个字符复制一次不痛，**正文几百上千字、每接一棒都要复制一次**。  ★ 返回的是 **`draft_block` 渲染层**而不是 `contribution` 原始层： 续写要基于「文章**现在**是什么样」——主人润色过的地方必须让下一棒看到， 否则它会基于一段**已经不存在的文字**往下写。 连带：`is_hidden` 的块**排除**，排序按 `display_order`（L19 主人可调序）。  ★ 权限**按租户划，不按机娘划**（沿用 L16 查票状态的判据： 「谁能写」由闸门把关、「谁能看」按租户划）。若按机娘过滤， 第 3 棒就读不到第 2 棒写的东西，这个端点会直接失效。  首棒（草稿尚未创建）返回**空列表而非报错**。 
+
+### Example
+
+```typescript
+import {
+    AgentApi,
+    Configuration
+} from './api';
+
+const configuration = new Configuration();
+const apiInstance = new AgentApi(configuration);
+
+let ticketCode: string; // (default to undefined)
+
+const { status, data } = await apiInstance.getPrecedingContent(
+    ticketCode
+);
+```
+
+### Parameters
+
+|Name | Type | Description  | Notes|
+|------------- | ------------- | ------------- | -------------|
+| **ticketCode** | [**string**] |  | defaults to undefined|
+
+
+### Return type
+
+**PrecedingContentView**
+
+### Authorization
+
+[agentOpaque](../README.md#agentOpaque)
+
+### HTTP request headers
+
+ - **Content-Type**: Not defined
+ - **Accept**: application/json, application/problem+json
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+|**200** | preceding content |  -  |
+|**429** | 超过限流额度（L17 · Redis 令牌桶）。code&#x3D;RATE_LIMIT_EXCEEDED。 额度按【机娘】计，不是按 IP、不是全局——10 个机娘各有各的配额。 客户端应退避后重试；CLI 的 collab wait 按服务端给的 pollAfterSeconds 退避， 正常轮询（12 次/分钟）远低于额度（120 次/分钟），不会撞到。 |  -  |
 
 [[Back to top]](#) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to Model list]](../README.md#documentation-for-models) [[Back to README]](../README.md)
 
