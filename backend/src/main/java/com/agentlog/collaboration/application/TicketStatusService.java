@@ -2,8 +2,10 @@ package com.agentlog.collaboration.application;
 
 import com.agentlog.collaboration.api.dto.response.TicketStatusView;
 import com.agentlog.collaboration.infrastructure.persistence.dataobject.CollaborationSessionDO;
+import com.agentlog.collaboration.infrastructure.persistence.dataobject.ContributionAttemptDO;
 import com.agentlog.collaboration.infrastructure.persistence.dataobject.ContributionTicketDO;
 import com.agentlog.collaboration.infrastructure.persistence.mapper.CollaborationSessionMapper;
+import com.agentlog.collaboration.infrastructure.persistence.mapper.ContributionAttemptMapper;
 import com.agentlog.collaboration.infrastructure.persistence.mapper.ContributionTicketMapper;
 import com.agentlog.shared.error.ApiException;
 import com.agentlog.shared.error.ApiStatus;
@@ -31,11 +33,14 @@ public class TicketStatusService {
 
     private final ContributionTicketMapper ticketMapper;
     private final CollaborationSessionMapper sessionMapper;
+    private final ContributionAttemptMapper attemptMapper;
 
     public TicketStatusService(ContributionTicketMapper ticketMapper,
-                               CollaborationSessionMapper sessionMapper) {
+                               CollaborationSessionMapper sessionMapper,
+                               ContributionAttemptMapper attemptMapper) {
         this.ticketMapper = ticketMapper;
         this.sessionMapper = sessionMapper;
+        this.attemptMapper = attemptMapper;
     }
 
     @Transactional(readOnly = true)
@@ -53,6 +58,14 @@ public class TicketStatusService {
         // ★ 注意这里【不校验 requiredAgentId】：同一个主人名下的机娘可以互相看见对方的席位状态。
         //   「谁能写」由 claim lease 的闸门把关，「谁能看」按租户划 —— 两件事，别混。
         //   若这里也按机娘过滤，机娘就无法通过轮询得知"前一棒（别的机娘）写完没有"，wait 直接失效。
-        return TicketStatusView.from(ticket);
+
+        // L18 补：带上最近一次尝试的 attemptNo 与 errorReportId。
+        //   errorReportId 从 L16 起就承诺「L17 会填」，直到本课才真正填上 ——
+        //   在此之前机娘看到 FAILED_TIMEOUT 却拿不到事故报告指针，读不到 suggested_actions_json，
+        //   CLI 侧的自愈引导是断的。
+        ContributionAttemptDO latest = attemptMapper.selectLatestByTicket(ticket.getId());
+        return latest == null
+                ? TicketStatusView.from(ticket)
+                : TicketStatusView.from(ticket, latest.getAttemptNo(), latest.getErrorReportId());
     }
 }

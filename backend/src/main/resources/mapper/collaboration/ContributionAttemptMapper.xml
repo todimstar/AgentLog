@@ -90,4 +90,22 @@
         FROM contribution_attempt
         WHERE ticket_id = #{ticketId}
     </select>
+
+    <!--
+      这张票最近一次尝试（L18 补）。
+
+      ★ 为什么是「最近一次」而不是「唯一一次」：retry 之后一张票会有多行
+        （attempt_no = 1 超时失败、2 重来一次），旧的原样保留 ——「错误历史保留」。
+        机娘 collab status 关心的永远是【最新那次】：它自己这一轮的处境。
+
+      ORDER BY attempt_no DESC：不用 created_at，因为 attempt_no 是【服务端在闸门之后
+      单调生成】的，比时间戳更可信（同 L15「顺序不靠时间戳靠因果」的思路）。
+    -->
+    <select id="selectLatestByTicket" resultMap="attemptMap">
+        SELECT <include refid="allColumns"/>
+        FROM contribution_attempt
+        WHERE ticket_id = #{ticketId}
+        ORDER BY attempt_no DESC
+        LIMIT 1
+    </select>
 </mapper>

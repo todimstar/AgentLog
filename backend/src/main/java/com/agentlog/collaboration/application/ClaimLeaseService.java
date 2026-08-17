@@ -12,6 +12,7 @@ import com.agentlog.collaboration.infrastructure.persistence.mapper.Contribution
 import com.agentlog.collaboration.infrastructure.persistence.mapper.ContributionTicketMapper;
 import com.agentlog.shared.error.ApiException;
 import com.agentlog.shared.error.ApiStatus;
+import com.agentlog.shared.event.LeaseClaimed;
 import com.agentlog.shared.security.AgentIdentity;
 import com.agentlog.shared.security.TokenProperties;
 import com.agentlog.shared.security.TokenService;
@@ -20,6 +21,7 @@ import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -56,6 +58,7 @@ public class ClaimLeaseService {
     private final CollaborationSessionMapper sessionMapper;
     private final TokenService tokenService;
     private final TokenProperties tokenProperties;
+    private final ApplicationEventPublisher events;
     private final Clock clock;
 
     public ClaimLeaseService(ContributionTicketMapper ticketMapper,
@@ -63,12 +66,14 @@ public class ClaimLeaseService {
                              CollaborationSessionMapper sessionMapper,
                              TokenService tokenService,
                              TokenProperties tokenProperties,
+                             ApplicationEventPublisher events,
                              Clock clock) {
         this.ticketMapper = ticketMapper;
         this.attemptMapper = attemptMapper;
         this.sessionMapper = sessionMapper;
         this.tokenService = tokenService;
         this.tokenProperties = tokenProperties;
+        this.events = events;
         this.clock = clock;
     }
 
@@ -118,14 +123,41 @@ public class ClaimLeaseService {
         // ④ 回填「当前进行中的 attempt」。按主键更新，无竞争。
         ticketMapper.linkActiveAttempt(ticket.getId(), attempt.getId(), now);
 
-        // ⑤ 首棒领租约 = 这次协作真正开始跑了：OPEN → RUNNING（ACPP 状态机）。
+        // ⑤ 会话推进：有人开始写了 → RUNNING（ACPP 状态机）。
         //    为什么不在 start 时就 RUNNING：start 只是排好了队，没有人在写；
-        //    状态要如实反映「有没有一棒正在进行」，否则 L17 的时间线页会骗人。
-        if (SessionStatus.OPEN.getCode().equals(session.getStatus())) {
-            session.setStatus(SessionStatus.RUNNING.getCode());
-            session.setUpdatedAt(now);
-            sessionMapper.updateById(session);
-        }
+        //    状态要如实反映「有没有一棒正在进行」，否则时间线页会骗人。
+        //
+        // 🔴 L18 修 bug：这里原本只有 `OPEN → RUNNING` 一个分支。
+        //    而 L16 的 SubmitContributionService 写完一棒后一律落 AWAITING_CONTINUATION，
+        //    注释白纸黑字写着「等下一棒 claim lease 时再回到 RUNNING」——
+        //    ★ 但那个「再回到」从来没有被实现过 ★。
+        //    后果：从第 2 棒开始，机娘正在写的时候 session 永远停在 AWAITING_CONTINUATION
+        //    （"等人来接"），再也回不到 RUNNING。
+        //
+        //    ⇒ 为什么这个 bug 能潜伏两课、两轮测试都没红：
+        //      核实过 —— session.status 在整个模块里【被写 4 处、被读来做判定 0 处】，
+        //      没有任何 SQL 的 WHERE 用到它。★ 一个从来没被读过的状态，写错了也没人会发现。★
+        //      L17 说「状态不准是会骗人的」，这里是更狠的后半截：
+        //      ★ 一个没人读的状态连骗人的机会都没有，它只是静静地错着 —— 直到有人把它显示出来。★
+        //      而 L18 的时间线页正是它的第一个真正消费者，stop 的闸门是它第一次承担判定职责。
+        //      在它变成"守卫"之前，必须先把它错了两课的这个 bug 修掉。
+        //
+        // 🔴 施工期第二处修正：这里原本用 sessionMapper.updateById(session)，被测试打出 Deadlock。
+        //    updateById 会 SET 全部列，其中三个是外键列（owner_user_id / planned_channel_id /
+        //    tail_handoff_token_id），即使值没变 InnoDB 也要做外键检查、给三张父表的行加 S 锁；
+        //    而 AuditListener 正异步插 audit_record（它的 4 个外键也在抢这些行的 S 锁），
+        //    两边加锁顺序相反 → 成环。改成只 SET status 的精准 UPDATE 后消失。
+        //    ★ updateById 的代价不是"多写几列"，是"多锁几张表"。
+        sessionMapper.promoteToRunning(session.getId(), now);
+
+        // ⑥ 发 LeaseClaimed 事件（L18 补 —— 时间线的第三笔欠账）。
+        //    V014 的 ck_audit_action_type 从 L17 起就列着 LEASE_CLAIMED，却从来没有代码产生它。
+        //    后果：时间线页看不到「这一棒什么时候开始写的」，只能看到提交与超时。
+        //    ★ 教训：CHECK 值集里有个值 ≠ 有代码会产生它。值集是承诺，不是实现。
+        events.publishEvent(new LeaseClaimed(
+                session.getId(), session.getOwnerUserId(), principal.agentAccountId(),
+                ticket.getId(), ticket.getSequenceNo(),
+                attempt.getId(), attempt.getAttemptNo(), leaseExpiresAt, now));
 
         return new ClaimLeaseResponse(ticketCode, rawLeaseToken, leaseExpiresAt,
                 writingContext(session, ticket));

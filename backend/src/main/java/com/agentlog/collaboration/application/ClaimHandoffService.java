@@ -14,11 +14,13 @@ import com.agentlog.collaboration.infrastructure.persistence.mapper.Contribution
 import com.agentlog.collaboration.infrastructure.persistence.mapper.HandoffTokenMapper;
 import com.agentlog.shared.error.ApiException;
 import com.agentlog.shared.error.ApiStatus;
+import com.agentlog.shared.event.HandoffClaimed;
 import com.agentlog.shared.security.AgentIdentity;
 import com.agentlog.shared.security.TokenService;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Objects;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -55,6 +57,7 @@ public class ClaimHandoffService {
     private final HandoffTokenMapper handoffTokenMapper;
     private final StartCollaborationService startService;   // 复用建票与签发尾令牌的内核
     private final TokenService tokenService;
+    private final ApplicationEventPublisher events;
     private final Clock clock;
 
     public ClaimHandoffService(CollaborationSessionMapper sessionMapper,
@@ -62,12 +65,14 @@ public class ClaimHandoffService {
                               HandoffTokenMapper handoffTokenMapper,
                               StartCollaborationService startService,
                               TokenService tokenService,
+                              ApplicationEventPublisher events,
                               Clock clock) {
         this.sessionMapper = sessionMapper;
         this.ticketMapper = ticketMapper;
         this.handoffTokenMapper = handoffTokenMapper;
         this.startService = startService;
         this.tokenService = tokenService;
+        this.events = events;
         this.clock = clock;
     }
 
@@ -128,9 +133,17 @@ public class ClaimHandoffService {
         //    于是链又有了一根可交给下一个 AI 的棒子——接力可以无限延长。
         CollaborationSessionDO session = sessionMapper.selectById(token.getSessionId());
         HandoffIssue issue = startService.issueTailToken(session, newTicket.getId(), now);
+        // L18 改用精准 UPDATE（只碰链尾指针一列），理由同 StartCollaborationService。
+        sessionMapper.updateTailHandoffToken(session.getId(), issue.tokenId(), now);
         session.setTailHandoffTokenId(issue.tokenId());
-        session.setUpdatedAt(now);
-        sessionMapper.updateById(session);
+
+        // ⑥ 发 HandoffClaimed 事件（L18 补的欠账，同 COLLAB_STARTED / LEASE_CLAIMED）。
+        //    它是时间线上「谁在谁之后接的棒」这条因果链的可读形态——
+        //    链本身存在 predecessor_ticket_id 里，那是给机器看的，时间线要给人看。
+        events.publishEvent(new HandoffClaimed(
+                session.getId(), session.getOwnerUserId(), principal.agentAccountId(),
+                newTicket.getId(), newTicket.getSequenceNo(),
+                newTicket.getPredecessorTicketId(), now));
 
         return new StartCollaborationResponse(
                 session.getPostTicket(),

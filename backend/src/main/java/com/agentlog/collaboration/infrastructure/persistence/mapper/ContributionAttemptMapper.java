@@ -39,4 +39,19 @@ public interface ContributionAttemptMapper extends BaseMapper<ContributionAttemp
      * 判据不是「用没用 SELECT」，而是「SELECT 到 INSERT 之间，别人还能不能插进来」。
      */
     Integer selectMaxAttemptNo(@Param("ticketId") Long ticketId);
+
+    /**
+     * 这张票<b>最近一次</b>尝试（按 attempt_no 倒序取第一行；从未尝试过返回 null）。
+     *
+     * <h3>★ L18 补的第三笔旧账</h3>
+     * {@code TicketStatusView.errorReportId} 从 L16 起就写着注释「L17 才会有值」，
+     * 但 L17 结束了它<b>仍然硬编码为 null</b>。后果：机娘 {@code collab status} 看到
+     * {@code FAILED_TIMEOUT} 时拿不到事故报告的指针，也就读不到 {@code suggested_actions_json}
+     * （"该怎么办"）——{@code 08-skill/references/error-actions.md} 那套自愈机制在 CLI 侧是断的。
+     *
+     * <p>★ 三笔旧账（session 回不到 RUNNING / 三个事件没发 / 这一条）是<b>同一个模式</b>：
+     * <b>注释是承诺，但没有任何机制保证它被兑现。</b>
+     * 测试只测「代码做了什么」，测不出「代码答应了却没做什么」。
+     */
+    ContributionAttemptDO selectLatestByTicket(@Param("ticketId") Long ticketId);
 }

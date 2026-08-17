@@ -16,11 +16,13 @@ import com.agentlog.collaboration.infrastructure.persistence.mapper.Contribution
 import com.agentlog.collaboration.infrastructure.persistence.mapper.HandoffTokenMapper;
 import com.agentlog.shared.error.ApiException;
 import com.agentlog.shared.error.ApiStatus;
+import com.agentlog.shared.event.CollaborationStarted;
 import com.agentlog.shared.security.AgentIdentity;
 import com.agentlog.shared.security.TokenProperties;
 import com.agentlog.shared.security.TokenService;
 import java.time.Clock;
 import java.time.Instant;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -49,6 +51,7 @@ public class StartCollaborationService {
     private final ChannelExistsMapper channelExistsMapper;
     private final TokenService tokenService;
     private final TokenProperties tokenProperties;
+    private final ApplicationEventPublisher events;
     private final Clock clock;
 
     public StartCollaborationService(CollaborationSessionMapper sessionMapper,
@@ -57,6 +60,7 @@ public class StartCollaborationService {
                                     ChannelExistsMapper channelExistsMapper,
                                     TokenService tokenService,
                                     TokenProperties tokenProperties,
+                                    ApplicationEventPublisher events,
                                     Clock clock) {
         this.sessionMapper = sessionMapper;
         this.ticketMapper = ticketMapper;
@@ -64,6 +68,7 @@ public class StartCollaborationService {
         this.channelExistsMapper = channelExistsMapper;
         this.tokenService = tokenService;
         this.tokenProperties = tokenProperties;
+        this.events = events;
         this.clock = clock;
     }
 
@@ -105,9 +110,20 @@ public class StartCollaborationService {
 
         // ⑤ 会话回指链尾。这条回指与 handoff_token.session_id 互为环——
         //    正是 V012 里必须「先建表、后 ALTER 补外键」的原因。
+        //    L18 改用精准 UPDATE（只碰这一列）：updateById 会 SET 全部列、连带锁住三张父表，
+        //    与异步审计写入形成死锁环（详见 CollaborationSessionMapper 的注释）。
+        sessionMapper.updateTailHandoffToken(session.getId(), issue.tokenId(), now);
         session.setTailHandoffTokenId(issue.tokenId());
-        session.setUpdatedAt(now);
-        sessionMapper.updateById(session);
+
+        // ⑥ 发 CollaborationStarted 事件（L18 补的欠账）。
+        //    ★ V014 的 ck_audit_action_type 从 L17 起就列着 COLLAB_STARTED，却从来没有代码产生它。
+        //      后果直到 L18 做时间线页才暴露：页面上一条协作会【凭空从「第 1 棒提交成功」开始】，
+        //      谁开的局、谁接的棒、谁领的租约全是空白。
+        //    ★ 教训：CHECK 值集里有个值，不等于有代码会产生它——【值集是承诺，不是实现】，
+        //      而没有任何机器能检查「承诺有没有兑现」。同类欠账 L18 一共还了三笔。
+        events.publishEvent(new CollaborationStarted(
+                session.getId(), session.getOwnerUserId(), principal.agentAccountId(),
+                firstTicket.getId(), session.getPostTicket(), session.getPlannedTitle(), now));
 
         return new StartCollaborationResponse(
                 session.getPostTicket(),

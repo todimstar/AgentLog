@@ -3,6 +3,7 @@ package com.agentlog.reliability.application;
 import com.agentlog.reliability.infrastructure.persistence.dataobject.ErrorReportDO;
 import com.agentlog.reliability.infrastructure.persistence.mapper.ErrorReportMapper;
 import com.agentlog.shared.event.AttemptExpired;
+import com.agentlog.shared.event.AttemptFailedByClient;
 import java.time.Clock;
 import java.time.Instant;
 import org.slf4j.Logger;
@@ -69,5 +70,45 @@ public class ExpireAttemptService {
         errorReportMapper.linkAttemptToErrorReport(e.attemptId(), r.getId(), now);
 
         log.info("[ErrorReport] attempt {} 已记录事故报告 #{}", e.attemptId(), r.getId());
+    }
+
+    /**
+     * 机娘<b>自报</b>失败的事故报告（L18）。
+     *
+     * <h3>★ 与超时那条路径的关键区别：{@code summary} 记的是【真实原因】</h3>
+     * 超时那条只能写「租约超时，未能在有效期内提交内容」——那是<b>症状</b>，不是原因：
+     * 服务端根本不知道机娘为什么没回来（对话崩了？需求不清？工具报错？）。
+     * <p>自报失败则带着机娘自己说的理由。对主人而言，<b>「上一棒内容缺了关键信息」
+     * 比「租约超时」有用一百倍</b>——前者他能立刻决定怎么办，后者他只能猜。
+     *
+     * <p>★ 这也是为什么值得单开一个端点：省下的 15 分钟等待是次要的，
+     * <b>把「症状」换成「原因」才是主要的</b>。
+     */
+    @ApplicationModuleListener
+    public void onAttemptFailedByClient(AttemptFailedByClient e) {
+        Instant now = Instant.now(clock);
+
+        ErrorReportDO r = new ErrorReportDO();
+        r.setOwnerUserId(e.ownerUserId());
+        r.setSessionId(e.sessionId());
+        r.setTicketId(e.ticketId());
+        r.setAttemptId(e.attemptId());
+        r.setAgentId(e.agentId());
+        r.setErrorType("CLIENT_REPORTED_FAILURE");
+        r.setFailedStage("WRITING");
+        r.setSummary(String.format("第 %d 棒的机娘主动报告失败：%s",
+                e.sequenceNo(), e.reason() == null || e.reason().isBlank() ? "（未说明原因）" : e.reason()));
+        // 建议动作的分叉与超时那条完全一致 —— 判据不是「怎么失败的」，而是【有没有草稿可救】：
+        //   首棒失败 → post/draft 从未创建，只能结束协作；
+        //   中间棒   → 草稿还在，可以让原机娘换个新对话 retry。
+        r.setSuggestedActionsJson(e.firstTurn()
+                ? "[\"TERMINATE_SESSION\"]"
+                : "[\"RETRY_TICKET\", \"TERMINATE_SESSION\"]");
+        r.setCreatedAt(now);
+        errorReportMapper.insert(r);
+
+        errorReportMapper.linkAttemptToErrorReport(e.attemptId(), r.getId(), now);
+
+        log.info("[ErrorReport] attempt {} 自报失败已记录事故报告 #{}", e.attemptId(), r.getId());
     }
 }
