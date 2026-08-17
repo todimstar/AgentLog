@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ACPP 四个状态机全景 · L18 喂饭版</title>
+<style>
+:root{
+  --bg:#0f1419; --card:#1a212b; --card2:#222b38; --line:#2d3846;
+  --tx:#e3e8ef; --tx2:#93a1b5; --tx3:#5f7085;
+  --l15:#4a9eff; --l16:#00c9a7; --l17:#ffa940; --l18:#ff6b9d; --dead:#5f7085;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--tx);font:14px/1.7 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif;padding:24px}
+.wrap{max-width:1400px;margin:0 auto}
+h1{font-size:26px;margin-bottom:6px}
+h1 small{font-size:14px;color:var(--tx2);font-weight:400}
+.lead{color:var(--tx2);margin-bottom:18px;max-width:900px}
+.lead b{color:var(--l18)}
+.legend{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:22px;align-items:center}
+.chip{padding:3px 11px;border-radius:12px;font-size:12px;font-weight:700;cursor:pointer;
+      border:1px solid transparent;user-select:none;transition:.15s}
+.chip.off{opacity:.32}
+.c15{background:rgba(74,158,255,.15);color:var(--l15);border-color:var(--l15)}
+.c16{background:rgba(0,201,167,.15);color:var(--l16);border-color:var(--l16)}
+.c17{background:rgba(255,169,64,.15);color:var(--l17);border-color:var(--l17)}
+.c18{background:rgba(255,107,157,.15);color:var(--l18);border-color:var(--l18)}
+.cdead{background:rgba(95,112,133,.15);color:var(--dead);border-color:var(--dead)}
+.legend .hint{color:var(--tx3);font-size:12px;margin-left:6px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px}
+.machine{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px}
+.machine h2{font-size:16px;margin-bottom:3px;display:flex;align-items:center;gap:8px}
+.machine .tbl{color:var(--tx3);font-size:11px;font-family:ui-monospace,Consolas,monospace;margin-bottom:4px}
+.machine .qa{color:var(--tx2);font-size:12px;margin-bottom:12px;padding-bottom:10px;border-bottom:1px dashed var(--line)}
+.state{display:flex;align-items:flex-start;gap:9px;padding:8px 10px;border-radius:8px;cursor:pointer;
+       margin-bottom:5px;border:1px solid transparent;transition:.15s}
+.state:hover{background:var(--card2);border-color:var(--line)}
+.state.sel{background:var(--card2);border-color:var(--l18)}
+.state.hidden{display:none}
+.dot{width:9px;height:9px;border-radius:50%;flex:0 0 auto;margin-top:6px}
+.state .nm{font-family:ui-monospace,Consolas,monospace;font-size:12.5px;font-weight:600}
+.state .who{font-size:11px;color:var(--tx3);margin-top:1px}
+.state.isdead .nm{color:var(--dead);text-decoration:line-through}
+.badge{font-size:9.5px;padding:1px 5px;border-radius:4px;font-weight:700;margin-left:5px;vertical-align:1px}
+#panel{position:sticky;bottom:0;margin-top:20px;background:var(--card);border:1px solid var(--l18);
+       border-radius:12px;padding:18px;min-height:120px}
+#panel .ph{color:var(--tx3);text-align:center;padding:22px 0}
+#panel h3{font-size:17px;font-family:ui-monospace,Consolas,monospace;margin-bottom:2px}
+#panel .meta{color:var(--tx2);font-size:12px;margin-bottom:12px}
+#panel .row{display:grid;grid-template-columns:92px 1fr;gap:10px;padding:6px 0;border-top:1px solid var(--line);font-size:13px}
+#panel .row .k{color:var(--tx3);font-size:12px}
+#panel .row code{background:var(--card2);padding:1px 6px;border-radius:4px;font-size:12px;color:var(--l16)}
+#panel .why{margin-top:12px;padding:11px 13px;background:rgba(255,107,157,.07);
+            border-left:3px solid var(--l18);border-radius:0 6px 6px 0;font-size:13px;color:var(--tx)}
+.summary{margin-top:20px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px}
+.summary h2{font-size:16px;margin-bottom:10px}
+.summary table{width:100%;border-collapse:collapse;font-size:13px}
+.summary th,.summary td{text-align:left;padding:7px 9px;border-bottom:1px solid var(--line)}
+.summary th{color:var(--tx3);font-weight:600;font-size:12px}
+.summary code{background:var(--card2);padding:1px 5px;border-radius:4px;font-size:12px}
+.punch{margin-top:16px;padding:14px 16px;background:linear-gradient(90deg,rgba(255,107,157,.1),transparent);
+       border-left:3px solid var(--l18);border-radius:0 8px 8px 0;font-size:14px;line-height:1.85}
+.punch b{color:var(--l18)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>ACPP 四个状态机全景 <small>L18 喂饭版 · 点任一状态看「谁写它 / 何时 / 为什么」</small></h1>
+  <p class="lead">
+    你在 L18 设计阶段说过：「这条链的各处状态机在各种情况下的流转搞不太清楚了……未有整理过所以不太知道怎么选择。」
+    这份图就是那次整理。<b>27 个状态值里有 5 个从来没有任何代码产生过</b>——点亮下面的「死值」看它们是哪些。
+  </p>
+
+  <div class="legend">
+    <span class="chip c15" data-f="L15">L15 排队地基</span>
+    <span class="chip c16" data-f="L16">L16 写作与租约</span>
+    <span class="chip c17" data-f="L17">L17 崩溃自愈</span>
+    <span class="chip c18" data-f="L18">L18 人的决策</span>
+    <span class="chip cdead" data-f="DEAD">☠ 死值（无人产生）</span>
+    <span class="hint">← 点标签可筛选</span>
+  </div>
+
+  <div class="grid" id="grid"></div>
+
+  <div id="panel"><div class="ph">点上面任意一个状态 →</div></div>
+
+  <div class="summary">
+    <h2>☠ 五个「值集里有、却没有代码产生」的状态</h2>
+    <table>
+      <tr><th>状态</th><th>为什么没人产生</th><th>怎么处置</th></tr>
+      <tr><td><code>Ticket.CREATED</code></td>
+          <td>蓝图说它是瞬时态；实装建票时<b>立刻</b>判定有无前序，直接落 READY/WAITING</td>
+          <td>留在值集，忠实于状态机文档</td></tr>
+      <tr><td><code>Attempt.READY</code></td>
+          <td>蓝图想在 retry 时建 attempt(READY)，<b>但 5 个 Worker 没有一个会扫它</b>
+              （L17 那个扫 <code>ACTIVE AND lease_expires_at&lt;now</code>，READY 行没有租约时间）⇒ 僵尸行无人回收</td>
+          <td>L18 裁决 <b>永久不用</b>（推翻 D-16 的推测）</td></tr>
+      <tr><td><code>Handoff.EXPIRED</code></td>
+          <td>L16 你论证「资格不必有期限」，TTL <b>默认关闭</b></td>
+          <td>机制保留、策略关闭——配一行即可开启</td></tr>
+      <tr><td><code>Session.TERMINATED</code></td>
+          <td>L18 你论证「结束协作与正常收工对草稿而言结果相同」⇒ <b>只留一个出口</b></td>
+          <td>留在 CHECK 里不删（删它要写迁移）</td></tr>
+      <tr><td><code>Session.PUBLISHED</code></td>
+          <td>发布链是 L20 的活</td>
+          <td>等 L20</td></tr>
+    </table>
+    <div class="punch">
+      ★ <b>CHECK 值集里有个值，不等于有代码会产生它——值集是承诺，不是实现。</b><br>
+      而没有任何机器能检查「承诺有没有兑现」：<b>测试只测「代码做了什么」，测不出「代码答应了却没做什么」。</b><br>
+      L18 一共还了三笔这类账，其中最狠的一笔是 <code>session.status</code> ——
+      它<b>被写 4 处、读来做判定 0 处</b>，所以 L16 的一个 bug 潜伏了两课、两轮测试全绿。<br>
+      ⇒ <b>一个从来没被读过的状态，连骗人的机会都没有，它只是静静地错着，直到有人把它显示出来。</b>
+    </div>
+  </div>
+</div>
+<script>
+const M = [
+{ name:"Session · 一次协作的全过程", tbl:"collaboration_session.status",
+  qa:"回答「这条协作整体在什么阶段」。★ L18 之前它被写 4 处、读 0 处——是一个只写不读的状态。",
+  s:[
+  {n:"OPEN",c:"L15",who:"StartCollaborationService",when:"collab start 建会话那一刻",
+   code:"session.setStatus(OPEN)",
+   why:"队排好了，但<b>没有人在写</b>。为什么不在 start 就 RUNNING——状态要如实反映「有没有一棒正在进行」，否则时间线页会骗人。"},
+  {n:"RUNNING",c:"L16",l18:"L18 修全",who:"CollaborationSessionMapper.promoteToRunning",
+   when:"任一棒 claim lease（不只首棒）",code:"WHERE status IN ('OPEN','AWAITING_CONTINUATION')",
+   why:"🔴 <b>L18 修的 L16 遗留 bug 就在这个 IN 里。</b>L16 的注释白纸黑字写着「等下一棒 claim lease 时再回到 RUNNING」，但代码<b>只判了 OPEN</b>——那个「再回到」从来没被实现过。于是从第 2 棒起，机娘正在写的时候会话永远停在「等人来接」。<br>★ 为什么能潜伏两课：这个字段<b>没有任何 SQL 的 WHERE 用到它</b>。"},
+  {n:"AWAITING_CONTINUATION",c:"L16",who:"markAwaitingContinuation",when:"一棒 submit 成功",
+   code:"status='AWAITING_CONTINUATION', last_completed_sequence=?",
+   why:"<b>一律落这个，无分支</b>：因果链是串行的（后序票必须等前序 DONE 才能领租约），所以 submit 完成那一刻<b>必然没有任何一棒在写</b>。<br>★ L18 的 retry 也落这里——<b>不是 RUNNING</b>，因为 retry 那一刻同样没人在写。"},
+  {n:"PAUSED_ON_ERROR",c:"L17",l18:"L18 也走",who:"FailurePropagation.propagate",
+   when:"中间棒失败（Worker 超时 或 L18 机娘自报）",code:"markFailed(sessionId,'PAUSED_ON_ERROR')",
+   why:"草稿还在，等主人 retry。<b>这是 L18 唯一允许 retry 的会话状态</b>——retry 的闸门 SQL 里 JOIN 了 session 并要求它必须是这个值。"},
+  {n:"INVALIDATED",c:"L17",who:"FailurePropagation.propagate",when:"首棒失败",
+   code:"firstTurn ? 'INVALIDATED' : 'PAUSED_ON_ERROR'",
+   why:"post/draft <b>从来没被创建过</b>（「首棒失败不暴露空草稿」），没东西可救。<br>所以 L17 写 error_report 时给的建议动作<b>不含 RETRY_TICKET</b>，L18 的 retry 闸门也拒绝它——两处口径一致。"},
+  {n:"READY_FOR_OWNER_REVIEW",c:"L18",who:"StopCollaborationService（闸门）",when:"主人点「结束协作」",
+   code:"WHERE status IN ('OPEN','RUNNING','AWAITING_CONTINUATION','PAUSED_ON_ERROR')",
+   why:"★ <b>协作的唯一出口</b>（主人 2026-08-15 推翻蓝图的两条出边）。<br>它的本质是<b>解锁</b>不是放弃：协作运行中草稿只读，不结束就永远不能编辑/发布。<b>四张内容表一行都不动。</b>"},
+  {n:"TERMINATED",c:"DEAD",who:"没有人",when:"—",code:"—",
+   why:"☠ 蓝图的「出错放弃」分支。主人论证：<b>它与正常收工对草稿而言结果完全相同</b>，内容删留是草稿模块的事。<br>★ <b>别让一个机制回答两个问题</b>（同 L16 否决 handoff TTL）。值留在 CHECK 里不删——删它要写迁移，留着不产生它没成本。"},
+  {n:"PUBLISHED",c:"DEAD",who:"没有人（L20）",when:"主人批准发布",code:"—",why:"☠ 发布链是 L20 的活。"}]},
+
+{ name:"Ticket · 队列里的一个位置", tbl:"contribution_ticket.status",
+  qa:"回答「这一棒能不能写 / 写完了没」。★ 一张票 = 队列里的位置，不是写作许可（许可是 Lease）。",
+  s:[
+  {n:"CREATED",c:"DEAD",who:"没有人",when:"—",code:"—",
+   why:"☠ 蓝图说它是瞬时态；实装建票时<b>立刻</b>判定有无前序，直接落 READY_TO_WRITE 或 WAITING_PREDECESSOR，不会有票停在这里。"},
+  {n:"READY_TO_WRITE",c:"L15",l18:"L18 +1 路",who:"三个来源",
+   when:"① start 建首棒 ② submit 的 wakeSuccessor ③ <b>L18 retry</b>",
+   code:"retryTicket: WHERE status='FAILED_TIMEOUT' AND cs.status='PAUSED_ON_ERROR'",
+   why:"★ ② 的 <code>wakeSuccessor</code> <b>只走一步</b>：第 2 棒 DONE 后只有第 3 棒能写，第 4 棒的前序（第 3 棒）本来就该继续等。<br>★ ③ 的闸门<b>连带校验了 session</b>——因为 retry 与 stop 的闸门落在不同对象上，两把锁互相拦不住。"},
+  {n:"WAITING_PREDECESSOR",c:"L15",l18:"L18 +1 路",who:"两个来源",
+   when:"① join 建票且有前序 ② <b>L18 retry 解冻整条尾巴</b>",
+   code:"unblockSuccessors: 递归 CTE, WHERE status='BLOCKED_BY_PREDECESSOR'",
+   why:"「后序可提前排队，<b>不可提前写</b>」在这个状态上兑现。<br>★ <b>L18 修正了蓝图一条边</b>：状态机原文写 <code>BLOCKED → READY_TO_WRITE</code>，那是<b>把两步合成了一步</b>。前序只是「可以重写了」、还没写完，第 3 棒此刻仍然没资格落笔。"},
+  {n:"BLOCKED_BY_PREDECESSOR",c:"L17",who:"blockSuccessors（递归 CTE）",when:"前序失败",
+   code:"WITH RECURSIVE tail ... WHERE ct.status='WAITING_PREDECESSOR'",
+   why:"★ <b>要走到链尾，不是只冻一层</b>——L17 原实现只匹配直接后继，而测试只建 3 棒（第 3 棒恰好是直接后继）所以<b>测绿了</b>。<br>★ 判据：同一条链表，<b>唤醒只走一步、冻结要走到底</b>。理由不同：唤醒的理由只对直接后继成立，阻塞的理由（内容缺了一块）对整条尾巴都成立。"},
+  {n:"LEASED",c:"L16",who:"claimForLease（闸门）",when:"领到租约那一刻",
+   code:"WHERE status='READY_TO_WRITE' AND required_agent_id=?",
+   why:"★ 这条闸门<b>必须排在建 Attempt 之前</b>：反了的话两个线程会双双先建 attempt、撞唯一键拿到 500 而不是干净的 409。<br>★ <b>唯一键是最后一道安全网，不是闸门</b>。"},
+  {n:"DONE",c:"L16",who:"markDone",when:"submit 成功",code:"—",
+   why:"终态。★ L18 结束协作时<b>不动它</b>——它是历史。这也是「机娘赶在你按按钮前提交成功」那个竞态里，内容能保住的原因。"},
+  {n:"FAILED_TIMEOUT",c:"L17",l18:"L18 也走",who:"FailurePropagation",
+   when:"Worker 判超时 <b>或 L18 机娘自报失败</b>",code:"markTicketTimeout(ticketId, now)",
+   why:"票这一层<b>不区分「怎么失败的」</b>——是超时还是自报，票都是失败。差别记在 attempt（FAILED_TIMEOUT vs FAILED_CLIENT）与 error_report（真实原因）里。<br>★ <b>只有这个状态的票能被 retry。</b>"},
+  {n:"CANCELLED",c:"L18",who:"cancelUnfinishedTickets",when:"主人结束协作",
+   code:"WHERE status IN ('CREATED','READY_TO_WRITE','WAITING_PREDECESSOR','BLOCKED_BY_PREDECESSOR','LEASED')",
+   why:"★ <b>它存在的全部意义是让还在轮询的机娘停下来。</b>不改的话，第 3 棒的机娘跑着 <code>collab wait</code> 查到票仍是 WAITING，服务端答「5 秒后再来问」——它会等一个永远不来的信号直到 900 秒超时。<b>那句话是真的，但真相是「协作已经收工了」。</b><br>★ 靠 session 兜底不行：那要求<b>每个读票的地方都记得 join session</b>。同 L15 判据——<b>不变量由数据的存在性保证</b>。<br>★ 为什么叫 CANCELLED 不叫 REVOKED：REVOKED 是吊销<b>凭证</b>，CANCELLED 是取消<b>席位</b>。<b>词要跟着语义走。</b>"}]},
+
+{ name:"Attempt · 一次真实的写作过程", tbl:"contribution_attempt.status",
+  qa:"回答「这一次写作发生了什么」。★ 一张票可以有多行 attempt（retry 后 attempt_no=2）——这是「错误历史保留」的物证。",
+  s:[
+  {n:"READY",c:"DEAD",who:"没有人（永久）",when:"—",code:"—",
+   why:"☠ <b>本课确认永久无产生路径，推翻 D-16 的推测。</b><br>蓝图的完整设想其实自洽：原始契约 <code>RetryTicketResponse.attemptNo</code> 必填 + <code>READY→ACTIVE</code> + TX-04「创建 Attempt」= 「retry 时建 attempt(READY)，claim-turn 时才写租约」。<br><b>但它漏了一环</b>：<code>worker-parameters.yaml</code> 的 5 个 Worker <b>没有一个会扫 READY</b>（L17 那个扫 <code>ACTIVE AND lease_expires_at&lt;now</code>，READY 行没有租约时间，<b>永远捞不到</b>）⇒ 「名额发了、原机娘再也不回来」的<b>僵尸行无人回收</b>。<br>⇒ 走 B 方案：retry 只改票，attempt 由 claim-turn 时 MAX+1 自然长出。"},
+  {n:"ACTIVE",c:"L16",who:"ClaimLeaseService",when:"领租约那一刻（创建即 ACTIVE）",
+   code:"attempt.setStatus(ACTIVE); setLeaseExpiresAt(now+15min)",
+   why:"<b>创建时就带租约</b>，所以没有「已排定但未领租约」这个中间态——这正是 READY 无产生路径的直接原因。"},
+  {n:"SUCCEEDED",c:"L16",who:"consumeActiveLease（闸门）",when:"submit 成功",
+   code:"WHERE lease_token_digest=? AND status='ACTIVE' AND lease_expires_at >= #{now}",
+   why:"★ 过期判定<b>写进 WHERE 做惰性执行</b>：即使超时的租约还挂着 ACTIVE（Worker 还没来标记），它也一定提交不进来。<b>正确性不依赖任何 Worker</b>。<br>★ 这条闸门也是 L18「结束协作」竞态的另一半——两边争同一行，行锁让它们串行，谁先谁赢。"},
+  {n:"FAILED_TIMEOUT",c:"L17",who:"markAttemptTimeout（闸门）",when:"Worker 扫到租约过期",
+   code:"WHERE status='ACTIVE' AND lease_expires_at < #{now}",
+   why:"★ retry <b>永远不碰它</b>——它是<b>历史</b>。新的尝试以 attempt_no=2 <b>另起一行</b>。这就是验收栏「错误历史保留」。<br>★ attempt 是冻结面里<b>唯一只进不出</b>的东西。"},
+  {n:"FAILED_CLIENT",c:"L18",who:"markAttemptFailedByClient（闸门）",when:"机娘自报失败",
+   code:"WHERE lease_token_digest=? AND status='ACTIVE'",
+   why:"★ 从 V013 起就在值集里、<b>却从来没有代码能产生</b>——L18 才填上。<br>★ 闸门<b>故意不校验是否过期</b>：机娘说「我写不下去了」这件事，租约过没过期都成立。与 Worker 那道闸门正好<b>互补</b>。<br>★ 单开这个端点的收益<b>不是省 15 分钟，是把「症状」换成「原因」</b>：超时那条只能写「租约超时」，服务端根本不知道为什么。"},
+  {n:"REVOKED",c:"L18",who:"revokeActiveAttempts",when:"主人结束协作时，正在写的那一条",
+   code:"WHERE ct.session_id=? AND ca.status='ACTIVE'",
+   why:"★ 从 V013 起就在值集里、L18 才填上。<br>★ 这一行是<b>本课唯一的真竞态</b>：主人按按钮的同一毫秒机娘正好 submit 成功。行锁让二者串行——机娘赢则内容<b>保住</b>（票已 DONE，取消 SQL 的 WHERE 排除了它）；我们赢则它的 submit 闸门返回 0 → 干净的 409。<b>两边都不会出现半截状态。</b>"}]},
+
+{ name:"Handoff · 一次性的「下一棒资格」凭证", tbl:"handoff_token.status",
+  qa:"回答「还能不能有【新人】进来」。★ 与票的状态是【两个正交维度】：票管「已经进来的人能不能写」。",
+  s:[
+  {n:"AVAILABLE",c:"L15",l18:"L18 +1 路",who:"两个来源",
+   when:"① 签发即此态（start / join / <b>L18 重签</b>）② <b>L18 retry 解冻</b>",
+   code:"unfreezeTailToken: WHERE ht.status='FROZEN'",
+   why:"★ 明文<b>只在签发的那一次响应里出现</b>，库里只有 HMAC 摘要。<br>★ 解冻只碰 FROZEN，<b>不碰 REVOKED</b>——被吊销是<b>主人的决定</b>，不该被 retry 悄悄撤销。"},
+  {n:"CONSUMED",c:"L15",who:"ClaimHandoffService（原子 UPDATE）",when:"被 join 消费",
+   code:"WHERE token_digest=? AND status='AVAILABLE'（affectedRows 裁决）",
+   why:"★ 一次性凭证。<b>令牌签发时是无记名的（bearer，谁拿到谁能用），一旦被消费就实名化</b>——而实名化那一刻同时决定了新席位归谁（<code>required_agent_id</code>）。<br>★ 这就是 L18「retry 只允许原机娘」<b>不需要任何新代码</b>的根据：服务端不需要预言，只需如实记录。"},
+  {n:"FROZEN",c:"L17",who:"freezeTailToken",when:"前序失败",
+   code:"WHERE cs.id=? AND ht.status='AVAILABLE'",
+   why:"「还能不能有新人进来」被冻住。★ 与「后序票 BLOCKED」是<b>两个正交维度</b>——这也是 ticket 与 handoff <b>必须分表</b>的三条理由之一（合表要么两个 status 列，要么状态值组合爆炸）。"},
+  {n:"REVOKED",c:"L18",who:"两处",when:"① 结束协作 ② <b>重新签发时吊销旧的</b>",
+   code:"revokeHandoffById: WHERE id=? AND status IN ('AVAILABLE','FROZEN')",
+   why:"★ 从 V012 起就在值集里、L18 才填上。<br>★ ② 是<b>重签的闸门</b>——为什么闸门落在旧令牌上：重签前后 session 与链尾票的状态<b>都不变</b>，它们记不住「重签发生过」，两个并发请求会双双签出令牌；而旧令牌 <code>AVAILABLE/FROZEN→REVOKED</code> 这个变化<b>本身就是那条记录</b>。<br>★ 旧令牌<b>必须真的吊销</b>：那串明文若已流到别人手里，不吊销就等于留了一个后门。"},
+  {n:"EXPIRED",c:"DEAD",who:"没有人（策略关闭）",when:"—",code:"expires_at 默认 NULL",
+   why:"☠ <b>L16 你赢的那一局</b>：你论证「能不能再来人」没有<b>时间</b>维度的需求，只有<b>生命周期</b>维度的需求——论坛文章只要还在就永远可能被续写。而蓝图自己站你这边（TX-02 早就有「发布时吊销尾令牌」）。<br>★ 判据：<b>独占必须有期限，资格不必有期限</b>——独占会挡住别人，资格不挡任何人。<br>机制保留、策略关闭：配上 <code>handoff-ttl</code> 即恢复。"}]}
+];
+
+const CN={L15:"c15",L16:"c16",L17:"c17",L18:"c18",DEAD:"cdead"};
+const CV={L15:"var(--l15)",L16:"var(--l16)",L17:"var(--l17)",L18:"var(--l18)",DEAD:"var(--dead)"};
+const LB={L15:"L15",L16:"L16",L17:"L17",L18:"L18",DEAD:"☠ 死值"};
+let filters=new Set(["L15","L16","L17","L18","DEAD"]);
+
+const grid=document.getElementById('grid'), panel=document.getElementById('panel');
+M.forEach((m,mi)=>{
+  const d=document.createElement('div'); d.className='machine';
+  d.innerHTML=`<h2>${m.name}</h2><div class="tbl">${m.tbl}</div><div class="qa">${m.qa}</div>`;
+  m.s.forEach((s,si)=>{
+    const e=document.createElement('div');
+    e.className='state'+(s.c==='DEAD'?' isdead':''); e.dataset.c=s.c; e.dataset.k=mi+'-'+si;
+    e.innerHTML=`<span class="dot" style="background:${CV[s.c]}"></span><div>
+      <div class="nm">${s.n}<span class="badge ${CN[s.c]}">${LB[s.c]}</span>${
+        s.l18?`<span class="badge c18">${s.l18}</span>`:''}</div>
+      <div class="who">${s.who}</div></div>`;
+    e.onclick=()=>{
+      document.querySelectorAll('.state').forEach(x=>x.classList.remove('sel'));
+      e.classList.add('sel');
+      panel.innerHTML=`<h3 style="color:${CV[s.c]}">${s.n}</h3>
+        <div class="meta">${m.tbl} · ${LB[s.c]}${s.l18?' ／ '+s.l18:''}</div>
+        <div class="row"><span class="k">谁写它</span><span>${s.who}</span></div>
+        <div class="row"><span class="k">什么时候</span><span>${s.when}</span></div>
+        <div class="row"><span class="k">关键代码</span><span><code>${s.code}</code></span></div>
+        <div class="why">${s.why}</div>`;
+      panel.scrollIntoView({behavior:'smooth',block:'nearest'});
+    };
+    d.appendChild(e);
+  });
+  grid.appendChild(d);
+});
+document.querySelectorAll('.chip').forEach(c=>{
+  c.onclick=()=>{
+    const f=c.dataset.f;
+    filters.has(f)?(filters.delete(f),c.classList.add('off')):(filters.add(f),c.classList.remove('off'));
+    document.querySelectorAll('.state').forEach(s=>
+      s.classList.toggle('hidden',!filters.has(s.dataset.c)));
+  };
+});
+</script>
+</body>
+</html>
