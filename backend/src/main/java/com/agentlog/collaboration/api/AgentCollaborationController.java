@@ -1,6 +1,7 @@
 package com.agentlog.collaboration.api;
 
 import com.agentlog.collaboration.api.dto.request.ClaimHandoffRequest;
+import com.agentlog.collaboration.api.dto.request.ReportFailureRequest;
 import com.agentlog.collaboration.api.dto.request.StartCollaborationRequest;
 import com.agentlog.collaboration.api.dto.request.SubmitContributionRequest;
 import com.agentlog.collaboration.api.dto.response.ClaimLeaseResponse;
@@ -9,6 +10,7 @@ import com.agentlog.collaboration.api.dto.response.SubmitContributionResponse;
 import com.agentlog.collaboration.api.dto.response.TicketStatusView;
 import com.agentlog.collaboration.application.ClaimHandoffService;
 import com.agentlog.collaboration.application.ClaimLeaseService;
+import com.agentlog.collaboration.application.ReportClientFailureService;
 import com.agentlog.collaboration.application.StartCollaborationService;
 import com.agentlog.collaboration.application.SubmitContributionService;
 import com.agentlog.collaboration.application.TicketStatusService;
@@ -63,6 +65,7 @@ public class AgentCollaborationController {
     private final TicketStatusService ticketStatusService;
     private final ClaimLeaseService claimLeaseService;
     private final SubmitContributionService submitContributionService;
+    private final ReportClientFailureService reportClientFailureService;
 
     /** 前端基址：机娘拿不到浏览器地址，草稿审稿链接必须由服务端拼好给它（同 L14）。 */
     private final String webBaseUrl;
@@ -72,12 +75,14 @@ public class AgentCollaborationController {
                                        TicketStatusService ticketStatusService,
                                        ClaimLeaseService claimLeaseService,
                                        SubmitContributionService submitContributionService,
+                                       ReportClientFailureService reportClientFailureService,
                                        @Value("${agentlog.web.base-url}") String webBaseUrl) {
         this.startCollaborationService = startCollaborationService;
         this.claimHandoffService = claimHandoffService;
         this.ticketStatusService = ticketStatusService;
         this.claimLeaseService = claimLeaseService;
         this.submitContributionService = submitContributionService;
+        this.reportClientFailureService = reportClientFailureService;
         this.webBaseUrl = webBaseUrl;
     }
 
@@ -150,5 +155,32 @@ public class AgentCollaborationController {
                 // ★ 恒为 null（DRIFT D-16 第 2 条）：令牌明文绝不落库，submit 时拿不回尾令牌明文；
                 //   而主人在 join 时早已拿到过它。安全铁律不为一个冗余字段让步。
                 null);
+    }
+
+    /**
+     * 自报失败（L18）：机娘知道自己写不下去了，主动认输，<b>不用干等 15 分钟租约超时</b>。
+     *
+     * <h3>★ 它填上了一个「值集列了、代码从没产生过」的状态</h3>
+     * {@code FAILED_CLIENT} 从 V013 起就在 CHECK 值集里（注释标着「L18」），
+     * 但在本课之前<b>没有任何端点能产生它</b>。
+     *
+     * <h3>★ 单开这个端点的主要收益不是省那 15 分钟，而是把「症状」换成「原因」</h3>
+     * 超时那条路径只能写「租约超时，未能在有效期内提交」——服务端<b>根本不知道为什么</b>
+     * （对话崩了？需求不清？工具报错？）。自报失败带着机娘自己说的理由，
+     * 对主人而言「上一棒内容缺了关键信息」比「租约超时」有用一百倍：
+     * 前者他能立刻决定怎么办，后者他只能猜。
+     *
+     * <p>租约令牌走请求头（同 submit）：令牌不进请求日志的 body。
+     * 返回最新席位状态，让机娘一眼看出「这一棒已作废，接下来等主人」。
+     */
+    @PostMapping("/contribution-tickets/{ticketCode}/failure")
+    @Idempotent
+    public TicketStatusView reportFailure(
+            @AuthenticationPrincipal AgentIdentity principal,
+            @PathVariable String ticketCode,
+            @RequestHeader(LEASE_TOKEN_HEADER) String leaseToken,
+            @Valid @RequestBody ReportFailureRequest request) {
+        return reportClientFailureService.reportFailure(
+                principal, ticketCode, leaseToken, request.reason());
     }
 }

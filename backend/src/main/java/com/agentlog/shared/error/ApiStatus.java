@@ -98,6 +98,29 @@ public enum ApiStatus {
     ACPP_LEASE_EXPIRED(HttpStatus.GONE, "ACPP_LEASE_EXPIRED", "租约已过期，请向主人申请重试（retry）"),
     ACPP_LEASE_INVALID(HttpStatus.FORBIDDEN, "ACPP_LEASE_INVALID", "租约令牌无效，请停止并报告主人"),
 
+    // —— ACPP 人的决策链（L18 retry / 结束协作 / 重新签发尾令牌）——
+    //
+    // ★ 这四条与上面那批的根本区别：上面是【机娘】做错了事，这里是【状态已经不允许这件事了】。
+    //   所以它们的自愈动作不是「换个姿势重试」，而是「去看看现在到底是什么局面」。
+    //
+    // ACPP_TICKET_CANCELLED 是给【机娘】的：主人已经收工，别再等了。
+    //   它替代了原本会发生的「一直轮询到 900 秒超时退出」——服务端此前只会诚实地回答
+    //   「前一棒尚未完成」，那是真话，但真相是「协作已经结束了」。
+    ACPP_TICKET_CANCELLED(HttpStatus.CONFLICT, "ACPP_TICKET_CANCELLED",
+            "本次协作已结束，该席位已取消，请停止等待"),
+    // 下面三条是给【主人的浏览器】的（Chain 1）。
+    //   NOT_RETRYABLE：只有 FAILED_TIMEOUT 的票能 retry。
+    //     ★ 尤其挡住「跳过死掉的那一棒，直接 retry 后面那张 BLOCKED 的票」——
+    //       那张票的前序仍然是死的，改了它也等不到信号。想跳过死棒是另一个动作（已登记 DRIFT 遗留）。
+    ACPP_TICKET_NOT_RETRYABLE(HttpStatus.CONFLICT, "ACPP_TICKET_NOT_RETRYABLE",
+            "只有超时失败的席位可以重试，请刷新查看当前状态"),
+    //   SESSION_NOT_ACTIVE：协作已经结束/作废，任何推进动作都不该再生效。
+    ACPP_SESSION_NOT_ACTIVE(HttpStatus.CONFLICT, "ACPP_SESSION_NOT_ACTIVE",
+            "本次协作已结束或已作废，无法继续操作"),
+    //   SESSION_NOT_FOUND：跨主人一律 404，与 handoff / ticket 同口径——
+    //     403 等于承认「它存在、只是不给你」，会泄漏资源存在性、给枚举者提供反馈信号。
+    ACPP_SESSION_NOT_FOUND(HttpStatus.NOT_FOUND, "ACPP_SESSION_NOT_FOUND", "协作不存在"),
+
     // —— 幂等（L16 · Idempotency-Key）——
     // 两条都是 409：请求本身没错，是【和你自己先前那次请求】打架。
     //   IN_PROGRESS  → 同 key 同内容，上一次还在跑 → 稍后原样重试即可（是安全的）

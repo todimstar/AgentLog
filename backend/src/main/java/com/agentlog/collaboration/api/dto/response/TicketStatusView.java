@@ -20,7 +20,10 @@ import com.agentlog.collaboration.infrastructure.persistence.dataobject.Contribu
  * </ul>
  *
  * @param pollAfterSeconds 建议隔多久再来问。0 = 别等了（要么轮到你了，要么等也没用）
- * @param errorReportId    失败详情指针（L17 才会有值，本课恒 null）
+ * @param errorReportId    失败详情指针。<b>L18 才真正填上</b>——见下方「补的旧账」
+ * @param attemptNo        这张票已经尝试到第几次（从未尝试过则为 null）。
+ *                         {@code > 1} 说明<b>之前失败过、是主人 retry 之后重开的</b>，
+ *                         {@code collab resume} 据此告诉机娘「你在续摊，不是开新的」
  */
 public record TicketStatusView(
         String ticketCode,
@@ -28,26 +31,50 @@ public record TicketStatusView(
         String status,
         Long requiredAgentId,
         int pollAfterSeconds,
-        Long errorReportId
+        Long errorReportId,
+        Integer attemptNo
 ) {
 
     /** 还在排队时的建议轮询间隔（秒）。取值折中：太短空转烧配额，太长交接迟钝。 */
     private static final int POLL_INTERVAL_WHILE_WAITING = 5;
 
+    /**
+     * 不带 attempt 信息的简版（仅用于还没有任何尝试的席位）。
+     *
+     * <h3>🔴 L18 补的旧账：errorReportId 曾经恒为 null</h3>
+     * L16 写下这一列时注释是「L17 才会有值，本课恒 null」，但 L17 结束了它<b>仍然硬编码 null</b>。
+     * 后果：机娘 {@code collab status} 看到 {@code FAILED_TIMEOUT} 时拿不到事故报告指针，
+     * 读不到 {@code suggested_actions_json}（"该怎么办"）——
+     * {@code 08-skill/references/error-actions.md} 那套自愈机制在 CLI 侧<b>是断的</b>。
+     *
+     * <p>★ 它和另外两笔旧账（session 回不到 RUNNING、三个审计事件没人发）是同一个模式：
+     * <b>注释是承诺，但没有任何机制保证它被兑现。</b>
+     * 测试只测「代码做了什么」，测不出「代码答应了却没做什么」。
+     */
     public static TicketStatusView from(ContributionTicketDO ticket) {
+        return from(ticket, null, null);
+    }
+
+    /** 带上最近一次尝试的信息（L18）。{@code latestAttempt} 可为 null。 */
+    public static TicketStatusView from(ContributionTicketDO ticket,
+                                        Integer attemptNo,
+                                        Long errorReportId) {
         return new TicketStatusView(
                 ticket.getTicketCode(),
                 ticket.getSequenceNo(),
                 ticket.getStatus(),
                 ticket.getRequiredAgentId(),
                 pollAfterSecondsFor(ticket.getStatus()),
-                null);
+                errorReportId,
+                attemptNo);
     }
 
     /**
      * 只有「等前序」这一种状态值得再问；其余都是 0：
      * READY_TO_WRITE 该立刻去领租约；LEASED/DONE 已成定局；
-     * BLOCKED/FAILED 要人介入（主人 retry），机器再问一万次也不会变。
+     * BLOCKED/FAILED 要人介入（主人 retry），机器再问一万次也不会变；
+     * <b>CANCELLED（L18）主人已经收工</b>——这是本课新增这个状态值的<b>全部意义</b>：
+     * 让还在轮询的机娘拿到 0，立刻停下来，而不是等一个永远不来的信号直到超时。
      */
     private static int pollAfterSecondsFor(String status) {
         return TicketStatus.WAITING_PREDECESSOR.getCode().equals(status)

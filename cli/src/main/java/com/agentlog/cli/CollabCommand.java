@@ -38,15 +38,17 @@ import picocli.CommandLine.Option;
  * <b>其余令牌（owner / refresh / acting / lease）一律绝不出现在任何流里</b>——
  * 尤其 lease：它不经过人手（自己领、自己用），回显只增加泄漏面。
  */
-@Command(name = "collab", description = "多机娘接力协作（开局 / 接力 / 等待 / 领棒 / 提交）",
+@Command(name = "collab", description = "多机娘接力协作（开局 / 接力 / 等待 / 领棒 / 提交 / 续写 / 认输）",
         subcommands = {CollabCommand.Start.class, CollabCommand.Join.class,
                 CollabCommand.Status.class, CollabCommand.Wait.class,
-                CollabCommand.ClaimTurn.class, CollabCommand.Submit.class})
+                CollabCommand.ClaimTurn.class, CollabCommand.Submit.class,
+                CollabCommand.Resume.class, CollabCommand.Fail.class})
 public class CollabCommand implements Runnable {
 
     @Override
     public void run() {
-        System.err.println("用法: agentlog collab <start|join|status|wait|claim-turn|submit>  （加 --help 看参数）");
+        System.err.println("用法: agentlog collab <start|join|status|wait|claim-turn|submit|resume|fail>  （加 --help 看参数）");
+        System.err.println("     ★ 拿不准该跑哪条？跑 resume —— 它会自己判断当前该做什么。");
     }
 
     // ——————————————————— 公共基座 ———————————————————
@@ -259,8 +261,59 @@ public class CollabCommand implements Runnable {
                         "    前序失败导致阻塞，需要主人 retry 前一棒才能解除。");
                 case "FAILED_TIMEOUT" -> System.err.println(
                         "    上一次写作超时被回收了，需要主人 retry 才能重来。");
+                // L18：主人已经结束协作 —— 这个值存在的【全部意义】就是让你停下来。
+                //   在它出现之前，服务端只能诚实地回答「前一棒尚未完成」，那是真话，
+                //   但真相是「这条协作已经收工了」，于是你会一直轮询到 900 秒超时。
+                case "CANCELLED" -> System.err.println(
+                        "    主人已经结束了这次协作，这个席位不再需要。你可以停下了，不用再等。");
                 default -> { }
             }
+        }
+
+        /**
+         * 领租约的公共内核（L18 抽出来，供 {@code claim-turn} 与 {@code resume} 共用）。
+         *
+         * @return 退出码；0 = 领到了
+         */
+        int doClaimTurn(String ticketCode, String actingToken) {
+            // 幂等键落本地：网络超时后原样重试会拿回【同一个租约】，而不是撞 409。
+            String idempotencyKey = rememberedKey(ticketCode, "claimIdempotencyKey");
+
+            ApiClient.Result res = api().post(ticketPath(ticketCode) + "/leases", actingToken,
+                    Map.of("Idempotency-Key", idempotencyKey));
+            if (!res.ok()) {
+                return reportFailure(res);
+            }
+
+            String leaseToken = res.body().path("leaseToken").asText();
+            String expiresAt = res.body().path("expiresAt").asText("");
+            JsonNode context = res.body().path("context");
+
+            ticketStore.merge(ticketCode, Map.of(
+                    "ticketStatus", "LEASED",
+                    "leaseToken", leaseToken,          // ★ 只落盘，不进任何流
+                    "leaseExpiresAt", expiresAt));
+
+            System.err.println("[OK] 已领到写作许可，这一棒 " + humanTtl(expiresAt) + "内归你独占。");
+            System.err.println("     协作 " + context.path("postTicket").asText()
+                    + " · 第 " + context.path("sequenceNo").asInt() + " 棒"
+                    + (context.path("isFirstTurn").asBoolean() ? "（首棒）" : ""));
+            System.err.println("     标题：" + context.path("plannedTitle").asText());
+            System.err.println("     写完后提交: agentlog collab submit --ticket " + ticketCode + " -f <正文文件>");
+            System.err.println("     ⚠️ 超时未提交会被回收（租约到期自动失效，不需要谁来解锁），");
+            System.err.println("        届时需要主人 retry 才能重来——所以别把租约当成「想写多久都行」。");
+            System.err.println("     若中途发现写不下去，别干等超时：agentlog collab fail --ticket "
+                    + ticketCode + " --reason \"...\"");
+            System.err.println("     租约令牌已存入 " + CliPaths.ticketStateFile(ticketCode) + "（不打印，submit 时自动使用）");
+
+            // stdout 给机器：★ 绝不包含 leaseToken。
+            System.out.println(mapper.createObjectNode()
+                    .put("status", "ok")
+                    .put("ticketCode", res.body().path("ticketCode").asText())
+                    .put("ticketStatus", "LEASED")
+                    .put("leaseExpiresAt", expiresAt)
+                    .toString());
+            return 0;
         }
 
         /**
@@ -487,6 +540,16 @@ public class CollabCommand implements Runnable {
                     explainStatus(res.body());
                     return 1;
                 }
+                // ★ L18：主人已结束协作 —— 立刻退出，不再空转。
+                //   这正是 CANCELLED 这个状态值存在的全部意义：在它出现之前，
+                //   服务端只会诚实地回答「前一棒尚未完成」（那是真话），
+                //   于是这只机娘会等一个永远不来的信号，直到 900 秒超时才退出。
+                if ("CANCELLED".equals(status)) {
+                    System.err.println("[i] 主人已经结束了这次协作，不用再等了。");
+                    explainStatus(res.body());
+                    System.out.println(res.body().toString());
+                    return 0;   // ★ 不是错误：协作正常收工，你只是没轮上
+                }
 
                 int pollAfter = Math.max(1, res.body().path("pollAfterSeconds").asInt(5));
                 if (Instant.now().plusSeconds(pollAfter).isAfter(deadline)) {
@@ -521,42 +584,7 @@ public class CollabCommand implements Runnable {
             if (actingToken == null) {
                 return 1;
             }
-            // 幂等键落本地：网络超时后原样重试会拿回【同一个租约】，而不是撞 409。
-            String idempotencyKey = rememberedKey(ticket, "claimIdempotencyKey");
-
-            ApiClient.Result res = api().post(ticketPath(ticket) + "/leases", actingToken,
-                    Map.of("Idempotency-Key", idempotencyKey));
-            if (!res.ok()) {
-                return reportFailure(res);
-            }
-
-            String leaseToken = res.body().path("leaseToken").asText();
-            String expiresAt = res.body().path("expiresAt").asText("");
-            JsonNode context = res.body().path("context");
-
-            ticketStore.merge(ticket, Map.of(
-                    "ticketStatus", "LEASED",
-                    "leaseToken", leaseToken,          // ★ 只落盘，不进任何流
-                    "leaseExpiresAt", expiresAt));
-
-            System.err.println("[OK] 已领到写作许可，这一棒 " + humanTtl(expiresAt) + "内归你独占。");
-            System.err.println("     协作 " + context.path("postTicket").asText()
-                    + " · 第 " + context.path("sequenceNo").asInt() + " 棒"
-                    + (context.path("isFirstTurn").asBoolean() ? "（首棒）" : ""));
-            System.err.println("     标题：" + context.path("plannedTitle").asText());
-            System.err.println("     写完后提交: agentlog collab submit --ticket " + ticket + " -f <正文文件>");
-            System.err.println("     ⚠️ 超时未提交会被回收（租约到期自动失效，不需要谁来解锁），");
-            System.err.println("        届时需要主人 retry 才能重来——所以别把租约当成「想写多久都行」。");
-            System.err.println("     租约令牌已存入 " + CliPaths.ticketStateFile(ticket) + "（不打印，submit 时自动使用）");
-
-            // stdout 给机器：★ 绝不包含 leaseToken。
-            System.out.println(mapper.createObjectNode()
-                    .put("status", "ok")
-                    .put("ticketCode", res.body().path("ticketCode").asText())
-                    .put("ticketStatus", "LEASED")
-                    .put("leaseExpiresAt", expiresAt)
-                    .toString());
-            return 0;
+            return doClaimTurn(ticket, actingToken);
         }
     }
 
@@ -633,6 +661,180 @@ public class CollabCommand implements Runnable {
 
         /** Map.of 不接受 null 值，这里手搓一个允许 null 的小工具（null = 把该字段置空）。 */
         private java.util.Map<String, String> mapWithNulls(String... kv) {
+            java.util.Map<String, String> m = new java.util.LinkedHashMap<>();
+            for (int i = 0; i < kv.length; i += 2) {
+                m.put(kv[i], kv[i + 1]);
+            }
+            return m;
+        }
+    }
+
+    // ——————————————————— resume（L18）———————————————————
+
+    /**
+     * 自适应入口：<b>不管这一棒现在处于什么局面，跑这一条就对了</b>。
+     *
+     * <h3>★ 它的价值不是"接收 retry 通知"（我一开始想错了）</h3>
+     * 主人在网页上点了 retry 之后，<b>服务端并不会、也无法通知机娘</b>——
+     * 服务端与机娘是「拉」不是「推」的关系，而 retry 的典型场景恰恰是<b>那个对话已经崩了</b>：
+     * <blockquote>
+     * 最需要通知的那一刻，接收方恰好已经不存在。<b>任何通信机制都推不到一个已死的进程。</b>
+     * </blockquote>
+     * 业界给 CLI 做反向通信的标准解法是「客户端建出站长连接」（如 {@code stripe listen}），
+     * 但那要求进程<b>常驻</b>——而机娘是一次一条命令的 AI 对话，挂不住长连接。
+     * <p>⇒ 真正的通道<b>是主人</b>：他在页面上一键复制一条命令，粘给新开的 AI 对话。
+     * 这与 L15 接力棒必须经过人手复制粘贴是<b>同一个架构决定</b>。
+     *
+     * <h3>★ 那 resume 到底解决什么</h3>
+     * <b>替机娘省掉「我现在该跑哪条命令」这个判断</b>——它对 AI 客户端特别贵。
+     * Skill 文档因此能从「五个分支的决策树」简化成一句「跑 resume，照它说的做」。
+     * <pre>
+     *   READY_TO_WRITE       → 直接领租约，开始写
+     *   WAITING_PREDECESSOR  → 告诉你去 wait
+     *   LEASED（租约在本地）  → 你上次领了没提交，接着写
+     *   CANCELLED            → 协作已收工，可以停了
+     *   DONE                 → 这一棒写过了，别重复写
+     *   FAILED_TIMEOUT/BLOCKED → 要主人介入
+     * </pre>
+     */
+    @Command(name = "resume", description = "接着写这一棒（自动判断当前该做什么）")
+    static class Resume extends Base {
+
+        @Option(names = {"--ticket", "-t"}, required = true, description = "席位号（主人给你的 CT-xxxx）")
+        String ticket;
+
+        @Override
+        public Integer call() {
+            String actingToken = requireActingToken();
+            if (actingToken == null) {
+                return 1;
+            }
+            ApiClient.Result res = api().getJson(ticketPath(ticket), actingToken);
+            if (!res.ok()) {
+                return reportFailure(res);
+            }
+            JsonNode body = res.body();
+            String status = body.path("status").asText("");
+            int attemptNo = body.path("attemptNo").asInt(0);
+
+            // ★ attemptNo > 1 说明这一棒之前失败过、是主人 retry 之后重开的。
+            //   告诉机娘"你在续摊"很重要：它该去读上一次失败的原因，而不是当成全新的活。
+            if (attemptNo > 1) {
+                System.err.println("[i] 这是第 " + attemptNo + " 次尝试——上一次失败了，主人已经 retry。");
+                long errId = body.path("errorReportId").asLong(0);
+                if (errId > 0) {
+                    System.err.println("    上次的失败记录 #" + errId + "，主人可在协作页看到详情。");
+                }
+            }
+
+            switch (status) {
+                case "READY_TO_WRITE" -> {
+                    System.err.println("[OK] 轮到你了，正在自动领取写作许可……");
+                    return doClaimTurn(ticket, actingToken);
+                }
+                case "LEASED" -> {
+                    String localLease = ticketStore.read(ticket, "leaseToken");
+                    if (localLease != null) {
+                        System.err.println("[OK] 你已经领过这一棒的写作许可，接着写就行。");
+                        System.err.println("     写完提交: agentlog collab submit --ticket " + ticket + " -f <正文文件>");
+                        System.err.println("     写不下去: agentlog collab fail --ticket " + ticket + " --reason \"...\"");
+                    } else {
+                        System.err.println("[FAIL] 这一棒的写作许可在别人手里（本地没有租约）。");
+                        System.err.println("       查状态: agentlog collab status --ticket " + ticket);
+                    }
+                    System.out.println(body.toString());
+                    return localLease != null ? 0 : 1;
+                }
+                case "WAITING_PREDECESSOR" -> {
+                    System.err.println("[i] 前一棒还没写完，你已排上队但还不能写。");
+                    System.err.println("    等它: agentlog collab wait --ticket " + ticket);
+                    System.out.println(body.toString());
+                    return 0;
+                }
+                case "CANCELLED" -> {
+                    System.err.println("[i] 主人已经结束了这次协作，这个席位不再需要。你可以停下了。");
+                    System.out.println(body.toString());
+                    return 0;   // 正常收工，不是错误
+                }
+                case "DONE" -> {
+                    System.err.println("[i] 这一棒已经写完提交了，不要重复写。");
+                    System.out.println(body.toString());
+                    return 0;
+                }
+                default -> {
+                    // FAILED_TIMEOUT / BLOCKED_BY_PREDECESSOR：要主人介入，机器再问也不会变。
+                    System.err.println("[FAIL] 当前状态 " + status + "，需要主人在协作页处理。");
+                    explainStatus(body);
+                    System.out.println(body.toString());
+                    return 1;
+                }
+            }
+        }
+    }
+
+    // ——————————————————— fail（L18）———————————————————
+
+    /**
+     * 自报失败：写不下去时<b>主动认输</b>，不用干等 15 分钟让租约超时。
+     *
+     * <h3>★ 主要收益不是省那 15 分钟，而是把「症状」换成「原因」</h3>
+     * 租约超时那条路径，服务端只能写「租约超时，未能在有效期内提交」——
+     * 它<b>根本不知道你为什么没回来</b>（对话崩了？需求不清？工具报错？）。
+     * 而自报失败带着你自己说的理由：对主人来说，
+     * 「上一棒内容缺了关键前提」比「租约超时」有用一百倍——
+     * 前者他能立刻决定怎么办，后者他只能猜。
+     *
+     * <p>顺带：后序机娘也能早 15 分钟知道别等了。
+     */
+    @Command(name = "fail", description = "自报失败（写不下去时主动认输，不必干等超时）")
+    static class Fail extends Base {
+
+        @Option(names = {"--ticket", "-t"}, required = true, description = "席位号")
+        String ticket;
+
+        @Option(names = {"--reason", "-r"}, required = true,
+                description = "失败原因（人话，主人在协作页直接看到）")
+        String reason;
+
+        @Override
+        public Integer call() {
+            String actingToken = requireActingToken();
+            if (actingToken == null) {
+                return 1;
+            }
+            String leaseToken = ticketStore.read(ticket, "leaseToken");
+            if (leaseToken == null) {
+                System.err.println("[FAIL] 本地没有这一棒的写作许可（租约），无法自报失败。");
+                System.err.println("       自报失败要凭租约认人——没领过这一棒的人不能替它宣告失败。");
+                System.err.println("       查状态: agentlog collab status --ticket " + ticket);
+                return 1;
+            }
+
+            String idempotencyKey = rememberedKey(ticket, "failIdempotencyKey");
+            ObjectNode body = mapper.createObjectNode().put("reason", reason);
+            ApiClient.Result res = api().postJson(
+                    ticketPath(ticket) + "/failure", body.toString(), actingToken,
+                    Map.of("X-Turn-Lease-Token", leaseToken,
+                            "Idempotency-Key", idempotencyKey));
+            if (!res.ok()) {
+                return reportFailure(res);
+            }
+
+            // 租约已随这次宣告作废，本地清掉，免得之后拿它去 submit 撞 409。
+            ticketStore.merge(ticket, mapWithNullValues(
+                    "ticketStatus", res.body().path("status").asText("FAILED_TIMEOUT"),
+                    "leaseToken", null, "leaseExpiresAt", null,
+                    "claimIdempotencyKey", null, "failIdempotencyKey", null));
+
+            System.err.println("[OK] 已向服务端报告这一棒写不下去，原因已记录。");
+            System.err.println("     后序机娘会立刻知道别等了，主人也会在协作页看到你说的原因。");
+            System.err.println("     ↳ 请把这句话回给主人：第 " + res.body().path("sequenceNo").asInt()
+                    + " 棒失败了（" + reason + "），需要他在协作页决定 retry 还是结束协作。");
+            System.out.println(res.body().toString());
+            return 0;
+        }
+
+        private java.util.Map<String, String> mapWithNullValues(String... kv) {
             java.util.Map<String, String> m = new java.util.LinkedHashMap<>();
             for (int i = 0; i < kv.length; i += 2) {
                 m.put(kv[i], kv[i + 1]);

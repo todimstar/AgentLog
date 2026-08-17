@@ -1,0 +1,367 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.agentlog.collaboration.infrastructure.persistence.mapper.OwnerCollaborationMapper">
+
+    <!--
+      ★★★ L18 主人决策链的全部 SQL ★★★
+
+      本课与 L15/L16/L17 最大的不同：这里每一条 UPDATE 的触发者都是【人】，不是机娘、不是 Worker。
+      但范式完全一样 —— 一条带条件的 UPDATE 完成「检查 + 动作」，affectedRows 就是裁决书。
+      人点错了、点重了、点晚了，全部由闸门挡住，不需要额外的判断代码。
+    -->
+
+    <!-- ═══════════════ ① retry ═══════════════ -->
+
+    <!--
+      retry 的闸门。只有 FAILED_TIMEOUT 的票能被重开，而且协作必须还停在 PAUSED_ON_ERROR。
+
+      ★ 为什么必须限定 FAILED_TIMEOUT，而不是"只要不是 DONE 就能 retry"：
+        它顺带挡住了一个很自然但错误的想法 ——「跳过死掉的第 2 棒，直接 retry 第 3 棒」。
+        第 3 棒此刻是 BLOCKED_BY_PREDECESSOR，把它改成可写毫无意义：
+        它的前序（第 2 棒）仍然是死的，它等的那个信号永远不会来。
+        想跳过死棒是【另一个动作】（改因果链指针），已登记 DRIFT 遗留。
+
+      ★★ 为什么 session 的条件必须【合进这一条 SQL】，而不是先查一次再判断（施工期想清楚的）：
+        主人在两个标签页里同时点了「retry」和「结束协作」——
+          stop 的闸门在 session 上、retry 的闸门在票上，两把锁管的是不同的行，【互相拦不住】。
+        若 retry 先 SELECT 一次 session 看到 PAUSED_ON_ERROR、随后 stop 提交、retry 才改票，
+        结果就是：协作已经收工，却有一张票被改回了「可写」——一个没有归属的活票。
+        ⇒ 把 cs.status 写进 JOIN 后的 WHERE，两件事就在【同一条语句、同一组行锁】里判定：
+          stop 先赢 → 这里匹配不到 PAUSED_ON_ERROR → 0 行；
+          retry 先赢 → stop 随后照常把票 CANCELLED。两个顺序都得到自洽的结果。
+        ★ 判据：当两个操作的闸门落在【不同对象】上时，必须有一方把对方的条件纳入自己的 WHERE，
+          否则两把锁各自都"成功"，合起来却破坏了不变量。
+
+      ★ 顺带说明：只允许 PAUSED_ON_ERROR，就自动排除了【首棒失败】(session=INVALIDATED)。
+        那是对的 —— 首棒失败时 post/draft 从来没被创建过，没有草稿可救；
+        L17 写 error_report 时给出的建议动作也正是 ["TERMINATE_SESSION"]，不含 RETRY_TICKET。
+
+      ★ 这道闸门同时就是幂等：连点两下，第二下必然返回 0。详见 Mapper 接口注释。
+    -->
+    <update id="retryTicket">
+        UPDATE contribution_ticket ct
+          JOIN collaboration_session cs ON cs.id = ct.session_id
+        SET ct.status     = 'READY_TO_WRITE',
+            ct.updated_at = #{now},
+            ct.version    = ct.version + 1
+        WHERE ct.ticket_code = #{ticketCode}
+          AND ct.status      = 'FAILED_TIMEOUT'
+          AND cs.status      = 'PAUSED_ON_ERROR'
+    </update>
+
+    <!-- retry 成功后把会话推回「等人来接」。 -->
+    <update id="resumeSessionAfterRetry">
+        UPDATE collaboration_session
+        SET status     = 'AWAITING_CONTINUATION',
+            updated_at = #{now},
+            version    = version + 1
+        WHERE id     = #{sessionId}
+          AND status = 'PAUSED_ON_ERROR'
+    </update>
+
+    <select id="selectSessionIdByPostTicket" resultType="java.lang.Long">
+        SELECT id FROM collaboration_session
+        WHERE post_ticket = #{postTicket} AND owner_user_id = #{ownerUserId}
+    </select>
+
+    <!--
+      解冻整条尾巴：BLOCKED_BY_PREDECESSOR → WAITING_PREDECESSOR。
+
+      ★★ 这是 L17 blockSuccessors 的镜像，两个关键点都必须照搬：
+
+        ① 递归 CTE 走到链尾，不是只走一层。
+           第 4、5、6 棒的 predecessor 指向第 3 棒，用 `WHERE predecessor_ticket_id = 超时票`
+           根本匹配不到它们 —— L17 就是这么漏的（而且因为测试只建 3 棒而测绿了）。
+
+        ② status 条件放【最外层 UPDATE】，绝不能塞进 CTE 的递归项。
+           CTE 负责「找出整条尾巴」（不管它们什么状态），
+           UPDATE 负责「只动其中真的被阻塞的那些」。
+           若把 status 塞进递归项，遇到一张非 BLOCKED 的票链条就断了，后面的票再也找不到。
+
+      ★ 但【目标状态与 L17 不同】—— 这是本课自己的判断：
+        改成 WAITING_PREDECESSOR（继续排队），不是 READY_TO_WRITE（可以写）。
+        前一棒只是"可以重写了"，还没写完。第 3 棒此刻仍然没有资格落笔，
+        否则它会基于一篇缺了一块的文章续写。
+        等前一棒真的 submit 成功，L16 的 wakeSuccessor 会唤醒它（那一步只走一步）。
+
+      ⇒ 三条遍历，方向与深度各不相同，别因为"看起来对称"就照抄：
+           唤醒（L16）：走【一步】，→ READY_TO_WRITE
+           冻结（L17）：走【到底】，→ BLOCKED_BY_PREDECESSOR
+           解冻（L18）：走【到底】，→ WAITING_PREDECESSOR   ← 深度同 L17，目标态同 L15
+    -->
+    <update id="unblockSuccessors">
+        WITH RECURSIVE tail (id) AS (
+            SELECT id FROM contribution_ticket
+            WHERE predecessor_ticket_id = #{predecessorTicketId}
+            UNION ALL
+            SELECT ct.id FROM contribution_ticket ct
+            JOIN tail t ON ct.predecessor_ticket_id = t.id
+        )
+        UPDATE contribution_ticket ct
+          JOIN tail t ON ct.id = t.id
+        SET ct.status     = 'WAITING_PREDECESSOR',
+            ct.updated_at = #{now},
+            ct.version    = ct.version + 1
+        WHERE ct.status = 'BLOCKED_BY_PREDECESSOR'
+    </update>
+
+    <!--
+      解冻尾令牌：FROZEN → AVAILABLE。与解冻后序票是两个正交维度 ——
+      后序票管「已经进来的人能不能写」，尾令牌管「还能不能有新人进来」。
+
+      ⚠️ 只解冻 FROZEN，不碰 REVOKED：被吊销是【主人的决定】，不该被 retry 悄悄撤销。
+    -->
+    <update id="unfreezeTailToken">
+        UPDATE handoff_token ht
+          JOIN collaboration_session cs ON cs.tail_handoff_token_id = ht.id
+        SET ht.status  = 'AVAILABLE',
+            ht.version = ht.version + 1
+        WHERE cs.id     = #{sessionId}
+          AND ht.status = 'FROZEN'
+    </update>
+
+    <!-- ═══════════════ ② 结束协作（唯一出口）═══════════════ -->
+
+    <!--
+      结束协作的闸门：推进到 READY_FOR_OWNER_REVIEW。
+
+      WHERE 里这四个 = 所有「还没结束」的状态。不在其中的两类：
+        INVALIDATED —— 首棒失败，post/draft 从来没被创建过，没有草稿要解锁，主人无需按任何按钮；
+        已结束的态   —— 已经是终态，再点一次落 0 行（这就是"连点两次"的防线）。
+    -->
+    <update id="stopSession">
+        UPDATE collaboration_session
+        SET status     = 'READY_FOR_OWNER_REVIEW',
+            updated_at = #{now},
+            version    = version + 1
+        WHERE id     = #{sessionId}
+          AND status IN ('OPEN', 'RUNNING', 'AWAITING_CONTINUATION', 'PAUSED_ON_ERROR')
+    </update>
+
+    <!-- 结束时正在写的那条 attempt（只为写审计取 id；判定仍由下面的条件 UPDATE 做）。 -->
+    <select id="selectActiveAttemptId" resultType="java.lang.Long">
+        SELECT ca.id
+        FROM contribution_attempt ca
+        JOIN contribution_ticket ct ON ct.id = ca.ticket_id
+        WHERE ct.session_id = #{sessionId}
+          AND ca.status     = 'ACTIVE'
+        LIMIT 1
+    </select>
+
+    <!--
+      吊销进行中的 attempt。★ 本课唯一的真竞态就在这一行上。
+
+      主人按下「结束协作」的同一毫秒，机娘正好 submit 成功：
+        两条 UPDATE 争同一行，MySQL 行锁让它们串行，谁先谁赢 ——
+          机娘赢 → 这里影响 0 行，它的内容【保住了】（它确实在按钮按下之前写完了）
+          我们赢 → attempt=REVOKED，它的 submit 闸门 WHERE status='ACTIVE' 返回 0 → 干净的 409
+        两边都不会出现半截状态。这正是「一条 UPDATE 同时完成检查与动作」的价值。
+    -->
+    <update id="revokeActiveAttempts">
+        UPDATE contribution_attempt ca
+          JOIN contribution_ticket ct ON ct.id = ca.ticket_id
+        SET ca.status      = 'REVOKED',
+            ca.finished_at = #{now},
+            ca.updated_at  = #{now}
+        WHERE ct.session_id = #{sessionId}
+          AND ca.status     = 'ACTIVE'
+    </update>
+
+    <!--
+      取消所有未完成的席位 → CANCELLED。
+
+      ★ 它的理由是【让还在轮询的机娘停下来】，不是"状态机好看"：
+        不改的话，第 3 棒的机娘跑着 collab wait，查到票仍是 WAITING_PREDECESSOR，
+        服务端答「5 秒后再来问」—— 它会等一个永远不来的信号，直到 900 秒超时退出。
+        那句话是真的，但真相是「协作已经收工了」。
+
+      ⚠️ WHERE 里【排除 DONE 与 FAILED_TIMEOUT】：它们是历史，历史不能改。
+         也正因如此，上面那个竞态里「机娘赢」的分支不会被这里误伤 —— 它的票已经是 DONE。
+    -->
+    <update id="cancelUnfinishedTickets">
+        UPDATE contribution_ticket
+        SET status     = 'CANCELLED',
+            updated_at = #{now},
+            version    = version + 1
+        WHERE session_id = #{sessionId}
+          AND status IN ('CREATED', 'READY_TO_WRITE', 'WAITING_PREDECESSOR',
+                         'BLOCKED_BY_PREDECESSOR', 'LEASED')
+    </update>
+
+    <!-- 吊销尾令牌：协作结束了，不能再有人进来。AVAILABLE 与 FROZEN 都要吊销。 -->
+    <update id="revokeTailToken">
+        UPDATE handoff_token ht
+          JOIN collaboration_session cs ON cs.tail_handoff_token_id = ht.id
+        SET ht.status  = 'REVOKED',
+            ht.version = ht.version + 1
+        WHERE cs.id     = #{sessionId}
+          AND ht.status IN ('AVAILABLE', 'FROZEN')
+    </update>
+
+    <!--
+      重算「已完成到第几棒」—— 一个被 @Version 逼出来的收尾步骤。
+
+      CollaborationSessionDO 带 @Version，submit 走 updateById 是乐观锁。
+      若 stop 先提交（version+1），submit 那次 updateById 会【静默影响 0 行】：
+      内容与票都落对了，但 last_completed_sequence 没跟上。
+
+      与其去改 submit 的写法（那会动 L16 的主干、影响面大），不如让 stop 按事实重算一次。
+      ★ 判据：能从事实推导出来的派生值，就不要依赖执行顺序去维护它。
+        这一步幂等且必然正确 —— 它不问"谁先谁后"，只问"哪些票真的写完了"。
+    -->
+    <update id="recalcLastCompletedSequence">
+        UPDATE collaboration_session cs
+        SET cs.last_completed_sequence = COALESCE((
+                SELECT MAX(ct.sequence_no) FROM contribution_ticket ct
+                WHERE ct.session_id = cs.id AND ct.status = 'DONE'
+            ), 0),
+            cs.updated_at = #{now}
+        WHERE cs.id = #{sessionId}
+    </update>
+
+    <!-- ═══════════════ ③ 重新签发尾令牌 ═══════════════ -->
+
+    <!--
+      重签的闸门：吊销旧的那根。
+
+      ★ 为什么闸门在【旧令牌】而不是会话或票：
+        闸门要选那个「能唯一代表这次操作发生过」的对象。
+        重签前后 session 的状态【不变】、链尾票的状态也【不变】——
+        它们记不住"重签发生过"，两个并发请求会双双通过、签出两根令牌。
+        而旧令牌的 status 从 AVAILABLE/FROZEN → REVOKED，这个变化【本身就是那条记录】。
+
+      ★ 为什么是"重新签发"而不是"重新查看"：库里只有 HMAC 摘要，明文签发时出现过一次就永远消失了。
+        UX 规格那句「可查看下一棒尾令牌」物理上做不到 —— 换个机制满足它。
+    -->
+    <update id="revokeHandoffById">
+        UPDATE handoff_token
+        SET status  = 'REVOKED',
+            version = version + 1
+        WHERE id     = #{tokenId}
+          AND status IN ('AVAILABLE', 'FROZEN')
+    </update>
+
+    <update id="updateTailHandoff">
+        UPDATE collaboration_session
+        SET tail_handoff_token_id = #{tokenId},
+            updated_at            = #{now},
+            version               = version + 1
+        WHERE id = #{sessionId}
+    </update>
+
+    <!-- ═══════════════ ④ 机娘自报失败 ═══════════════ -->
+
+    <!--
+      自报失败的闸门：凭租约摘要认人。与 L17 Worker 那道闸门正好互补：
+        Worker：WHERE status='ACTIVE' AND lease_expires_at < now  （已过期才轮到我收尸）
+        自报  ：WHERE lease_token_digest=? AND status='ACTIVE'     （凭证对得上就认）
+
+      ★ 故意不校验是否过期：机娘说「我写不下去了」这件事，租约过没过期都成立。
+        若恰好与 Worker 撞上，行锁让二者串行，谁先谁赢，另一个拿 0 行干净退出 ——
+        而两条路径【后续做的事完全相同】，所以谁赢都不影响正确性。
+    -->
+    <update id="markAttemptFailedByClient">
+        UPDATE contribution_attempt
+        SET status      = 'FAILED_CLIENT',
+            finished_at = #{now},
+            updated_at  = #{now}
+        WHERE lease_token_digest = #{leaseTokenDigest}
+          AND status             = 'ACTIVE'
+    </update>
+
+    <select id="selectAttemptByLeaseDigest"
+            resultType="com.agentlog.collaboration.infrastructure.persistence.dataobject.TimelineAttemptRow">
+        SELECT id AS attempt_id, ticket_id, attempt_no, status,
+               lease_issued_at, lease_expires_at, started_at, finished_at, error_report_id
+        FROM contribution_attempt
+        WHERE lease_token_digest = #{leaseTokenDigest}
+    </select>
+
+    <!-- ═══════════════ ⑤ 时间线查询（跨模块只读投影）═══════════════ -->
+
+    <!--
+      ★ 下面四条 SQL 分别 join 了 identity / audit / reliability 三个模块的表，
+        但本模块【一个类都没 import】—— SQL 只依赖【表结构】，不依赖【Java 类型】，
+        而 ModularityTest 检查的是字节码引用。这就是 D-05「跨模块只读走 SQL 投影」的做法。
+
+      ⚠️ 代价要诚实：这几条 SQL 与别的模块的表结构【隐式耦合】了，编译器不会替你检查。
+         对方改列名，这里运行时才炸。项目接受这个代价，因为替代方案（为只读架 Facade）
+         成本更高、收益为零 —— Facade 的价值是保证事务边界与不变量，而读不改变任何东西。
+    -->
+
+    <select id="selectTicketTimeline"
+            resultType="com.agentlog.collaboration.infrastructure.persistence.dataobject.TimelineTicketRow">
+        SELECT ct.id                AS ticket_id,
+               ct.ticket_code,
+               ct.sequence_no,
+               ct.status,
+               ct.required_agent_id,
+               aa.nickname          AS required_agent_nickname,
+               ct.predecessor_ticket_id,
+               ct.created_at,
+               ct.updated_at
+        FROM contribution_ticket ct
+        LEFT JOIN agent_account aa ON aa.id = ct.required_agent_id
+        WHERE ct.session_id = #{sessionId}
+        ORDER BY ct.sequence_no
+    </select>
+
+    <!--
+      每一次写作尝试。★ 一张票可能有多行（attempt_no 1、2、…）——
+      retry 之后原机娘重来一次就会长出第 2 行，而第 1 行【原样保留】。
+      这就是验收栏「错误历史保留」的物证。ORDER BY 让时间线按发生顺序排。
+    -->
+    <select id="selectAttemptTimeline"
+            resultType="com.agentlog.collaboration.infrastructure.persistence.dataobject.TimelineAttemptRow">
+        SELECT ca.id AS attempt_id,
+               ca.ticket_id,
+               ca.attempt_no,
+               ca.status,
+               ca.lease_issued_at,
+               ca.lease_expires_at,
+               ca.started_at,
+               ca.finished_at,
+               ca.error_report_id
+        FROM contribution_attempt ca
+        JOIN contribution_ticket ct ON ct.id = ca.ticket_id
+        WHERE ct.session_id = #{sessionId}
+        ORDER BY ct.sequence_no, ca.attempt_no
+    </select>
+
+    <select id="selectAuditTimeline"
+            resultType="com.agentlog.collaboration.infrastructure.persistence.dataobject.TimelineAuditRow">
+        SELECT ar.id,
+               ar.action_type,
+               ar.summary,
+               ar.detail_json,
+               ar.ticket_id,
+               ar.agent_id,
+               aa.nickname AS agent_nickname,
+               ar.created_at
+        FROM audit_record ar
+        LEFT JOIN agent_account aa ON aa.id = ar.agent_id
+        WHERE ar.session_id = #{sessionId}
+        ORDER BY ar.created_at, ar.id
+    </select>
+
+    <select id="selectErrorTimeline"
+            resultType="com.agentlog.collaboration.infrastructure.persistence.dataobject.TimelineErrorRow">
+        SELECT er.id,
+               er.ticket_id,
+               er.attempt_id,
+               er.error_type,
+               er.failed_stage,
+               er.summary,
+               er.suggested_actions_json,
+               er.created_at
+        FROM error_report er
+        WHERE er.session_id = #{sessionId}
+        ORDER BY er.created_at, er.id
+    </select>
+
+    <select id="selectAgentNickname" resultType="java.lang.String">
+        SELECT nickname FROM agent_account WHERE id = #{agentId}
+    </select>
+
+</mapper>
