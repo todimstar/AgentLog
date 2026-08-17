@@ -32,6 +32,8 @@ import type { CreateAgentDraftRequest } from '../models';
 // @ts-ignore
 import type { ProblemDetail } from '../models';
 // @ts-ignore
+import type { ReportFailureRequest } from '../models';
+// @ts-ignore
 import type { StartCollaborationRequest } from '../models';
 // @ts-ignore
 import type { StartCollaborationResponse } from '../models';
@@ -76,7 +78,7 @@ export const AgentApiAxiosParamCreator = function (configuration?: Configuration
             await setBearerAuthToObject(localVarHeaderParameter, configuration)
 
             localVarHeaderParameter['Content-Type'] = 'application/json';
-            localVarHeaderParameter['Accept'] = 'application/json';
+            localVarHeaderParameter['Accept'] = 'application/json,application/problem+json';
 
             setSearchParams(localVarUrlObj, localVarQueryParameter);
             let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
@@ -195,11 +197,60 @@ export const AgentApiAxiosParamCreator = function (configuration?: Configuration
             // http bearer authentication required
             await setBearerAuthToObject(localVarHeaderParameter, configuration)
 
+            localVarHeaderParameter['Accept'] = 'application/json,application/problem+json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * 机娘知道自己写不下去了（需求不清 / 上一棒内容有问题 / 工具报错），主动认输， **不用干等 15 分钟让租约超时**。  它走的状态推进与 L17 Worker 宣布超时**完全相同**（票落失败态、后序整条尾巴阻塞、 尾令牌冻结、会话暂停或作废），只是触发者与失败原因不同——共用同一段 `FailurePropagation`。  ★ 主要收益不是省那 15 分钟，而是**把「症状」换成「原因」**： 超时那条只能写「租约超时」，服务端根本不知道为什么。 
+         * @summary 自报失败
+         * @param {string} ticketCode 
+         * @param {ReportFailureRequest} reportFailureRequest 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        reportAttemptFailure: async (ticketCode: string, reportFailureRequest: ReportFailureRequest, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'ticketCode' is not null or undefined
+            assertParamExists('reportAttemptFailure', 'ticketCode', ticketCode)
+            // verify required parameter 'reportFailureRequest' is not null or undefined
+            assertParamExists('reportAttemptFailure', 'reportFailureRequest', reportFailureRequest)
+            const localVarPath = `/api/v1/agent/contribution-tickets/{ticketCode}/failure`
+                .replace('{ticketCode}', encodeURIComponent(String(ticketCode)));
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'POST', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication idempotencyKey required
+            await setApiKeyToObject(localVarHeaderParameter, "Idempotency-Key", configuration)
+
+            // authentication leaseToken required
+            await setApiKeyToObject(localVarHeaderParameter, "X-Turn-Lease-Token", configuration)
+
+            // authentication agentOpaque required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            localVarHeaderParameter['Content-Type'] = 'application/json';
             localVarHeaderParameter['Accept'] = 'application/json';
 
             setSearchParams(localVarUrlObj, localVarQueryParameter);
             let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
             localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+            localVarRequestOptions.data = serializeDataIfNeeded(reportFailureRequest, localVarRequestOptions, configuration)
 
             return {
                 url: toPathString(localVarUrlObj),
@@ -359,6 +410,20 @@ export const AgentApiFp = function(configuration?: Configuration) {
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
         /**
+         * 机娘知道自己写不下去了（需求不清 / 上一棒内容有问题 / 工具报错），主动认输， **不用干等 15 分钟让租约超时**。  它走的状态推进与 L17 Worker 宣布超时**完全相同**（票落失败态、后序整条尾巴阻塞、 尾令牌冻结、会话暂停或作废），只是触发者与失败原因不同——共用同一段 `FailurePropagation`。  ★ 主要收益不是省那 15 分钟，而是**把「症状」换成「原因」**： 超时那条只能写「租约超时」，服务端根本不知道为什么。 
+         * @summary 自报失败
+         * @param {string} ticketCode 
+         * @param {ReportFailureRequest} reportFailureRequest 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async reportAttemptFailure(ticketCode: string, reportFailureRequest: ReportFailureRequest, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<TicketStatusView>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.reportAttemptFailure(ticketCode, reportFailureRequest, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['AgentApi.reportAttemptFailure']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
          * 
          * @summary Start ACPP
          * @param {StartCollaborationRequest} startCollaborationRequest 
@@ -435,6 +500,17 @@ export const AgentApiFactory = function (configuration?: Configuration, basePath
             return localVarFp.getTicketStatus(ticketCode, options).then((request) => request(axios, basePath));
         },
         /**
+         * 机娘知道自己写不下去了（需求不清 / 上一棒内容有问题 / 工具报错），主动认输， **不用干等 15 分钟让租约超时**。  它走的状态推进与 L17 Worker 宣布超时**完全相同**（票落失败态、后序整条尾巴阻塞、 尾令牌冻结、会话暂停或作废），只是触发者与失败原因不同——共用同一段 `FailurePropagation`。  ★ 主要收益不是省那 15 分钟，而是**把「症状」换成「原因」**： 超时那条只能写「租约超时」，服务端根本不知道为什么。 
+         * @summary 自报失败
+         * @param {string} ticketCode 
+         * @param {ReportFailureRequest} reportFailureRequest 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        reportAttemptFailure(ticketCode: string, reportFailureRequest: ReportFailureRequest, options?: RawAxiosRequestConfig): AxiosPromise<TicketStatusView> {
+            return localVarFp.reportAttemptFailure(ticketCode, reportFailureRequest, options).then((request) => request(axios, basePath));
+        },
+        /**
          * 
          * @summary Start ACPP
          * @param {StartCollaborationRequest} startCollaborationRequest 
@@ -504,6 +580,18 @@ export class AgentApi extends BaseAPI {
      */
     public getTicketStatus(ticketCode: string, options?: RawAxiosRequestConfig) {
         return AgentApiFp(this.configuration).getTicketStatus(ticketCode, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * 机娘知道自己写不下去了（需求不清 / 上一棒内容有问题 / 工具报错），主动认输， **不用干等 15 分钟让租约超时**。  它走的状态推进与 L17 Worker 宣布超时**完全相同**（票落失败态、后序整条尾巴阻塞、 尾令牌冻结、会话暂停或作废），只是触发者与失败原因不同——共用同一段 `FailurePropagation`。  ★ 主要收益不是省那 15 分钟，而是**把「症状」换成「原因」**： 超时那条只能写「租约超时」，服务端根本不知道为什么。 
+     * @summary 自报失败
+     * @param {string} ticketCode 
+     * @param {ReportFailureRequest} reportFailureRequest 
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public reportAttemptFailure(ticketCode: string, reportFailureRequest: ReportFailureRequest, options?: RawAxiosRequestConfig) {
+        return AgentApiFp(this.configuration).reportAttemptFailure(ticketCode, reportFailureRequest, options).then((request) => request(this.axios, this.basePath));
     }
 
     /**

@@ -40,9 +40,13 @@ import type { PublishDraftRequest } from '../models';
 // @ts-ignore
 import type { PublishDraftResponse } from '../models';
 // @ts-ignore
+import type { ReissueHandoffResponse } from '../models';
+// @ts-ignore
 import type { RetryTicketResponse } from '../models';
 // @ts-ignore
 import type { SaveDraftRequest } from '../models';
+// @ts-ignore
+import type { StopCollaborationResponse } from '../models';
 // @ts-ignore
 import type { UploadSlotResponse } from '../models';
 /**
@@ -223,7 +227,7 @@ export const OwnerApiAxiosParamCreator = function (configuration?: Configuration
             };
         },
         /**
-         * 
+         * 席位全景 + 动作流水 + 事故报告（含建议动作）。协作详情页的全部数据来源。  ⚠️ 原标 L17，**实际在 L18 实装**——L17 只准备了数据源（audit_record / error_report）。 
          * @summary 协作时间线
          * @param {string} postTicket 
          * @param {*} [options] Override http request option.
@@ -362,7 +366,41 @@ export const OwnerApiAxiosParamCreator = function (configuration?: Configuration
             };
         },
         /**
-         * 
+         * 吊销旧的尾令牌，签发一根新的，**明文只在这次响应里出现一次**。  ★ UX 规格（`06-web/owner-review-ux.md`）要的是「可**查看**下一棒尾令牌」， 但库里只有 `HMAC-SHA256(pepper, 明文)`，**摘要算不回明文**——「查看」物理上不可能。 判据：**UX 需求撞上安全模型时，往往不是砍需求，而是换一个能满足它的机制**。  典型场景：① 令牌弄丢了 ② 怀疑泄漏 ③ **retry 刚把尾令牌解冻，但主人手上早没有那串明文了**。  ⚠️ 旧令牌**必须真的吊销**：那串明文若已流到别人手里，不吊销就等于留了一个后门。 
+         * @summary 重新签发尾令牌
+         * @param {string} postTicket 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        reissueHandoff: async (postTicket: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'postTicket' is not null or undefined
+            assertParamExists('reissueHandoff', 'postTicket', postTicket)
+            const localVarPath = `/api/v1/owner/collaboration-sessions/{postTicket}/handoff`
+                .replace('{postTicket}', encodeURIComponent(String(postTicket)));
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'POST', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * 重试某一棒：票 FAILED_TIMEOUT → READY_TO_WRITE、解冻整条后序尾巴与尾令牌、 会话回到 AWAITING_CONTINUATION（**不是 RUNNING**——此刻还没有人在写）。  ★ 为什么必须由人点：机娘的对话已经崩了，服务端与它之间是**「拉」不是「推」**—— 它连对方还在不在都不知道。自动重试只会把票改回可写、再超时、再重试 = 死循环。  ★ **不需要 Idempotency-Key**：闸门本身就是幂等（条件 UPDATE 影响 0 行 = 已发生过）。 幂等防的是「同一个请求被重发」，闸门防的是「这件事被重复执行」。  ⚠️ 只有 `FAILED_TIMEOUT` 的票能 retry。想「跳过死掉的那一棒、直接 retry 后面那张 BLOCKED 的」 会得到 409 —— 那张票的前序仍然是死的，改了也等不到信号。 
          * @summary Retry
          * @param {string} postTicket 
          * @param {string} ticketCode 
@@ -432,6 +470,40 @@ export const OwnerApiAxiosParamCreator = function (configuration?: Configuration
             let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
             localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
             localVarRequestOptions.data = serializeDataIfNeeded(saveDraftRequest, localVarRequestOptions, configuration)
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * 协作的**唯一出口** → `READY_FOR_OWNER_REVIEW`，把草稿的控制权还给主人。  做四件事：会话交审稿 · 进行中的 attempt → REVOKED · 未完成的席位 → CANCELLED · 尾令牌 → REVOKED。⚠️ **不删任何内容**。  ★ 蓝图原本画了两条出边（正常收工 → READY_FOR_OWNER_REVIEW、出错放弃 → TERMINATED）， L18 决策合并为一条（DRIFT D-18）：两者对草稿而言结果完全相同， 内容是删是留归草稿模块管——**别让一个机制回答两个问题**。 
+         * @summary 结束协作
+         * @param {string} postTicket 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        stopCollaboration: async (postTicket: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'postTicket' is not null or undefined
+            assertParamExists('stopCollaboration', 'postTicket', postTicket)
+            const localVarPath = `/api/v1/owner/collaboration-sessions/{postTicket}/stop`
+                .replace('{postTicket}', encodeURIComponent(String(postTicket)));
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'POST', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            localVarHeaderParameter['Accept'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
 
             return {
                 url: toPathString(localVarUrlObj),
@@ -513,7 +585,7 @@ export const OwnerApiFp = function(configuration?: Configuration) {
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
         /**
-         * 
+         * 席位全景 + 动作流水 + 事故报告（含建议动作）。协作详情页的全部数据来源。  ⚠️ 原标 L17，**实际在 L18 实装**——L17 只准备了数据源（audit_record / error_report）。 
          * @summary 协作时间线
          * @param {string} postTicket 
          * @param {*} [options] Override http request option.
@@ -565,7 +637,20 @@ export const OwnerApiFp = function(configuration?: Configuration) {
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
         /**
-         * 
+         * 吊销旧的尾令牌，签发一根新的，**明文只在这次响应里出现一次**。  ★ UX 规格（`06-web/owner-review-ux.md`）要的是「可**查看**下一棒尾令牌」， 但库里只有 `HMAC-SHA256(pepper, 明文)`，**摘要算不回明文**——「查看」物理上不可能。 判据：**UX 需求撞上安全模型时，往往不是砍需求，而是换一个能满足它的机制**。  典型场景：① 令牌弄丢了 ② 怀疑泄漏 ③ **retry 刚把尾令牌解冻，但主人手上早没有那串明文了**。  ⚠️ 旧令牌**必须真的吊销**：那串明文若已流到别人手里，不吊销就等于留了一个后门。 
+         * @summary 重新签发尾令牌
+         * @param {string} postTicket 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async reissueHandoff(postTicket: string, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<ReissueHandoffResponse>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.reissueHandoff(postTicket, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['OwnerApi.reissueHandoff']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * 重试某一棒：票 FAILED_TIMEOUT → READY_TO_WRITE、解冻整条后序尾巴与尾令牌、 会话回到 AWAITING_CONTINUATION（**不是 RUNNING**——此刻还没有人在写）。  ★ 为什么必须由人点：机娘的对话已经崩了，服务端与它之间是**「拉」不是「推」**—— 它连对方还在不在都不知道。自动重试只会把票改回可写、再超时、再重试 = 死循环。  ★ **不需要 Idempotency-Key**：闸门本身就是幂等（条件 UPDATE 影响 0 行 = 已发生过）。 幂等防的是「同一个请求被重发」，闸门防的是「这件事被重复执行」。  ⚠️ 只有 `FAILED_TIMEOUT` 的票能 retry。想「跳过死掉的那一棒、直接 retry 后面那张 BLOCKED 的」 会得到 409 —— 那张票的前序仍然是死的，改了也等不到信号。 
          * @summary Retry
          * @param {string} postTicket 
          * @param {string} ticketCode 
@@ -590,6 +675,19 @@ export const OwnerApiFp = function(configuration?: Configuration) {
             const localVarAxiosArgs = await localVarAxiosParamCreator.saveDraft(draftId, saveDraftRequest, options);
             const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
             const localVarOperationServerBasePath = operationServerMap['OwnerApi.saveDraft']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * 协作的**唯一出口** → `READY_FOR_OWNER_REVIEW`，把草稿的控制权还给主人。  做四件事：会话交审稿 · 进行中的 attempt → REVOKED · 未完成的席位 → CANCELLED · 尾令牌 → REVOKED。⚠️ **不删任何内容**。  ★ 蓝图原本画了两条出边（正常收工 → READY_FOR_OWNER_REVIEW、出错放弃 → TERMINATED）， L18 决策合并为一条（DRIFT D-18）：两者对草稿而言结果完全相同， 内容是删是留归草稿模块管——**别让一个机制回答两个问题**。 
+         * @summary 结束协作
+         * @param {string} postTicket 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async stopCollaboration(postTicket: string, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<StopCollaborationResponse>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.stopCollaboration(postTicket, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['OwnerApi.stopCollaboration']?.[localVarOperationServerIndex]?.url;
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
     }
@@ -652,7 +750,7 @@ export const OwnerApiFactory = function (configuration?: Configuration, basePath
             return localVarFp.finalizeMedia(mediaId, options).then((request) => request(axios, basePath));
         },
         /**
-         * 
+         * 席位全景 + 动作流水 + 事故报告（含建议动作）。协作详情页的全部数据来源。  ⚠️ 原标 L17，**实际在 L18 实装**——L17 只准备了数据源（audit_record / error_report）。 
          * @summary 协作时间线
          * @param {string} postTicket 
          * @param {*} [options] Override http request option.
@@ -692,7 +790,17 @@ export const OwnerApiFactory = function (configuration?: Configuration, basePath
             return localVarFp.publishDraft(draftId, publishDraftRequest, options).then((request) => request(axios, basePath));
         },
         /**
-         * 
+         * 吊销旧的尾令牌，签发一根新的，**明文只在这次响应里出现一次**。  ★ UX 规格（`06-web/owner-review-ux.md`）要的是「可**查看**下一棒尾令牌」， 但库里只有 `HMAC-SHA256(pepper, 明文)`，**摘要算不回明文**——「查看」物理上不可能。 判据：**UX 需求撞上安全模型时，往往不是砍需求，而是换一个能满足它的机制**。  典型场景：① 令牌弄丢了 ② 怀疑泄漏 ③ **retry 刚把尾令牌解冻，但主人手上早没有那串明文了**。  ⚠️ 旧令牌**必须真的吊销**：那串明文若已流到别人手里，不吊销就等于留了一个后门。 
+         * @summary 重新签发尾令牌
+         * @param {string} postTicket 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        reissueHandoff(postTicket: string, options?: RawAxiosRequestConfig): AxiosPromise<ReissueHandoffResponse> {
+            return localVarFp.reissueHandoff(postTicket, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * 重试某一棒：票 FAILED_TIMEOUT → READY_TO_WRITE、解冻整条后序尾巴与尾令牌、 会话回到 AWAITING_CONTINUATION（**不是 RUNNING**——此刻还没有人在写）。  ★ 为什么必须由人点：机娘的对话已经崩了，服务端与它之间是**「拉」不是「推」**—— 它连对方还在不在都不知道。自动重试只会把票改回可写、再超时、再重试 = 死循环。  ★ **不需要 Idempotency-Key**：闸门本身就是幂等（条件 UPDATE 影响 0 行 = 已发生过）。 幂等防的是「同一个请求被重发」，闸门防的是「这件事被重复执行」。  ⚠️ 只有 `FAILED_TIMEOUT` 的票能 retry。想「跳过死掉的那一棒、直接 retry 后面那张 BLOCKED 的」 会得到 409 —— 那张票的前序仍然是死的，改了也等不到信号。 
          * @summary Retry
          * @param {string} postTicket 
          * @param {string} ticketCode 
@@ -712,6 +820,16 @@ export const OwnerApiFactory = function (configuration?: Configuration, basePath
          */
         saveDraft(draftId: number, saveDraftRequest: SaveDraftRequest, options?: RawAxiosRequestConfig): AxiosPromise<DraftView> {
             return localVarFp.saveDraft(draftId, saveDraftRequest, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * 协作的**唯一出口** → `READY_FOR_OWNER_REVIEW`，把草稿的控制权还给主人。  做四件事：会话交审稿 · 进行中的 attempt → REVOKED · 未完成的席位 → CANCELLED · 尾令牌 → REVOKED。⚠️ **不删任何内容**。  ★ 蓝图原本画了两条出边（正常收工 → READY_FOR_OWNER_REVIEW、出错放弃 → TERMINATED）， L18 决策合并为一条（DRIFT D-18）：两者对草稿而言结果完全相同， 内容是删是留归草稿模块管——**别让一个机制回答两个问题**。 
+         * @summary 结束协作
+         * @param {string} postTicket 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        stopCollaboration(postTicket: string, options?: RawAxiosRequestConfig): AxiosPromise<StopCollaborationResponse> {
+            return localVarFp.stopCollaboration(postTicket, options).then((request) => request(axios, basePath));
         },
     };
 };
@@ -776,7 +894,7 @@ export class OwnerApi extends BaseAPI {
     }
 
     /**
-     * 
+     * 席位全景 + 动作流水 + 事故报告（含建议动作）。协作详情页的全部数据来源。  ⚠️ 原标 L17，**实际在 L18 实装**——L17 只准备了数据源（audit_record / error_report）。 
      * @summary 协作时间线
      * @param {string} postTicket 
      * @param {*} [options] Override http request option.
@@ -820,7 +938,18 @@ export class OwnerApi extends BaseAPI {
     }
 
     /**
-     * 
+     * 吊销旧的尾令牌，签发一根新的，**明文只在这次响应里出现一次**。  ★ UX 规格（`06-web/owner-review-ux.md`）要的是「可**查看**下一棒尾令牌」， 但库里只有 `HMAC-SHA256(pepper, 明文)`，**摘要算不回明文**——「查看」物理上不可能。 判据：**UX 需求撞上安全模型时，往往不是砍需求，而是换一个能满足它的机制**。  典型场景：① 令牌弄丢了 ② 怀疑泄漏 ③ **retry 刚把尾令牌解冻，但主人手上早没有那串明文了**。  ⚠️ 旧令牌**必须真的吊销**：那串明文若已流到别人手里，不吊销就等于留了一个后门。 
+     * @summary 重新签发尾令牌
+     * @param {string} postTicket 
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public reissueHandoff(postTicket: string, options?: RawAxiosRequestConfig) {
+        return OwnerApiFp(this.configuration).reissueHandoff(postTicket, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * 重试某一棒：票 FAILED_TIMEOUT → READY_TO_WRITE、解冻整条后序尾巴与尾令牌、 会话回到 AWAITING_CONTINUATION（**不是 RUNNING**——此刻还没有人在写）。  ★ 为什么必须由人点：机娘的对话已经崩了，服务端与它之间是**「拉」不是「推」**—— 它连对方还在不在都不知道。自动重试只会把票改回可写、再超时、再重试 = 死循环。  ★ **不需要 Idempotency-Key**：闸门本身就是幂等（条件 UPDATE 影响 0 行 = 已发生过）。 幂等防的是「同一个请求被重发」，闸门防的是「这件事被重复执行」。  ⚠️ 只有 `FAILED_TIMEOUT` 的票能 retry。想「跳过死掉的那一棒、直接 retry 后面那张 BLOCKED 的」 会得到 409 —— 那张票的前序仍然是死的，改了也等不到信号。 
      * @summary Retry
      * @param {string} postTicket 
      * @param {string} ticketCode 
@@ -841,6 +970,17 @@ export class OwnerApi extends BaseAPI {
      */
     public saveDraft(draftId: number, saveDraftRequest: SaveDraftRequest, options?: RawAxiosRequestConfig) {
         return OwnerApiFp(this.configuration).saveDraft(draftId, saveDraftRequest, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * 协作的**唯一出口** → `READY_FOR_OWNER_REVIEW`，把草稿的控制权还给主人。  做四件事：会话交审稿 · 进行中的 attempt → REVOKED · 未完成的席位 → CANCELLED · 尾令牌 → REVOKED。⚠️ **不删任何内容**。  ★ 蓝图原本画了两条出边（正常收工 → READY_FOR_OWNER_REVIEW、出错放弃 → TERMINATED）， L18 决策合并为一条（DRIFT D-18）：两者对草稿而言结果完全相同， 内容是删是留归草稿模块管——**别让一个机制回答两个问题**。 
+     * @summary 结束协作
+     * @param {string} postTicket 
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public stopCollaboration(postTicket: string, options?: RawAxiosRequestConfig) {
+        return OwnerApiFp(this.configuration).stopCollaboration(postTicket, options).then((request) => request(this.axios, this.basePath));
     }
 }
 

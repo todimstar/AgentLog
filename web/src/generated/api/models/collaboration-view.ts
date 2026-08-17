@@ -15,11 +15,34 @@
 
 // May contain unused imports in some cases
 // @ts-ignore
-import type { TicketView } from './ticket-view';
+import type { CollaborationErrorDetail } from './collaboration-error-detail';
+// May contain unused imports in some cases
+// @ts-ignore
+import type { CollaborationTicketDetail } from './collaboration-ticket-detail';
+// May contain unused imports in some cases
+// @ts-ignore
+import type { CollaborationTimelineEntry } from './collaboration-timeline-entry';
 
+/**
+ * 协作详情（L18 时间线页的全部数据）。三段回答三个不同的问题： `tickets` = 现在这条链是什么局面；`timeline` = 一路上发生了什么；`errors` = 出了什么事、该怎么办。 
+ */
 export interface CollaborationView {
     'postTicket': string;
+    /**
+     * 会话状态。L18 是它的**第一个真正消费者**——此前被写 4 处、读来做判定 0 处
+     */
     'status': string;
-    'tickets': Array<TicketView>;
+    'plannedTitle'?: string;
+    'plannedSummary'?: string | null;
+    /**
+     * 首棒成功后才有。null = 还没有任何内容（首棒未完成或已作废）
+     */
+    'draftId'?: number | null;
+    'lastCompletedSequence'?: number;
+    'createdAt'?: string;
+    'updatedAt'?: string;
+    'tickets': Array<CollaborationTicketDetail>;
+    'timeline': Array<CollaborationTimelineEntry>;
+    'errors': Array<CollaborationErrorDetail>;
 }
 

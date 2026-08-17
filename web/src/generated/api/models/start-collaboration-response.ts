@@ -21,6 +21,9 @@ export interface StartCollaborationResponse {
     'postTicket': string;
     'contributionTicket': TicketView;
     'nextHandoffToken': string;
-    'nextHandoffExpiresAt'?: string;
+    /**
+     * 接力棒失效时刻。L16 起默认为 null = 永不过期（DRIFT D-16）—— 「能不能再来人」由生命周期决定（发布/终止时吊销尾令牌，TX-02 第 11 步），不由时钟决定。 判据：独占（lease）必须有期限，资格（handoff）不必有期限。 运营方配置 agentlog.token.handoff-ttl 后此字段恢复有值。
+     */
+    'nextHandoffExpiresAt'?: string | null;
 }
 
