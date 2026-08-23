@@ -97,3 +97,5 @@ ALTER TABLE audit_record
 --     TERMINATED 留在值集里不删（删它要写迁移，留着不产生它没有成本），
 --     'INVALIDATED' 仍由 L17 的 Worker 在首棒失败时自动落 —— 那条路上没有草稿要解锁，
 --     主人根本不需要按任何按钮。
+
+-- 8.19审批：加了ticket的cancel状态给终止票链的后续票更新状态。同时补齐了session的各种状态，给审计链

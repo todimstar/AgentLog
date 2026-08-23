@@ -196,3 +196,4 @@ public class AuditListener {
         mapper.insert(r);
     }
 }
+//8.21：整一个异步mapper存进事件表里记录的记录员，监听器

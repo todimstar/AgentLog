@@ -52,6 +52,7 @@ import org.springframework.transaction.annotation.Transactional;
  * 票 : 尝试 = 1:N，若 join 成一张宽表，票的字段会随尝试次数<b>重复 N 遍</b>（笛卡尔膨胀），
  * 还要在 Java 里去重。分两次查、按 {@code ticketId} 在内存里归并，SQL 更简单、语义更清楚。
  * 数据量也支持这么做：一条协作的席位是个位数。
+ * 第一次先用参数查出会话id，第二次用id查该会话相关的票、error、audit等时间线所需信息，然后组装成DetailView返回
  */
 @Service
 public class CollaborationTimelineService {

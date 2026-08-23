@@ -2209,6 +2209,548 @@ Markdown 不靠"禁止 v-html"的纪律靠组件封装。能用结构约束的,�
 
 ---
 
+## 故事 38:一条看起来最无害的 UPDATE 把系统锁死了——从随机死锁到根因（L18）🔴 简历主打
+
+> **面试时长**:完整讲 6-8 分钟。这是本项目**排查链条最长**的一个问题:
+> 症状离根因隔了两层,而且第一层修完**问题只减轻不消失**——那才是真正开始动脑的地方。
+
+### 0. 先补三个名词(面试官若是前端/产品出身,你需要先铺这层)
+
+**① 事务**:一组要么全成功要么全失败的数据库操作。转账扣款+入账必须在一个事务里,否则钱会凭空消失。
+
+**② 行锁,以及两种锁**:
+数据库为了不让两个人同时改坏同一行数据,会给行"上锁"。锁分两种:
+
+```
+S 锁(Shared,共享锁,俗称读锁)
+  —— "我在看这一行,你也可以看,但谁都别改它"
+  多个事务可以【同时】持有同一行的 S 锁。
+
+X 锁(eXclusive,排他锁,俗称写锁)
+  —— "我要改这一行,谁都别碰"
+  同一行的 X 锁【只能有一个】事务持有,且与 S 锁互斥。
+```
+
+**③ 死锁**:两个事务各自拿着对方想要的锁,谁都不肯先放手,永远等下去。
+
+```
+        T1 持有 A行 ──── 想要 B行
+                ↑              ↓
+        T2 想要 A行 ◄──── 持有 B行
+        （成环 → 谁都动不了）
+```
+
+数据库不会真的等到宇宙尽头——**InnoDB 有死锁检测器**,发现成环就**主动杀掉其中一个事务**,报
+`Deadlock found when trying to get lock; try restarting transaction`。所以死锁的表现是
+**"某个请求随机失败"**,而不是"系统卡住"。这一点很重要:它意味着**死锁很容易在测试里偶发,然后被当成"网络抖动"忽略掉**。
+
+### 1. 背景:我加了一行看起来毫无风险的代码
+
+L18 这一课我在做"协作时间线页"——把一次多 AI 接力协作的全过程展示给用户。做的时候发现一个洞:
+时间线上只有「提交成功」和「超时失败」两种事件,**开局、接棒、开始写作这三个动作从来没有人记录过**
+(审计表的合法值里列了它们,但没有任何代码产生)。
+
+所以我在"AI 领取写作许可"这个方法末尾补了一行:发一个领域事件,让审计模块异步记一条流水。
+
+```java
+// ClaimLeaseService.claim() 末尾
+events.publishEvent(new LeaseClaimed(...));   // ← 我加的就是这一行
+```
+
+**功能上它完全正确,测试也是为它写的。但加完之后,15 条集成测试里开始有 2 条随机失败。**
+
+### 2. 症状:报错指向一条我根本没改过的 SQL
+
+先说排查的第一个动作——**把测试输出落盘再 grep,不要用管道**:
+
+```bash
+# ⚠️ 不能写成 ./mvnw test | grep ...
+#    Maven 的输出有缓冲,管道会让你看到空结果或截断结果(我早期吃过这个亏)
+./mvnw -o test -pl backend -Dtest=OwnerCollaborationIntegrationTest > /tmp/l18-test.log 2>&1
+grep -n "Tests run:\|<<< FAILURE\|<<< ERROR" /tmp/l18-test.log
+```
+
+输出:
+
+```text
+[ERROR] Tests run: 15, Failures: 0, Errors: 2, Skipped: 0
+[ERROR] ...sessionReturnsToRunningWhenSecondTurnStartsWriting -- <<< ERROR!
+[ERROR] ...clientReportedFailurePropagatesLikeTimeoutButKeepsRealReason -- <<< ERROR!
+```
+
+**注意 `Failures: 0, Errors: 2`——这个区分很重要**:`Failures` 是断言不成立(功能错了),
+`Errors` 是抛异常(程序崩了)。**0 个断言失败说明我的业务逻辑是对的,是别的东西炸了。**
+
+看完整堆栈:
+
+```bash
+sed -n '173,200p' /tmp/l18-test.log
+```
+
+```text
+org.springframework.dao.DeadlockLoserDataAccessException:
+
+### Error updating database.  Cause: com.mysql.cj.jdbc.exceptions.
+    MySQLTransactionRollbackException: Deadlock found when trying to get lock;
+    try restarting transaction
+### The error may involve ...CollaborationSessionMapper.updateById-Inline
+### SQL: UPDATE collaboration_session
+         SET post_ticket=?, owner_user_id=?, planned_title=?, planned_channel_id=?,
+             status=?, tail_handoff_token_id=?, last_completed_sequence=?,
+             version=?, created_at=?, updated_at=?
+         WHERE id=? AND version=?
+    at com.agentlog.collaboration.application.ClaimLeaseService.claim(ClaimLeaseService.java:149)
+```
+
+**这里有两个信息值得停下来看:**
+
+**(a) 报错的 SQL 是 `updateById` 生成的,而我这一行代码是上一课就写好的、根本没动。**
+真正新增的只有那个 `publishEvent`。所以问题不在"我写错了什么",而在"我引入了什么并发"。
+
+**(b) SQL 里 `SET` 了 10 个列——而我只想改 1 个(`status`)。**
+这就是 ORM 的"全字段更新":`updateById` 把整个对象的所有字段都写回去。
+(顺带解释另一个疑问:为什么 WHERE 里有 `AND version=?`——因为项目装了 MyBatis-Plus 的
+乐观锁拦截器 `OptimisticLockerInnerInterceptor`,它会自动给带 `@Version` 的实体加这个条件。
+我用一条命令确认了它真的装着:`grep -rn "OptimisticLockerInnerInterceptor" backend/src/main/java/`)
+
+### 3. 第一层根因:全字段更新会**连带锁住别的表**
+
+盯着那 10 个列看,我发现三个是**外键列**:`owner_user_id` → 用户表、
+`planned_channel_id` → 分区表、`tail_handoff_token_id` → 令牌表。
+
+**关键知识点(很多人不知道):外键不是"免费的完整性检查",它是【隐式的锁】。**
+
+```text
+当你 UPDATE 一个外键列(哪怕值一个字都没变),InnoDB 必须确认
+"你填的这个 owner_user_id 在 user_account 里真的存在" ——
+而为了防止在你这个事务提交之前那一行被别人删掉,
+它会给【父表的那一行】加一把 S 锁。
+
+⇒ 我这条"只想改 status"的 UPDATE,实际锁住了 4 张表的行:
+   collaboration_session(X 锁) + user_account(S) + forum_channel(S) + handoff_token(S)
+```
+
+修法很直接:**别用全字段更新,手写一条只改需要的列的 SQL**。
+
+```sql
+UPDATE collaboration_session
+   SET status = 'RUNNING', updated_at = ?, version = version + 1
+ WHERE id = ? AND status IN ('OPEN','AWAITING_CONTINUATION')
+```
+
+重跑:
+
+```text
+[ERROR] Tests run: 15, Failures: 0, Errors: 1     ← 从 2 减到 1
+```
+
+**减轻了,但没消失。这就是整个排查最有价值的一刻——方向对了,但根因还没挖到底。**
+
+### 4. 第二层根因:死锁的另一半在**异步事务**里
+
+剩下那一条的报错,SQL 已经是我刚改的精简版了:
+
+```text
+### SQL: UPDATE collaboration_session
+           SET status='RUNNING', updated_at=?, version=version+1
+         WHERE id=? AND status IN ('OPEN','AWAITING_CONTINUATION')
+    at ...promoteToRunning(Unknown Source)
+    at com.agentlog.collaboration.application.ClaimLeaseService.claim(ClaimLeaseService.java:151)
+```
+
+**一条只碰一张表、一个列的 UPDATE,还能死锁——说明对手方不是我以为的那个。**
+
+死锁必须**两个**事务才能成环。我这边只有一个业务事务,那另一个是谁?
+
+我回头看我唯一新增的那行代码:`events.publishEvent(new LeaseClaimed(...))`。
+接收它的监听器长这样:
+
+```java
+@ApplicationModuleListener     // = @Async + @Transactional(REQUIRES_NEW) + 事务性发件箱
+public void onLeaseClaimed(LeaseClaimed e) {
+    insertRecord(...);          // INSERT INTO audit_record
+}
+```
+
+**`@ApplicationModuleListener` 的含义(小白补充)**:它让这个方法在**另一个线程、另一个独立事务**里跑。
+好处是审计写失败不会让业务回滚;代价是——**它成了一个我没意识到的并发对手**。
+
+那么它锁了什么?查审计表的外键:
+
+```bash
+grep -n "CONSTRAINT fk_audit\|CONSTRAINT fk_error" \
+     backend/src/main/resources/db/migration/V014__create_reliability_audit_events.sql
+```
+
+```text
+CONSTRAINT fk_audit_owner   FOREIGN KEY (owner_user_id) REFERENCES user_account(id),
+CONSTRAINT fk_audit_session FOREIGN KEY (session_id)    REFERENCES collaboration_session(id),
+CONSTRAINT fk_audit_ticket  FOREIGN KEY (ticket_id)     REFERENCES contribution_ticket(id),
+CONSTRAINT fk_audit_agent   FOREIGN KEY (agent_id)      REFERENCES agent_account(id)
+```
+
+**四个外键。也就是说:每插入一条审计流水,它都要去这四张父表各拿一把 S 锁。**
+而那四张表里有两张,正是业务事务此刻正在改的:`collaboration_session` 和 `contribution_ticket`。
+
+**锁环终于画得出来了:**
+
+```text
+T1 = 业务事务(AI 领取写作许可)
+     ① 先改票:UPDATE contribution_ticket ... → 持有【票】的 X 锁
+     ② 再改会话:UPDATE collaboration_session ... → 【想要】会话的 X 锁 ⏳
+
+T2 = 审计的异步事务(记录"开始写作")
+     ① INSERT audit_record → 外键检查 fk_audit_session → 持有【会话】的 S 锁
+     ② 外键检查 fk_audit_ticket → 【想要】票的 S 锁 ⏳
+
+        T1 持票 ────────► 等会话
+                              ▲
+        T2 持会话 ◄──────── 等票
+        成环 → InnoDB 杀掉其中一个 → 我们看到的那个随机报错
+```
+
+**根因一句话:审计表是被业务事务"旁路异步"写入的,而它通过外键锁住的,
+恰恰是业务事务正在改的那几行——两条路径关心同一批实体,加锁顺序却完全不同。**
+
+### 5. 为什么这个隐患从三课前就埋着,却直到现在才炸
+
+这是我最想让面试官注意的一点:
+
+```text
+审计事件在 L17 就有了,但只有两种:「租约超时」「提交成功」——
+  超时:15 分钟才可能发生一次
+  提交:一次协作总共几次
+⇒ 又稀疏、又不与高频写入并发 ⇒ 三课都没撞上
+
+L18 我加了「开始写作」:每领一次租约就写一条审计,
+  而"领租约"本身就是那条会改会话状态的高频路径
+⇒ 两个事务【贴在一起】跑,撞车概率陡增
+```
+
+> ★ **并发缺陷的暴露需要压力,而压力常常由一个看似无关的新功能提供。**
+> 反过来说:**测试全绿 ≠ 没有并发缺陷,只说明你造的负载还不够。**
+
+### 6. 最终解法,以及为什么不选另外两条路
+
+我先列了三条候选,再淘汰:
+
+| 候选 | 为什么不行 / 行 |
+|---|---|
+| **调整加锁顺序**(让两边都先锁会话再锁票) | ❌ 做不到。业务侧的第一条 UPDATE 是**闸门**,必须排最前(这是项目从 L15 起的铁律);而审计侧的加锁顺序由 InnoDB 的外键检查决定,**应用层管不着** |
+| **给审计写入加重试** | ❌ 治症状不治病。死锁还会发生,只是被藏起来了;而且重试期间锁竞争更严重 |
+| **✅ 去掉审计表的外键** | 采用 |
+
+去掉外键的理由不是"图省事",是**外键在这里防的那件事根本不会发生**:
+
+```text
+外键防的是:父行被删除后,子行变成指向不存在记录的"孤儿"
+
+而这两张表(审计流水、事故报告):
+  ① 每一列都由【我们自己的代码】写入,不存在"用户传了个不存在的 id"
+  ② 父行(会话/席位/用户/机娘)在本项目里【从来不物理删除】——机娘注销都是墓碑软删
+  ③ 它们是只追加的流水,永不 UPDATE、永不需要级联
+⇒ 防的事不会发生,代价(每次写入锁 4 张父表)却每次都付
+```
+
+于是写了一条迁移(`V016`)把这两张流水表的 9 个外键全部删掉。
+
+**⚠️ 一个容易连带做错的点**:MySQL 建外键时会**自动建索引**,所以很多人删外键时会顺手把索引也删了。
+**索引必须全部保留**——时间线页正是靠 `idx_audit_session_created` 按会话拉全量流水的。
+外键管的是"写入时的完整性",索引管的是"查询时的速度",**两件事**。
+
+重跑:
+
+```text
+[INFO] Tests run: 15, Failures: 0, Errors: 0     ✅
+```
+
+随后跑全量回归:**后端 118 绿**(后来补前文端点变成 121)。
+
+### 7. 如果面试官追问"你怎么确认锁环真的是这个走向的"
+
+**诚实版**:这次我是靠**异常堆栈定位到代码行 + 读表结构推出锁的走向**,没有去看 InnoDB 的死锁日志——
+因为报错已经精确到行、而对手方(唯一新增的异步监听器)只有一个,推理链是闭合的。
+
+**但生产环境该用的标准工具,你要说得出来**:
+
+```sql
+-- ① 看最近一次死锁的完整现场:双方持有什么锁、等什么锁、执行的哪条 SQL
+SHOW ENGINE INNODB STATUS;
+--    输出里找 "LATEST DETECTED DEADLOCK" 段落
+
+-- ② 让每次死锁都进 error log(默认只保留最近一次,偶发问题必开)
+SET GLOBAL innodb_print_all_deadlocks = ON;
+
+-- ③ MySQL 8.0:实时看当前谁持有锁、谁在等
+SELECT * FROM performance_schema.data_locks;
+SELECT * FROM performance_schema.data_lock_waits;
+SELECT * FROM sys.innodb_lock_waits;   -- sys 库的可读视图,直接告诉你"谁在等谁"
+```
+
+`SHOW ENGINE INNODB STATUS` 的死锁段会直接列出 `*** (1) TRANSACTION` / `*** (2) TRANSACTION`
+以及各自 `WAITING FOR THIS LOCK TO BE GRANTED` 的锁类型(`lock_mode S` / `lock mode X`)——
+**那就是锁环的直接证据**,比推理更硬。
+
+### 8. 学到什么(三条判据,可直接背)
+
+> **① `updateById` 的代价不是"多写几列",是"多锁几张表"。**
+> 一条 UPDATE 碰到的外键列越多,牵连的锁就越多,与并发写入者撞车的面就越大。
+> 这也是为什么这个项目的另一个 Mapper **故意不继承 `BaseMapper`**——不给"顺手 updateById"留入口。
+
+> **② 流水表(审计/日志/事故报告)不建外键。**
+> 判据:**外键防的那件事,在这张表上会不会发生?** 会 → 建;不会 → 它就只是纯成本。
+> 业界惯例背后是这个推理,不是"大家都这么干"。
+
+> **③ 外键不是"免费的完整性",它是隐式的锁。**
+> 面试时这句最容易让人记住:**你以为你在声明约束,其实你在声明加锁顺序。**
+
+**另外两条元层面的收获:**
+
+- **症状离根因隔了两层时,"修完只减轻不消失"是最有价值的信号**——它说明你找到的是一个真原因,但不是全部。这时候最忌讳的是"再试试重试机制"。
+- **异步是把并发引进来的最隐蔽方式。** 我加的是"一行发事件",心理上觉得"这不改数据",但它实实在在造出了第二个事务。**凡是 `@Async` / 消息队列 / 事件监听,都要问一句:它会锁什么?**
+
+---
+
+## 故事 39:幂等和"闸门"到底有什么区别——两个都能防重复,为什么两个都要（L16→L18）🔴 简历主打
+
+> **面试时长**:4-5 分钟。这是个**概念辨析题**,但它不是背定义——
+> 它的价值在于:两个机制看起来功能重叠,**能说清"为什么都要"才说明你真的懂**。
+
+### 0. 先定义两个词(它们都是我项目里的实现手法)
+
+**① 闸门(我们项目的叫法,业界叫"条件更新 / CAS 式更新")**
+
+一条带条件的 UPDATE,让数据库在**一条语句内**同时完成"检查"和"动作":
+
+```sql
+UPDATE contribution_ticket
+   SET status = 'READY_TO_WRITE'
+ WHERE ticket_code = ? AND status = 'FAILED_TIMEOUT';   -- ← 条件就是判定
+```
+
+然后看 `affectedRows`:**1 = 这件事由我做成了;0 = 我没做成**。
+
+为什么要合成一条:如果写成"先 SELECT 查状态 → Java 里 if 判断 → 再 UPDATE",
+两步之间有时间缝隙,并发下两个请求都会查到"可以改",然后**双双执行**。
+这个缝隙有个名字叫 **TOCTOU**(Time-Of-Check to Time-Of-Use,检查与使用之间的时间差)。
+
+**② 幂等(Idempotency-Key 机制)**
+
+客户端在请求头带一个自己生成的唯一串;服务端拿它查一张"幂等台账":
+
+```text
+台账里没有这个 key → 记一条"处理中" → 执行业务 → 把响应缓存进台账 → 返回
+台账里已有且已完成 → 【业务一行都不执行】,直接把上次那份响应原样返回
+```
+
+### 1. 问题:既然闸门能防重复,为什么还要幂等?
+
+这是我自己在 L18 真实产生的疑问。当时的情况是:
+
+```text
+L16 的"提交正文"接口   → 挂了 @Idempotent
+L18 的"重试某一棒"接口 → 我没挂,只有闸门
+```
+
+看起来很不一致。而且闸门更底层、更可靠(它在数据库里,不依赖客户端配合)——**那幂等是不是多余的?**
+
+### 2. 答案:它们防的不是同一件事
+
+我用一个具体场景把差别逼出来——**服务端成功了,但响应在回去的路上丢了**:
+
+```text
+AI 提交正文 → 服务端【成功写入草稿】→ 返回 201 的路上网络断了
+
+【只有闸门】
+  客户端重发 → 闸门 WHERE status='ACTIVE' → 现在已是 SUCCEEDED → 0 行 → 返回 409
+  ✅ 数据是对的:没写出两段正文(闸门尽职了)
+  ❌ 但客户端拿到 409,它【不知道自己上次成功了】
+     → 它会判断"我提交失败了",去报告用户"写不进去"
+     → 而正文其实早就在草稿里了 ⇒ 用户看到自相矛盾的状态
+
+【加上幂等】
+  客户端重发(复用同一个 key)→ 台账查到 COMPLETED
+  → 直接返回【上次那份 201 响应】(含草稿地址)
+  ✅ 数据是对的
+  ✅ 客户端知道成功了,拿到草稿地址,正常往下走
+```
+
+> ## ★ 一句话:**闸门保证数据对,幂等保证调用方知道数据对。**
+>
+> | | 闸门 | 幂等 |
+> |---|---|---|
+> | 防什么 | 状态被改两次 | **响应丢了** |
+> | 重发时返回 | 409(“你没成功”) | **上次那份成功响应** |
+> | 保护的是 | **数据** | **调用方的判断** |
+> | 需要客户端配合 | ❌ 不需要 | ✅ 必须复用同一个 key |
+> | 作用位置 | 数据库(WHERE) | 应用层(台账 + 切面) |
+
+**⇒ 缺了幂等,数据是对的,但客户端会做出错误决策。这在有自动化客户端(CLI、SDK、AI Agent)的系统里是真伤害。**
+
+### 3. 那什么时候可以只用闸门?——三条判据
+
+我最后定的判定顺序是:**先问"重发会不会造成第二次真实的改变"**。
+
+| 判据 | 提交正文 | 重试某一棒 |
+|---|---|---|
+| ① 重发会产生**第二次真实副作用**吗 | ✅ 会:多一段正文(它是 INSERT) | ❌ 不会:闸门 0 行,什么都没发生(它是"把状态改成 X") |
+| ② 调用方**需要知道上次的结果**吗 | ✅ 要草稿地址 | ❌ 409 就够,甚至更有用("你点重了") |
+| ③ 调用方能**复用同一个 key** 吗 | ✅ CLI 把 key 落盘,重试时读出来 | ❌ **浏览器点两次是两个不同的 key** |
+
+**三条缺一个就没必要上幂等。重试那个接口三条全不满足。**
+
+> ★ 根本区别在**操作的性质**:
+> - **状态迁移**("把它改成 X")→ 天然幂等(改一次和改两次结果相同)→ **闸门足够**
+> - **追加/创建**("新增一条")→ 天生不幂等(执行两次就是两条)→ **必须靠客户端的 key 来区分"重发"与"真的又做了一次"**
+>
+> 说到底:**服务端能不能自己分辨"这是重发"还是"这是一次新的意图"?**
+> 状态迁移能(数据库当前状态就是答案);追加不能(两次 INSERT 长得一模一样)。
+
+### 4. 一个延伸追问:浏览器是不是基本用不了幂等?
+
+**基本正确,而且理由值得说清。** 浏览器**能**做,条件是前端主动生成并持有 key:
+
+```js
+const idemKey = ref(crypto.randomUUID())   // 进页面时生成一次
+await api.retryTicket(pt, code, { headers: { 'Idempotency-Key': idemKey.value } })
+```
+
+⚠️ 但这只能防"**同一个页面里连点**"。**刷新页面、换个标签页,就是新 key**——幂等当场失效。
+
+> ★ 规律:**幂等的适用性取决于客户端能不能跨请求持有同一个 key。**
+> CLI 能(落盘);浏览器只能在**单页生命周期内**做到。
+> **这不是幂等设计得差,而是"客户端身份"这件事在浏览器里天生更弱。**
+
+**所以生产上的通行分工(我的判断,面试时可标明是自己的总结):**
+
+| 场景 | 用什么 |
+|---|---|
+| 服务间调用 / CLI / SDK | 标准 Idempotency-Key |
+| 浏览器表单 | 闸门 + 按钮 disable + 状态机拦截;要更严就"先领一个提交令牌再提交"(等于把 key 的生成搬到服务端) |
+| 支付、下单 | 两者都上,而且 key 用**业务单号**充当 |
+
+最后那条给出一条更漂亮的判据:
+> ★ **当业务本身有天然唯一标识时,那个标识就是最好的幂等键。**
+> 订单号天生唯一、客户端天然持有、还能人工对账。
+> 而"重试第 2 棒"这个动作**没有单号**——这从另一个角度说明它不该走幂等。
+
+### 5. 学到什么
+
+> **① 幂等防的是「同一个请求被重发」,闸门防的是「这件事被重复执行」——不管来的是不是同一个请求。**
+> 这也是为什么闸门更"根本":浏览器连点两次是两个不同的 key,幂等认不出它们是同一件事,**闸门能**。
+
+> **② 判定顺序:先问"重发会不会造成第二次真实的改变"。** 会 → 需要幂等;不会 → 闸门足够。
+
+> **③ 两个机制的层次不同,不是二选一**:闸门在**数据库**保证不变量,幂等在**应用层**保证响应可重放。
+> 高价值接口(支付、提交内容)两个都要——**闸门兜数据,幂等兜体验**。
+
+---
+
+## 故事 40:三个动作,三个闸门落在三个不同对象上——闸门到底该选谁（L18）
+
+> **面试时长**:3-4 分钟。适合在讲完故事 39 之后接着讲,是它的进阶。
+
+### 背景
+
+L18 我要给"多 AI 协作"加三个由**人**触发的操作:**重试某一棒 / 结束整个协作 / 重新签发接力凭证**。
+三个都要防重复执行(用户会连点、会开两个标签页)。
+
+按故事 39 的结论,它们都是"状态迁移",所以都用闸门。**但闸门的 WHERE 该写在哪张表上?**
+我一开始以为这是个随手决定,结果发现**选错会直接失效**。
+
+### 问题:一个反例逼出了判据
+
+先看"重新签发接力凭证"这个操作。它做两件事:把旧凭证作废、签发一个新的。
+
+**如果闸门写在"协作会话"这行上会怎样:**
+
+```sql
+UPDATE collaboration_session SET ... WHERE post_ticket = ? AND status = 'AWAITING_CONTINUATION'
+```
+
+```text
+问题:重签前后,会话的状态【根本不变】——之前是"等人来接",之后还是"等人来接"。
+⇒ 这个闸门无法记录"重签发生过"
+⇒ 两个标签页同时点 → 两边的 WHERE 都匹配 → 双双通过 → 签出【两根】有效凭证
+   而这是安全事故:凭证本该一次只有一根有效。
+```
+
+**正确做法是把闸门落在【旧凭证】那一行上:**
+
+```sql
+UPDATE handoff_token SET status = 'REVOKED'
+ WHERE id = ? AND status IN ('AVAILABLE','FROZEN');
+```
+
+因为**旧凭证的状态会因这次操作而改变**(`AVAILABLE → REVOKED`),
+**这个变化本身就是"重签发生过"的记录**。第二个请求进来时它已经是 `REVOKED`,匹配不到,干净失败。
+
+### 判据
+
+> ## ★ 闸门要选那个「**能唯一代表这次操作发生过**」的对象。
+>
+> 换个说法:**这次操作会让哪一行的状态发生不可逆的变化?** 那一行就是闸门该落的地方。
+
+对照我那三个操作:
+
+| 动作 | 它判定的是 | 闸门落在 | 依据 |
+|---|---|---|---|
+| 重试某一棒 | 这**张票**是不是失败态 | `ticket.status = 'FAILED_TIMEOUT'` | 票会从"失败"变"可写" |
+| 结束协作 | 这**条协作**是不是还活着 | `session.status IN (活跃四态)` | 会话会落终态 |
+| 重新签发 | 那**根凭证**还在不在 | `handoff.status IN ('AVAILABLE','FROZEN')` | 旧凭证会变"已吊销" |
+
+**"结束协作"为什么不能拿某一张票当闸门**:它的操作对象是整条协作,**没有"某一张票"这个天然目标**;
+随便挑一张的话,两个标签页各挑一张,双双通过。
+
+### 进阶(这一段才是真正拉开差距的地方)
+
+上面三个闸门各管一件事,看起来很干净。**但它们互相拦不住。**
+
+我在施工时想到一个场景:**用户开了两个标签页,一个点"重试第 2 棒",一个点"结束协作"。**
+
+```text
+重试的闸门在【票】上,结束的闸门在【会话】上 —— 两把锁管的是【不同的行】
+
+若重试的实现是"先查一下会话还活着 → 再改票":
+  ① 重试:SELECT 会话 → 看到"暂停中",OK
+  ② 结束:UPDATE 会话 → 终态,提交
+  ③ 重试:UPDATE 票 → 成功
+  ⇒ 结果:协作已经收工了,却有一张票被改回了「可写」
+     —— 一个没有归属的活票。后面那个 AI 真的会来写,写完发现没人要。
+```
+
+**两把锁各自都"成功"了,合起来却破坏了不变量。**
+
+修法:让重试那条 UPDATE **把对方的条件纳入自己的 WHERE**——用 JOIN 把会话拉进来:
+
+```sql
+UPDATE contribution_ticket ct
+  JOIN collaboration_session cs ON cs.id = ct.session_id
+   SET ct.status = 'READY_TO_WRITE'
+ WHERE ct.ticket_code = ?
+   AND ct.status      = 'FAILED_TIMEOUT'
+   AND cs.status      = 'PAUSED_ON_ERROR';    -- ★ 把"协作还在暂停中"也写进判定
+```
+
+这样两件事在**同一条语句、同一组行锁**里判定:
+
+```text
+结束先赢 → 会话已是终态 → 这里匹配不到 → 0 行 → 重试干净失败 ✅
+重试先赢 → 票改回可写 → 结束随后照常把它 CANCELLED ✅
+两个顺序都得到自洽的结果。
+```
+
+> ## ★ 判据:**当两个操作的闸门落在【不同对象】上时,必须有一方把对方的条件纳入自己的 WHERE。**
+> 否则你会得到一个很隐蔽的 bug:**每一步都"成功"了,系统整体却进入了不该存在的状态。**
+
+### 学到什么
+
+- **闸门不是"加个 WHERE 就行",选对象本身就是设计**:选那个状态会因此改变的对象。
+- **多个闸门并存时,要检查它们的"管辖范围"有没有交叉**——交叉处必须有人负责把对方的条件带上。
+- 更一般的表述:**并发正确性不能靠"每个操作各自正确"推出来,必须看它们组合起来还成不成立。**
+
+---
+
 ## 面试自述模板
 
 选 2-3 个故事串成 3-5 分钟:

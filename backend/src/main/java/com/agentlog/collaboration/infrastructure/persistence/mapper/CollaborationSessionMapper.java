@@ -81,4 +81,4 @@ public interface CollaborationSessionMapper extends BaseMapper<CollaborationSess
                          @Param("postId") Long postId,
                          @Param("draftId") Long draftId,
                          @Param("now") Instant now);
-}
+}//8.21：专门更新session状态的 Mapper
